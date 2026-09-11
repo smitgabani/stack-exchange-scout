@@ -22,6 +22,7 @@ A running, dated narration of each work session: what we decided, what got built
 **Milestone / tickets:** Pre-M0 (repo + process setup, not a ticket itself)
 
 **Decisions made:**
+
 - Reframed the engagement: I (Claude) act as the senior engineer executing implementation; the user — a Node.js developer learning Python/FastAPI, advanced Git, DevOps, and system design — reviews, decides, and learns by doing rather than writing most of the code themselves. See `decisions/0001-team-workflow-and-collaboration-model.md` for the full reasoning.
 - Backlog lives in `featuresticketlist.md`, organized as vertical-slice milestones (M0–M11) rather than the backend-first/frontend-last phase order in `prd.md` §30 — every milestone ships a backend piece and its matching frontend page together.
 - Git workflow: real feature-branch-per-ticket, merged back to `main`, Conventional Commits — chosen specifically as the vehicle for hands-on branching/merging/rebasing practice, not commits straight to `main`.
@@ -30,6 +31,7 @@ A running, dated narration of each work session: what we decided, what got built
 - The scheduler (closing the "no scheduler yet" gap) is deliberately placed *after* the MVP checkpoint (M11, post-M10), not interleaved into MVP work.
 
 **What got built:**
+
 - Git repository initialized; existing `build-docs/` and `design-mockups/` content committed as the root commit.
 - `.gitignore` added (Python + Node + editor + macOS junk).
 - `featuresticketlist.md` populated with the full M0–M11 backlog.
@@ -37,15 +39,34 @@ A running, dated narration of each work session: what we decided, what got built
 - This log, seeded with its template and this entry.
 
 **Git:**
+
 ```
 git init
 git add .gitignore build-docs design-mockups
 git commit -m "chore: initial project docs and design mockups"
 ```
+
 This first commit went straight to `main` deliberately — it's a snapshot of pre-existing work, not a ticket. Starting with M0, every ticket gets its own branch (`git checkout -b <ticket-id>-<slug>`), and merging that branch back is where branching/merging/rebasing gets taught for real, on real history.
 
 **Concepts introduced:**
+
 - Conventional Commits (`feat:`/`fix:`/`test:`/`docs:`/`chore:`) as the commit message convention going forward.
 - ADRs (Architecture Decision Records) as a real industry pattern for documenting significant technical decisions — lightweight, one file per decision, used sparingly (not for every small choice).
 
 **Next up:** M0 — Foundations & scaffolding (backend skeleton, frontend skeleton, both deployed and talking to each other).
+
+---
+
+## 2026-09-11 — Correction: command execution boundary
+
+**Milestone / tickets:** Pre-M0 (process correction, not a ticket)
+
+**Decisions made:** Claude ran `git checkout -b ...` directly at the start of M0. Corrected immediately: Git and DevOps/infra commands are user-run from here on (Claude instructs one command at a time with an explanation, user executes and reports back); Claude continues writing application code directly. See `decisions/0002-command-execution-boundary.md`.
+
+**What got built:** ADR 0002; ADR 0001 marked as amended by it.
+
+**Git:** none yet on this branch — `uv` was installed via Homebrew (a one-time local tool install, not part of the app's own git history) before the correction landed. The actual first git commands of the session (staging/committing this correction, then branching for M0) are next, and will be user-run.
+
+**Concepts introduced:** ADRs get *amended* by a new ADR rather than rewritten in place — same principle as not rewriting git history that's already shared: the record of "we used to think X, then learned Y" is itself valuable.
+
+**Next up:** commit this correction, then start M0-B1 for real, with the user running every git/devops command.

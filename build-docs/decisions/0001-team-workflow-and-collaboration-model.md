@@ -1,6 +1,6 @@
 # 0001 — Team Workflow and Collaboration Model
 
-**Status:** Accepted
+**Status:** Accepted (amended by 0002 — command execution boundary)
 
 ## Context
 
