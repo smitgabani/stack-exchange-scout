@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--body:#333840;--muted:#41454d;--hairline:#dddddd;--border-strong:#9297a0;
+      --canvas:#ffffff;--surface-soft:#f8fafc;--surface-strong:#e0e2e6;--coral:#aa2d00;--on-primary:#ffffff;
+      --link:#1b61c9;--link-active:#1a3866;--info:#254fad;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);background:var(--canvas);}
+    a{color:var(--link);}
+    a:hover{color:var(--link-active);}
+    .nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-bottom:1px solid var(--hairline);}
+    .nav-left{display:flex;align-items:center;gap:40px;}
+    .wordmark{font-size:16px;font-weight:500;display:flex;align-items:center;gap:10px;}
+    .wordmark-badge{width:28px;height:28px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .nav-links{display:flex;gap:28px;}
+    .nav-link{font-size:14px;font-weight:500;color:var(--muted);}
+    .nav-link.active{color:var(--ink);}
+    .avatar{width:32px;height:32px;border-radius:9999px;background:var(--surface-strong);}
+    .page{max-width:1180px;margin:0 auto;padding:48px 40px 96px 40px;display:flex;flex-direction:column;gap:32px;}
+    .page-title{font-size:32px;font-weight:400;}
+    .page-sub{font-size:14px;color:var(--muted);margin-top:8px;}
+    .filters{display:flex;gap:10px;flex-wrap:wrap;}
+    .filter-chip{font-size:14px;font-weight:500;padding:10px 16px;border-radius:9999px;border:1px solid var(--hairline);cursor:pointer;background:var(--canvas);color:var(--body);}
+    .filter-chip.on{background:var(--ink);border-color:var(--ink);color:var(--on-primary);}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;}
+    .qcard{border:1px solid var(--hairline);border-radius:12px;padding:22px;display:flex;flex-direction:column;gap:14px;transition:opacity .15s ease;}
+    .qcard.tall{padding-bottom:36px;}
+    .qcard.dismissed{opacity:0.35;}
+    .qtitle{font-size:16px;font-weight:500;line-height:1.35;}
+    .qtag-row{display:flex;flex-wrap:wrap;gap:6px;}
+    .qtag{font-size:13.12px;font-weight:500;padding:4px 10px;border-radius:9999px;background:var(--surface-soft);color:var(--body);}
+    .qstat-row{display:flex;align-items:center;gap:14px;font-size:13.12px;color:var(--body);}
+    .qstat{display:flex;align-items:center;gap:4px;}
+    .qstat-accepted{color:var(--success);font-weight:500;}
+    .qstat-noaccepted{color:var(--muted);}
+    .qdate-row{font-size:13.12px;color:var(--muted);}
+    .qscore{display:flex;align-items:center;gap:8px;font-size:13.12px;font-weight:600;color:var(--muted);}
+    .qscore-bar{flex:1;height:4px;border-radius:9999px;background:var(--surface-strong);position:relative;overflow:hidden;}
+    .qscore-fill{position:absolute;left:0;top:0;bottom:0;background:var(--ink);border-radius:9999px;}
+    .qso-link{font-size:14px;font-weight:500;text-decoration:none;}
+    .qactions{display:flex;gap:10px;margin-top:auto;padding-top:8px;}
+    .qbtn{flex:1;text-align:center;padding:10px;border-radius:8px;border:1px solid var(--hairline);font-size:14px;font-weight:500;cursor:pointer;background:var(--canvas);}
+    .qbtn.primary{background:var(--ink);color:var(--on-primary);border-color:var(--ink);}
+    .qbtn.dismissed-label{background:var(--surface-soft);color:var(--muted);cursor:default;}
+    @media (max-width: 900px){ .grid{grid-template-columns:1fr;} }
+  </style>
+</helmet>
+<div class="nav">
+  <div class="nav-left">
+    <div class="wordmark">
+      <div class="wordmark-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      Challenge Scout
+    </div>
+    <div class="nav-links">
+      <div class="nav-link">Dashboard</div>
+      <div class="nav-link">Topics</div>
+      <div class="nav-link active">Questions</div>
+      <div class="nav-link">Challenges</div>
+      <div class="nav-link">Settings</div>
+    </div>
+  </div>
+  <div class="avatar"></div>
+</div>
+
+<div class="page">
+  <div>
+    <div class="page-title">Candidate pool</div>
+    <div class="page-sub">Metadata below is verified against the Stack Exchange API, not just Yutori's discovery output (prd.md §11).</div>
+  </div>
+  <div class="filters">
+    <sc-for list="{{filters}}" as="f" hint-placeholder-count="4">
+      <div class="filter-chip {{f.cls}}" onClick="{{f.toggle}}">{{f.label}}</div>
+    </sc-for>
+  </div>
+
+  <div class="grid">
+    <sc-for list="{{questions}}" as="q" hint-placeholder-count="6">
+      <div class="qcard {{q.sizeCls}} {{q.dismissedCls}}">
+        <div class="qtitle">{{q.title}}</div>
+
+        <div class="qtag-row">
+          <sc-for list="{{q.tagList}}" as="tag" hint-placeholder-count="2">
+            <div class="qtag" style="background:{{tag.color}}">{{tag.name}}</div>
+          </sc-for>
+        </div>
+
+        <div class="qstat-row">
+          <div class="qstat">▲ {{q.votes}}</div>
+          <div class="qstat">{{q.answers}} answers</div>
+          <sc-if value="{{q.hasAccepted}}" hint-placeholder-val="{{false}}">
+            <div class="qstat qstat-accepted">✓ Accepted answer</div>
+          </sc-if>
+          <sc-if value="{{q.noAccepted}}" hint-placeholder-val="{{true}}">
+            <div class="qstat qstat-noaccepted">No accepted answer</div>
+          </sc-if>
+        </div>
+
+        <div class="qdate-row">Posted {{q.posted}} · last active {{q.lastActivity}}</div>
+
+        <div class="qscore">
+          Match {{q.matchScore}}%
+          <div class="qscore-bar"><div class="qscore-fill" style="width:{{q.matchScore}}%"></div></div>
+        </div>
+
+        <a href="#" class="qso-link">Open on Stack Overflow ↗</a>
+        <div class="qactions">
+          <sc-if value="{{q.isDismissed}}" hint-placeholder-val="{{false}}">
+            <div class="qbtn dismissed-label">Skipped</div>
+          </sc-if>
+          <sc-if value="{{q.isActive}}" hint-placeholder-val="{{true}}">
+            <div class="qbtn" onClick="{{q.skip}}">Skip</div>
+            <div class="qbtn primary" onClick="{{q.mark}}">Interesting</div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+const TOPIC_PALETTE = ["#a8d8c4", "#fcab79", "#f5e9d4", "#f4d35e", "#d9a441"];
+function colorForTopic(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 997;
+  return TOPIC_PALETTE[Math.abs(hash) % TOPIC_PALETTE.length];
+}
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      activeFilter: "all",
+      statuses: {},
+      data: [
+        { id: 1, title: "asyncio.gather() runs sequentially instead of concurrently", tags: ["python", "asyncio"], votes: 12, answers: 1, hasAccepted: false, posted: "2d ago", lastActivity: "4h ago", matchScore: 88, tall: true },
+        { id: 2, title: "PostgreSQL planner picks seq scan over index", tags: ["postgresql", "performance"], votes: 6, answers: 0, hasAccepted: false, posted: "5h ago", lastActivity: "2h ago", matchScore: 81 },
+        { id: 3, title: "FastAPI DI breaks under async context managers", tags: ["fastapi", "dependency-injection"], votes: 9, answers: 2, hasAccepted: true, posted: "1d ago", lastActivity: "6h ago", matchScore: 76, tall: true },
+        { id: 4, title: "Redis pipeline loses ordering under pub/sub", tags: ["redis", "pubsub"], votes: 3, answers: 1, hasAccepted: false, posted: "3d ago", lastActivity: "1d ago", matchScore: 69 },
+        { id: 5, title: "SQLAlchemy session leak in background tasks", tags: ["sqlalchemy", "python"], votes: 15, answers: 0, hasAccepted: false, posted: "9h ago", lastActivity: "9h ago", matchScore: 74, tall: true },
+        { id: 6, title: "Kubernetes readiness probe flaps under load", tags: ["kubernetes"], votes: 4, answers: 3, hasAccepted: true, posted: "4d ago", lastActivity: "3d ago", matchScore: 58 },
+      ],
+    };
+  }
+  setStatus(id, status) {
+    this.setState({ statuses: { ...this.state.statuses, [id]: status } });
+  }
+  renderVals() {
+    return {
+      filters: ["All", "Python", "Unanswered", "Difficulty 4+"].map((label) => ({
+        label,
+        cls: this.state.activeFilter === label ? "on" : "",
+        toggle: () => this.setState({ activeFilter: label }),
+      })),
+      questions: this.state.data.map((q) => {
+        const status = this.state.statuses[q.id];
+        return {
+          ...q,
+          tagList: q.tags.map((name) => ({ name, color: colorForTopic(name) })),
+          sizeCls: q.tall ? "tall" : "",
+          dismissedCls: status === "skip" ? "dismissed" : "",
+          isDismissed: status === "skip",
+          isActive: status !== "skip",
+          noAccepted: !q.hasAccepted,
+          skip: () => this.setStatus(q.id, "skip"),
+          mark: () => this.setStatus(q.id, "interesting"),
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

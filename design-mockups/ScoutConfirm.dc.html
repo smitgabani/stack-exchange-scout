@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--body:#333840;--muted:#41454d;--hairline:#dddddd;--canvas:#ffffff;
+      --coral:#aa2d00;--on-primary:#ffffff;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);}
+    .wrap{min-height:500px;width:100%;background:var(--coral);display:flex;align-items:center;justify-content:center;padding:24px;}
+    .card{width:100%;max-width:440px;background:var(--canvas);border-radius:12px;padding:40px 36px;display:flex;flex-direction:column;gap:20px;text-align:center;align-items:center;}
+    .eyebrow{font-size:14px;font-weight:500;color:var(--ink);}
+    .title{font-size:24px;font-weight:400;line-height:1.35;}
+    .spend{font-size:14px;color:var(--muted);}
+    .btn-row{display:flex;gap:12px;width:100%;margin-top:8px;}
+    .btn{flex:1;padding:16px;border-radius:12px;font-size:16px;font-weight:500;cursor:pointer;border:1px solid var(--hairline);background:var(--canvas);color:var(--ink);}
+    .btn.primary{background:var(--ink);color:var(--on-primary);border-color:var(--ink);}
+    .done-icon{width:48px;height:48px;border-radius:9999px;background:var(--success);display:flex;align-items:center;justify-content:center;}
+    .done-title{font-size:20px;font-weight:500;}
+    .done-sub{font-size:14px;color:var(--muted);}
+  </style>
+</helmet>
+<div class="wrap">
+  <div class="card">
+    <sc-if value="{{isPending}}" hint-placeholder-val="{{true}}">
+      <div class="eyebrow">Setup Mode — confirmation needed</div>
+      <div class="title">Run the Scout again this cycle?</div>
+      <div class="spend">$2.45 of $5.00 free credit used so far</div>
+      <div class="btn-row">
+        <div class="btn" onClick="{{onNo}}">No, skip this cycle</div>
+        <div class="btn primary" onClick="{{onYes}}">Yes, run it</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+      <div class="done-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="done-title">{{doneTitle}}</div>
+      <div class="done-sub">{{doneSub}}</div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { answer: null };
+  }
+  renderVals() {
+    const answer = this.state.answer;
+    return {
+      isPending: !answer,
+      isDone: !!answer,
+      doneTitle: answer === "yes" ? "Got it — running the Scout" : "Got it — skipping this cycle",
+      doneSub: answer === "yes"
+        ? "Your next digest will include anything newly discovered."
+        : "No cost for this cycle. Your next digest reuses what's already in the pool.",
+      onYes: () => this.setState({ answer: "yes" }),
+      onNo: () => this.setState({ answer: "no" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

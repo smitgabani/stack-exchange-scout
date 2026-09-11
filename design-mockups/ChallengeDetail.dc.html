@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--body:#333840;--muted:#41454d;--hairline:#dddddd;--border-strong:#9297a0;
+      --canvas:#ffffff;--surface-soft:#f8fafc;--surface-strong:#e0e2e6;
+      --coral:#aa2d00;--mint:#a8d8c4;--forest:#0a2e0e;--cream:#f5e9d4;--yellow:#f4d35e;
+      --on-primary:#ffffff;--link:#1b61c9;--link-active:#1a3866;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);background:var(--canvas);}
+    a{color:var(--link);}
+    a:hover{color:var(--link-active);}
+    .nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-bottom:1px solid var(--hairline);}
+    .wordmark{font-size:16px;font-weight:500;display:flex;align-items:center;gap:10px;}
+    .wordmark-badge{width:28px;height:28px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .avatar{width:32px;height:32px;border-radius:9999px;background:var(--surface-strong);}
+    .page{max-width:760px;margin:0 auto;padding:40px 40px 96px 40px;display:flex;flex-direction:column;gap:28px;}
+    .back{font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;}
+    .title{font-size:32px;font-weight:400;line-height:1.2;}
+
+    .header-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;}
+    .why-card{background:var(--mint);color:var(--forest);border-radius:12px;padding:24px 26px;display:flex;flex-direction:column;gap:8px;}
+    .card-label{font-size:13.12px;font-weight:600;letter-spacing:0.16px;text-transform:uppercase;}
+    .why-card .card-label{color:var(--forest);}
+    .why-card p{font-size:15px;line-height:1.45;margin:0;}
+    .meta-card{background:var(--cream);border-radius:12px;padding:24px 26px;display:flex;flex-direction:column;gap:14px;}
+    .meta-card .card-label{color:var(--coral);}
+    .diff-row{display:flex;align-items:baseline;gap:8px;}
+    .diff-num{font-size:32px;font-weight:400;line-height:1;}
+    .diff-of{font-size:14px;color:var(--body);}
+    .chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+    .chip{font-size:13.12px;font-weight:500;padding:6px 14px;border-radius:9999px;border:1px solid rgba(24,29,38,0.18);color:var(--body);background:transparent;}
+    .chip.tag{background:rgba(255,255,255,0.5);}
+    .meta-line{font-size:13.12px;color:var(--body);}
+
+    .problem-block{background:var(--ink);color:var(--on-primary);border-radius:16px;padding:40px 36px;display:flex;flex-direction:column;gap:12px;}
+    .problem-label{font-size:13.12px;font-weight:600;letter-spacing:0.16px;text-transform:uppercase;color:var(--surface-strong);}
+    .problem-text{font-size:22px;font-weight:400;line-height:1.5;}
+    .problem-text code{background:rgba(255,255,255,0.14);padding:2px 6px;border-radius:4px;font-size:0.9em;}
+
+    .block{display:flex;flex-direction:column;gap:10px;}
+    .block-label{font-size:13.12px;font-weight:600;letter-spacing:0.16px;color:var(--muted);text-transform:uppercase;}
+    .block-body{font-size:16px;line-height:1.5;color:var(--body);}
+    .concept-chip{font-size:14px;font-weight:500;padding:8px 14px;border-radius:9999px;background:rgba(244,211,94,0.28);color:var(--body);}
+
+    .hints{display:flex;flex-direction:column;gap:12px;}
+    .hint-item{border:1px solid var(--hairline);border-radius:10px;padding:16px 20px;}
+    .hint-label{font-size:14px;font-weight:500;color:var(--muted);}
+    .hint-text{font-size:15px;color:var(--body);margin-top:8px;line-height:1.4;}
+    .reveal-btn{font-size:14px;font-weight:500;color:var(--link);cursor:pointer;border:1px dashed var(--hairline);border-radius:10px;padding:14px 20px;text-align:center;}
+
+    hr{border:none;border-top:1px solid var(--hairline);margin:4px 0;}
+    .so-button{display:inline-flex;align-items:center;gap:10px;background:var(--coral);color:var(--on-primary);font-size:16px;font-weight:500;text-decoration:none;padding:16px 28px;border-radius:12px;align-self:flex-start;}
+
+    .feedback-row{display:flex;flex-wrap:wrap;gap:10px;position:sticky;bottom:0;background:linear-gradient(to top, var(--canvas) 75%, transparent);padding-top:20px;}
+    .fbtn{font-size:14px;font-weight:500;padding:10px 16px;border-radius:9999px;border:1px solid var(--hairline);cursor:pointer;background:var(--canvas);color:var(--body);}
+    .fbtn.on{background:var(--ink);border-color:var(--ink);color:var(--on-primary);}
+
+    @media (max-width: 620px){ .header-grid{grid-template-columns:1fr;} }
+  </style>
+</helmet>
+<div class="nav">
+  <div class="wordmark">
+    <div class="wordmark-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    Challenge Scout
+  </div>
+  <div class="avatar"></div>
+</div>
+
+<div class="page">
+  <div class="back">← Back to dashboard</div>
+
+  <div class="title">Async Python — asyncio.gather() runs sequentially</div>
+
+  <div class="header-grid">
+    <div class="why-card">
+      <div class="card-label">Why this was selected</div>
+      <p>A genuine debugging problem involving concurrency, not a syntax issue. There is currently no accepted answer.</p>
+    </div>
+    <div class="meta-card">
+      <div class="card-label">At a glance</div>
+      <div class="diff-row"><div class="diff-num">4</div><div class="diff-of">/ 5 difficulty</div></div>
+      <div class="chip-row">
+        <div class="chip tag">python</div>
+        <div class="chip tag">asyncio</div>
+        <div class="chip tag">concurrency</div>
+        <div class="chip tag">event-loop</div>
+      </div>
+      <div class="meta-line">1 answer · no accepted answer · posted 2 days ago</div>
+    </div>
+  </div>
+
+  <div class="problem-block">
+    <div class="problem-label">Problem</div>
+    <div class="problem-text">A Python application uses <code>asyncio.gather()</code>, but operations that should run concurrently appear to execute sequentially instead.</div>
+  </div>
+
+  <div class="block">
+    <div class="block-label">Concepts</div>
+    <div class="chip-row">
+      <div class="concept-chip">asyncio</div>
+      <div class="concept-chip">event loop</div>
+      <div class="concept-chip">blocking operations</div>
+      <div class="concept-chip">concurrency</div>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="block-label">Start here</div>
+    <div class="block-body">Inspect what happens inside each coroutine before assuming <code>gather()</code> itself is responsible.</div>
+  </div>
+
+  <div class="block">
+    <div class="block-label">Hints</div>
+    <div class="hints">
+      <sc-for list="{{revealedHints}}" as="h" hint-placeholder-count="1">
+        <div class="hint-item">
+          <div class="hint-label">{{h.label}}</div>
+          <div class="hint-text">{{h.text}}</div>
+        </div>
+      </sc-for>
+      <sc-if value="{{showRevealButton}}" hint-placeholder-val="{{true}}">
+        <div class="reveal-btn" onClick="{{onRevealNext}}">{{revealButtonLabel}}</div>
+      </sc-if>
+    </div>
+  </div>
+
+  <hr />
+
+  <a class="so-button" href="#">Open on Stack Overflow ↗</a>
+
+  <div class="feedback-row">
+    <sc-for list="{{feedbackOptions}}" as="f" hint-placeholder-count="7">
+      <div class="fbtn {{f.cls}}" onClick="{{f.select}}">{{f.label}}</div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { revealed: 0, feedback: null };
+  }
+  renderVals() {
+    const hints = [
+      { label: "Hint 1 — Direction", text: "Look at what each coroutine actually does before it reaches an await point." },
+      { label: "Hint 2 — Concept", text: "A synchronous, blocking call inside a coroutine holds the whole event loop hostage." },
+      { label: "Hint 3 — Strong hint", text: "Search each coroutine for a call that isn't itself async-aware — a regular blocking library call is the usual culprit." },
+    ];
+    const revealed = this.state.revealed;
+    const revealedHints = hints.slice(0, revealed);
+    const showRevealButton = revealed < hints.length;
+    const labels = ["Show hint 1", "Show hint 2", "Show hint 3"];
+    const options = ["Interesting", "Not interesting", "Loved it", "Too easy", "Too hard", "Solved", "Skipped"];
+    return {
+      revealedHints,
+      showRevealButton,
+      revealButtonLabel: labels[revealed] || "",
+      onRevealNext: () => this.setState({ revealed: Math.min(hints.length, revealed + 1) }),
+      feedbackOptions: options.map((label) => ({
+        label,
+        cls: this.state.feedback === label ? "on" : "",
+        select: () => this.setState({ feedback: label }),
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

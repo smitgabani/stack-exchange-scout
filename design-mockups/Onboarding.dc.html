@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--primary:#181d26;--primary-active:#0d1218;--body:#333840;--muted:#41454d;
+      --hairline:#dddddd;--border-strong:#9297a0;--canvas:#ffffff;--surface-soft:#f8fafc;
+      --cream:#f5e9d4;--mint:#a8d8c4;--forest:#0a2e0e;--on-primary:#ffffff;--link:#1b61c9;--link-active:#1a3866;
+      --info:#254fad;--info-border:#458fff;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);}
+    a{color:var(--link);}
+    a:hover{color:var(--link-active);}
+    .bg{
+      position:relative;min-height:900px;width:100%;overflow:hidden;
+      background:radial-gradient(circle at 50% -8%, #fbf4e6 0%, var(--cream) 38%, #ffffff 78%);
+      display:flex;flex-direction:column;
+    }
+    .ring{position:absolute;top:44%;left:50%;border-radius:9999px;border:1px solid rgba(24,29,38,0.08);transform:translate(-50%,-50%);pointer-events:none;}
+    .ring-1{width:1100px;height:1100px;}
+    .ring-2{width:800px;height:800px;}
+    .topbar{position:relative;z-index:1;padding:32px 40px;display:flex;align-items:center;gap:10px;}
+    .wordmark-badge{width:32px;height:32px;border-radius:9px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .wordmark-text{font-size:16px;font-weight:500;}
+    .center{position:relative;z-index:1;flex:1;display:flex;align-items:center;justify-content:center;padding:24px 24px 96px 24px;}
+    .card{
+      width:100%;max-width:560px;background:#ffffff;border-radius:24px;padding:56px 48px;
+      display:flex;flex-direction:column;gap:8px;
+      box-shadow:0 40px 80px -32px rgba(24,29,38,0.22), 0 2px 6px rgba(24,29,38,0.05);
+    }
+    .eyebrow{font-size:14px;font-weight:500;color:var(--ink);}
+    .title{font-size:32px;font-weight:400;line-height:1.2;margin-top:6px;}
+    .subtitle{font-size:15px;color:var(--muted);line-height:1.45;max-width:420px;margin-top:10px;margin-bottom:8px;}
+    .steps{display:flex;gap:8px;margin:24px 0 32px 0;}
+    .step-dot{flex:1;height:4px;border-radius:9999px;background:var(--hairline);}
+    .step-dot.done{background:var(--ink);}
+    .field{display:flex;flex-direction:column;gap:8px;}
+    label{font-size:14px;font-weight:500;color:var(--body);}
+    input{font-family:inherit;font-size:16px;padding:16px 18px;border-radius:12px;border:1px solid var(--border-strong);background:var(--surface-soft);color:var(--ink);}
+    input:focus{outline:2px solid var(--info-border);outline-offset:2px;}
+    .hint{font-size:14px;color:var(--muted);line-height:1.4;}
+    .btn-primary{background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:500;border:none;border-radius:12px;padding:16px 24px;cursor:pointer;margin-top:20px;}
+    .btn-primary:active{background:var(--primary-active);}
+    .btn-primary:disabled{background:var(--border-strong);cursor:not-allowed;}
+    .row{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px;}
+    .badge-req{font-size:13.12px;font-weight:600;color:var(--ink);}
+    .badge-opt{font-size:13.12px;font-weight:600;color:var(--muted);}
+    .done-row{display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:12px;background:var(--mint);margin-bottom:12px;}
+    .done-row .hint{color:var(--forest);}
+    .checkmark{width:22px;height:22px;border-radius:9999px;background:var(--success);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  </style>
+</helmet>
+<div class="bg">
+  <div class="ring ring-1"></div>
+  <div class="ring ring-2"></div>
+
+  <div class="topbar">
+    <div class="wordmark-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="wordmark-text">Challenge Scout</div>
+  </div>
+
+  <div class="center">
+    <div class="card">
+      <div class="eyebrow">Setup — step {{stepNumber}} of 2</div>
+      <div class="title">{{stepTitle}}</div>
+      <div class="subtitle">{{stepSubtitle}}</div>
+
+      <div class="steps">
+        <div class="step-dot {{yutoriDotClass}}"></div>
+        <div class="step-dot {{geminiDotClass}}"></div>
+      </div>
+
+      <sc-if value="{{onYutoriStep}}" hint-placeholder-val="{{true}}">
+        <div class="field">
+          <div class="row">
+            <label for="yk">Yutori API key</label>
+            <div class="badge-req">Required to start discovery</div>
+          </div>
+          <input id="yk" type="password" placeholder="yut_••••••••••••" value="{{yutoriKey}}" onInput="{{onYutoriInput}}" />
+          <div class="hint">Yutori bills per Scout run from a one-time signup credit — the app tracks estimated spend for you once this is set (see Settings).</div>
+        </div>
+        <button class="btn-primary" disabled="{{yutoriDisabled}}" onClick="{{onYutoriContinue}}">Save &amp; continue</button>
+      </sc-if>
+
+      <sc-if value="{{onGeminiStep}}" hint-placeholder-val="{{false}}">
+        <div class="done-row">
+          <div class="checkmark"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="hint">Yutori key saved</div>
+        </div>
+        <div class="field">
+          <div class="row">
+            <label for="gk">Gemini API key</label>
+            <div class="badge-req">Required for challenges</div>
+          </div>
+          <input id="gk" type="password" placeholder="AIza••••••••••••" value="{{geminiKey}}" onInput="{{onGeminiInput}}" />
+          <div class="hint">Gemini turns selected questions into challenges. OpenAI is available later, in Settings, as an optional alternative provider.</div>
+        </div>
+        <button class="btn-primary" disabled="{{geminiDisabled}}" onClick="{{onGeminiContinue}}">Save &amp; finish setup</button>
+      </sc-if>
+
+      <sc-if value="{{allDone}}" hint-placeholder-val="{{false}}">
+        <div class="done-row">
+          <div class="checkmark"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="hint">Yutori key saved</div>
+        </div>
+        <div class="done-row">
+          <div class="checkmark"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="hint">Gemini key saved</div>
+        </div>
+        <div class="hint" style="margin-top:4px;">You're set up. Discovery starts on your next scout cycle — head to the dashboard.</div>
+        <button class="btn-primary" onClick="{{onEnterApp}}">Go to dashboard</button>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { step: "yutori", yutoriKey: "", geminiKey: "" };
+  }
+  renderVals() {
+    const step = this.state.step;
+    const onYutoriStep = step === "yutori";
+    const onGeminiStep = step === "gemini";
+    const allDone = step === "done";
+    return {
+      stepNumber: onYutoriStep ? 1 : 2,
+      stepTitle: onYutoriStep ? "Connect Yutori" : (onGeminiStep ? "Connect Gemini" : "All set"),
+      stepSubtitle: onYutoriStep
+        ? "Discovery is blocked until a Yutori key is supplied."
+        : (onGeminiStep ? "Challenge generation is blocked until a Gemini key is supplied." : "Both keys are stored encrypted — never shown again in plain text."),
+      yutoriDotClass: (onGeminiStep || allDone) ? "done" : "",
+      geminiDotClass: allDone ? "done" : "",
+      onYutoriStep, onGeminiStep, allDone,
+      yutoriKey: this.state.yutoriKey,
+      geminiKey: this.state.geminiKey,
+      yutoriDisabled: this.state.yutoriKey.length === 0,
+      geminiDisabled: this.state.geminiKey.length === 0,
+      onYutoriInput: (e) => this.setState({ yutoriKey: e.target.value }),
+      onGeminiInput: (e) => this.setState({ geminiKey: e.target.value }),
+      onYutoriContinue: () => this.setState({ step: "gemini" }),
+      onGeminiContinue: () => this.setState({ step: "done" }),
+      onEnterApp: () => this.setState({ step: "yutori", yutoriKey: "", geminiKey: "" }),
+    };
+  }
+}
+</script>
+</body>
+</html>

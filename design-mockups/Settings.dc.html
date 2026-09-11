@@ -1,0 +1,243 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--primary:#181d26;--primary-active:#0d1218;--body:#333840;--muted:#41454d;
+      --hairline:#dddddd;--border-strong:#9297a0;--canvas:#ffffff;--surface-soft:#f8fafc;--surface-strong:#e0e2e6;
+      --coral:#aa2d00;--peach:#fcab79;--on-primary:#ffffff;--link:#1b61c9;--link-active:#1a3866;
+      --info:#254fad;--info-border:#458fff;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);background:var(--canvas);}
+    a{color:var(--link);}
+    a:hover{color:var(--link-active);}
+    .nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-bottom:1px solid var(--hairline);}
+    .nav-left{display:flex;align-items:center;gap:40px;}
+    .wordmark{font-size:16px;font-weight:500;display:flex;align-items:center;gap:10px;}
+    .wordmark-badge{width:28px;height:28px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .nav-links{display:flex;gap:28px;}
+    .nav-link{font-size:14px;font-weight:500;color:var(--muted);}
+    .nav-link.active{color:var(--ink);}
+    .avatar{width:32px;height:32px;border-radius:9999px;background:var(--surface-strong);}
+    .page{max-width:760px;margin:0 auto;padding:48px 40px 96px 40px;display:flex;flex-direction:column;gap:32px;}
+    .page-title{font-size:32px;font-weight:400;}
+    .card{border:1px solid var(--hairline);border-radius:12px;padding:28px 32px;display:flex;flex-direction:column;gap:20px;}
+    .card-title{font-size:18px;font-weight:500;}
+    .key-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-top:1px solid var(--hairline);}
+    .key-row:first-of-type{border-top:none;padding-top:0;}
+    .key-name{font-size:15px;font-weight:500;}
+    .key-req{font-size:13.12px;color:var(--muted);margin-top:2px;}
+    .key-status{display:flex;align-items:center;gap:10px;}
+    .status-dot{width:8px;height:8px;border-radius:9999px;}
+    .status-dot.set{background:var(--success);}
+    .status-dot.missing{background:transparent;border:1.5px solid var(--border-strong);}
+    .status-text{font-size:14px;font-weight:500;}
+    .btn-text{font-size:14px;font-weight:500;color:var(--link);cursor:pointer;}
+    .toggle-row{display:flex;background:var(--surface-soft);border-radius:10px;padding:4px;}
+    .toggle-opt{flex:1;text-align:center;padding:10px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;color:var(--muted);}
+    .toggle-opt.on{background:var(--canvas);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,0.06);}
+    .toggle-opt.disabled{color:var(--border-strong);cursor:not-allowed;}
+    .spend-row{display:flex;flex-direction:column;gap:8px;}
+    .spend-bar{height:8px;border-radius:9999px;background:var(--surface-strong);overflow:hidden;}
+    .spend-fill{height:100%;background:var(--ink);border-radius:9999px;}
+    .spend-label{font-size:14px;color:var(--muted);}
+    .row{display:flex;align-items:center;justify-content:space-between;}
+    .field-hint{font-size:14px;color:var(--muted);line-height:1.4;}
+    .btn-secondary{background:var(--canvas);color:var(--ink);font-size:15px;font-weight:500;border:1px solid var(--hairline);border-radius:12px;padding:14px 24px;cursor:pointer;align-self:flex-start;}
+    .spend-edit-row{display:flex;align-items:center;gap:10px;}
+    .spend-input{width:90px;font-family:inherit;font-size:14px;padding:8px 10px;border-radius:8px;border:1px solid var(--border-strong);}
+    .stepper{display:flex;align-items:center;gap:14px;}
+    .step-btn{width:36px;height:36px;border-radius:9999px;border:1px solid var(--border-strong);background:var(--canvas);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;}
+    .step-btn:active{background:var(--surface-strong);}
+    .step-val{font-size:16px;font-weight:500;min-width:20px;text-align:center;}
+    .freq-row{display:flex;gap:8px;}
+    .freq-btn{padding:10px 16px;border-radius:9999px;border:1px solid var(--hairline);font-size:13.12px;font-weight:500;cursor:pointer;background:var(--canvas);}
+    .freq-btn.on{border-color:var(--ink);background:var(--surface-soft);}
+    .diff-inline{display:flex;align-items:center;gap:10px;}
+  </style>
+</helmet>
+<div class="nav">
+  <div class="nav-left">
+    <div class="wordmark">
+      <div class="wordmark-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      Challenge Scout
+    </div>
+    <div class="nav-links">
+      <div class="nav-link">Dashboard</div>
+      <div class="nav-link">Topics</div>
+      <div class="nav-link">Questions</div>
+      <div class="nav-link">Challenges</div>
+      <div class="nav-link active">Settings</div>
+    </div>
+  </div>
+  <div class="avatar"></div>
+</div>
+
+<div class="page">
+  <div class="page-title">Settings</div>
+
+  <div class="card">
+    <div class="card-title">API keys</div>
+    <div class="key-row">
+      <div>
+        <div class="key-name">Yutori</div>
+        <div class="key-req">Required — discovery is blocked without it</div>
+      </div>
+      <div class="key-status"><div class="status-dot set"></div><div class="status-text">Connected</div><div class="btn-text">Rotate</div></div>
+    </div>
+    <div class="key-row">
+      <div>
+        <div class="key-name">Gemini</div>
+        <div class="key-req">Required — active provider</div>
+      </div>
+      <div class="key-status"><div class="status-dot set"></div><div class="status-text">Connected</div><div class="btn-text">Rotate</div></div>
+    </div>
+    <div class="key-row">
+      <div>
+        <div class="key-name">OpenAI</div>
+        <div class="key-req">Optional — alternative provider</div>
+      </div>
+      <div class="key-status"><div class="status-dot missing"></div><div class="status-text">Not set</div><div class="btn-text">Add key</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Active LLM provider</div>
+    <div class="toggle-row">
+      <div class="toggle-opt on">Gemini</div>
+      <div class="toggle-opt disabled">OpenAI — add a key to enable</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Scout mode</div>
+    <div class="toggle-row">
+      <sc-for list="{{modes}}" as="m" hint-placeholder-count="2">
+        <div class="toggle-opt {{m.cls}}" onClick="{{m.select}}">{{m.label}}</div>
+      </sc-for>
+    </div>
+    <div class="field-hint">{{modeHint}}</div>
+    <div class="spend-row">
+      <div class="row"><div class="spend-label">Estimated Yutori spend</div>
+        <sc-if value="{{editingSpend}}" hint-placeholder-val="{{false}}">
+          <div class="spend-edit-row">
+            <span class="spend-label">$</span>
+            <input class="spend-input" type="number" step="0.01" value="{{spendInput}}" onInput="{{onSpendInput}}" />
+            <div class="btn-text" onClick="{{onSaveSpend}}">Save</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{notEditingSpend}}" hint-placeholder-val="{{true}}">
+          <div class="spend-edit-row"><div class="spend-label">${{spend}} of $5.00</div><div class="btn-text" onClick="{{onEditSpend}}">Correct</div></div>
+        </sc-if>
+      </div>
+      <div class="spend-bar"><div class="spend-fill" style="width:{{spendPct}}%"></div></div>
+      <div class="field-hint">If this drifts from what Yutori's own dashboard shows, correct it here — the running total continues from your corrected figure (prd.md §7.2).</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Digest</div>
+    <div class="row">
+      <div class="field-hint">Questions per digest</div>
+      <div class="stepper">
+        <div class="step-btn" onClick="{{onQuestionCountDecrement}}">−</div>
+        <div class="step-val">{{questionCount}}</div>
+        <div class="step-btn" onClick="{{onQuestionCountIncrement}}">+</div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field-hint">Frequency</div>
+      <div class="freq-row">
+        <sc-for list="{{frequencies}}" as="f" hint-placeholder-count="3">
+          <div class="freq-btn {{f.cls}}" onClick="{{f.select}}">{{f.label}}</div>
+        </sc-for>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field-hint">Difficulty range</div>
+      <div class="diff-inline">
+        <div class="stepper">
+          <div class="step-btn" onClick="{{onMinDecrement}}">−</div>
+          <div class="step-val">{{difficultyMin}}</div>
+          <div class="step-btn" onClick="{{onMinIncrement}}">+</div>
+        </div>
+        <span class="field-hint">to</span>
+        <div class="stepper">
+          <div class="step-btn" onClick="{{onMaxDecrement}}">−</div>
+          <div class="step-val">{{difficultyMax}}</div>
+          <div class="step-btn" onClick="{{onMaxIncrement}}">+</div>
+        </div>
+      </div>
+    </div>
+    <div class="row"><div class="field-hint">Recipient</div><div class="key-name">you@example.com</div></div>
+    <div class="field-hint">Recipient is set once at deploy time (`DIGEST_RECIPIENT_EMAIL`) — there's only one user, so it isn't a database field.</div>
+  </div>
+
+  <button class="btn-secondary">Log out</button>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      mode: "setup",
+      spend: 2.45,
+      editingSpend: false,
+      spendInput: "2.45",
+      questionCount: 5,
+      frequency: "3",
+      difficultyMin: 3,
+      difficultyMax: 5,
+    };
+  }
+  renderVals() {
+    const spend = this.state.spend;
+    return {
+      modes: [
+        { label: "Setup — confirm each run", value: "setup" },
+        { label: "Automatic — no confirmation", value: "automatic" },
+      ].map((m) => ({
+        label: m.label,
+        cls: this.state.mode === m.value ? "on" : "",
+        select: () => this.setState({ mode: m.value }),
+      })),
+      modeHint: this.state.mode === "setup"
+        ? "Every cycle asks before spending — good while your topics are still changing."
+        : "Runs on your interval without asking — switch back anytime.",
+      spend: spend.toFixed(2),
+      spendPct: Math.min(100, (spend / 5) * 100),
+      editingSpend: this.state.editingSpend,
+      notEditingSpend: !this.state.editingSpend,
+      spendInput: this.state.spendInput,
+      onSpendInput: (e) => this.setState({ spendInput: e.target.value }),
+      onEditSpend: () => this.setState({ editingSpend: true, spendInput: String(spend) }),
+      onSaveSpend: () => this.setState({ editingSpend: false, spend: Number(this.state.spendInput) || spend }),
+      questionCount: this.state.questionCount,
+      onQuestionCountIncrement: () => this.setState({ questionCount: Math.min(10, this.state.questionCount + 1) }),
+      onQuestionCountDecrement: () => this.setState({ questionCount: Math.max(1, this.state.questionCount - 1) }),
+      frequencies: ["1", "3", "7"].map((f) => ({
+        label: f === "1" ? "Every day" : "Every " + f + " days",
+        cls: this.state.frequency === f ? "on" : "",
+        select: () => this.setState({ frequency: f }),
+      })),
+      difficultyMin: this.state.difficultyMin,
+      difficultyMax: this.state.difficultyMax,
+      onMinIncrement: () => this.setState({ difficultyMin: Math.min(this.state.difficultyMax, this.state.difficultyMin + 1) }),
+      onMinDecrement: () => this.setState({ difficultyMin: Math.max(1, this.state.difficultyMin - 1) }),
+      onMaxIncrement: () => this.setState({ difficultyMax: Math.min(5, this.state.difficultyMax + 1) }),
+      onMaxDecrement: () => this.setState({ difficultyMax: Math.max(this.state.difficultyMin, this.state.difficultyMax - 1) }),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--body:#333840;--muted:#41454d;--hairline:#dddddd;--border-strong:#9297a0;
+      --canvas:#ffffff;--surface-soft:#f8fafc;--surface-strong:#e0e2e6;--coral:#aa2d00;--on-primary:#ffffff;
+      --link:#1b61c9;--link-active:#1a3866;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);background:var(--canvas);}
+    a{color:var(--link);}
+    a:hover{color:var(--link-active);}
+    .nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-bottom:1px solid var(--hairline);}
+    .nav-left{display:flex;align-items:center;gap:40px;}
+    .wordmark{font-size:16px;font-weight:500;display:flex;align-items:center;gap:10px;}
+    .wordmark-badge{width:28px;height:28px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .nav-links{display:flex;gap:28px;}
+    .nav-link{font-size:14px;font-weight:500;color:var(--muted);}
+    .nav-link.active{color:var(--ink);}
+    .avatar{width:32px;height:32px;border-radius:9999px;background:var(--surface-strong);}
+    .page{max-width:960px;margin:0 auto;padding:48px 40px 96px 40px;display:flex;flex-direction:column;gap:32px;}
+    .page-title{font-size:32px;font-weight:400;}
+    .list{display:flex;flex-direction:column;}
+    .row{display:grid;grid-template-columns:100px 1fr 100px 130px 160px;gap:16px;align-items:center;padding:18px 0;border-bottom:1px solid var(--hairline);}
+    .row.head{font-size:13.12px;font-weight:600;letter-spacing:0.16px;color:var(--muted);padding-bottom:12px;}
+    .date{font-size:14px;color:var(--muted);}
+    .qtitle{font-size:15px;font-weight:500;}
+    .diff{font-size:14px;color:var(--body);}
+    .status-pill{font-size:13.12px;font-weight:600;padding:4px 10px;border-radius:6px;display:inline-block;width:fit-content;}
+    .status-pill.solved{background:#e6f2e6;color:var(--success);}
+    .status-pill.attempted{background:#eef1fb;color:#254fad;}
+    .status-pill.skipped{background:var(--surface-soft);color:var(--muted);}
+    .status-pill.not-started{background:var(--surface-soft);color:var(--muted);}
+    .feedback{font-size:14px;color:var(--muted);}
+    @media (max-width: 760px){
+      .row{grid-template-columns:1fr;gap:4px;padding:16px 0;}
+      .row.head{display:none;}
+    }
+  </style>
+</helmet>
+<div class="nav">
+  <div class="nav-left">
+    <div class="wordmark">
+      <div class="wordmark-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      Challenge Scout
+    </div>
+    <div class="nav-links">
+      <div class="nav-link">Dashboard</div>
+      <div class="nav-link">Topics</div>
+      <div class="nav-link">Questions</div>
+      <div class="nav-link active">Challenges</div>
+      <div class="nav-link">Settings</div>
+    </div>
+  </div>
+  <div class="avatar"></div>
+</div>
+
+<div class="page">
+  <div class="page-title">Challenge history</div>
+  <div class="list">
+    <div class="row head"><div>Date</div><div>Question</div><div>Difficulty</div><div>Status</div><div>Feedback</div></div>
+    <sc-for list="{{items}}" as="c" hint-placeholder-count="5">
+      <div class="row">
+        <div class="date">{{c.date}}</div>
+        <div class="qtitle">{{c.title}}</div>
+        <div class="diff">{{c.difficulty}}/5</div>
+        <div><div class="status-pill {{c.statusCls}}">{{c.status}}</div></div>
+        <div class="feedback">{{c.feedback}}</div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      { date: "Sep 7", title: "asyncio.gather() runs sequentially", difficulty: 4, status: "Solved", statusCls: "solved", feedback: "Loved it" },
+      { date: "Sep 7", title: "PostgreSQL planner picks seq scan", difficulty: 3, status: "Attempted", statusCls: "attempted", feedback: "Interesting" },
+      { date: "Sep 4", title: "Redis pipeline loses ordering", difficulty: 3, status: "Skipped", statusCls: "skipped", feedback: "Too easy" },
+      { date: "Sep 4", title: "FastAPI DI breaks under context managers", difficulty: 5, status: "Not started", statusCls: "not-started", feedback: "—" },
+      { date: "Sep 1", title: "SQLAlchemy session leak in background tasks", difficulty: 3, status: "Solved", statusCls: "solved", feedback: "Solved" },
+    ];
+    return { items: rows };
+  }
+}
+</script>
+</body>
+</html>

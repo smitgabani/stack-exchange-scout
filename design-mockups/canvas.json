@@ -1,0 +1,23 @@
+{
+  "artboards": [
+    { "file": "Login.dc.html", "x": 0, "y": 0, "w": 900, "h": 600, "title": "1. Login" },
+    { "file": "Onboarding.dc.html", "x": 980, "y": 0, "w": 1280, "h": 950, "title": "2. First-run setup" },
+
+    { "file": "Main.dc.html", "x": 0, "y": 1030, "w": 1280, "h": 1150, "title": "3. Dashboard (/)" },
+    { "file": "Topics.dc.html", "x": 1360, "y": 1030, "w": 900, "h": 1950, "title": "4. Topics (/topics)" },
+    { "file": "Questions.dc.html", "x": 2340, "y": 1030, "w": 1280, "h": 1450, "title": "5. Questions (/questions)" },
+
+    { "file": "Challenges.dc.html", "x": 0, "y": 3060, "w": 1080, "h": 900, "title": "6. Challenge history (/challenges)" },
+    { "file": "ChallengeDetail.dc.html", "x": 1160, "y": 3060, "w": 760, "h": 1600, "title": "7. Challenge detail (/challenge/:id)" },
+    { "file": "Settings.dc.html", "x": 2000, "y": 3060, "w": 900, "h": 1800, "title": "8. Settings (/settings)" },
+
+    { "file": "ScoutConfirm.dc.html", "x": 0, "y": 4940, "w": 700, "h": 550, "title": "9. Scout confirm (email link, no login)" }
+  ],
+  "annotations": [
+    { "id": "flow-onboarding", "x": 0, "y": -110, "w": 1800, "text": "First run: password gate, then blocking key entry (Yutori required for discovery, Gemini required for challenges)" },
+    { "id": "flow-main", "x": 0, "y": 920, "w": 1800, "text": "Core loop: dashboard → manage topics → browse candidates" },
+    { "id": "flow-detail", "x": 0, "y": 2950, "w": 1800, "text": "History, challenge detail with progressive hints + feedback, and settings" },
+    { "id": "flow-edge", "x": 0, "y": 4830, "w": 700, "text": "Edge case: Setup Mode confirmation, reached from an email link, no login required" }
+  ],
+  "launch": { "view": "canvas" }
+}

@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--primary:#181d26;--primary-active:#0d1218;--body:#333840;--muted:#41454d;
+      --hairline:#dddddd;--border-strong:#9297a0;--canvas:#ffffff;--surface-soft:#f8fafc;--surface-strong:#e0e2e6;
+      --coral:#aa2d00;--forest:#0a2e0e;--cream:#f5e9d4;--peach:#fcab79;--mint:#a8d8c4;--yellow:#f4d35e;
+      --on-primary:#ffffff;--link:#1b61c9;--link-active:#1a3866;--info:#254fad;--info-border:#458fff;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);background:var(--canvas);}
+    a{color:var(--link);}
+    a:hover{color:var(--link-active);}
+    .nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-bottom:1px solid var(--hairline);}
+    .nav-left{display:flex;align-items:center;gap:40px;}
+    .wordmark{font-size:16px;font-weight:500;display:flex;align-items:center;gap:10px;}
+    .wordmark-badge{width:28px;height:28px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .nav-links{display:flex;gap:28px;}
+    .nav-link{font-size:14px;font-weight:500;color:var(--muted);}
+    .nav-link.active{color:var(--ink);}
+    .avatar{width:32px;height:32px;border-radius:9999px;background:var(--surface-strong);}
+    .page{max-width:1120px;margin:0 auto;padding:32px 40px 96px 40px;display:flex;flex-direction:column;gap:40px;}
+
+    .banner{background:var(--yellow);border-radius:12px;padding:20px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;}
+    .banner-text{font-size:15px;font-weight:500;color:var(--ink);}
+    .banner-sub{font-size:13.12px;color:var(--body);margin-top:2px;}
+    .banner-actions{display:flex;gap:10px;}
+    .banner-btn{font-size:14px;font-weight:500;padding:10px 18px;border-radius:9999px;cursor:pointer;border:1px solid rgba(24,29,38,0.25);background:transparent;color:var(--ink);}
+    .banner-btn.primary{background:var(--ink);color:var(--on-primary);border-color:var(--ink);}
+
+    .hero{background:var(--cream);border-radius:12px;padding:40px 48px;display:flex;align-items:center;justify-content:space-between;gap:24px;}
+    .hero-eyebrow{font-size:14px;font-weight:500;letter-spacing:0.16px;color:var(--ink);margin-bottom:8px;}
+    .hero-title{font-size:32px;font-weight:400;line-height:1.2;}
+    .hero-sub{font-size:14px;color:var(--body);margin-top:8px;max-width:440px;line-height:1.4;}
+    .btn-secondary{background:var(--canvas);color:var(--ink);font-size:16px;font-weight:500;border:1px solid var(--hairline);border-radius:12px;padding:16px 24px;cursor:pointer;white-space:nowrap;}
+
+    .section-title{font-size:20px;font-weight:400;margin-bottom:20px;}
+    .topics-row{display:flex;flex-wrap:wrap;gap:12px;}
+    .topic-chip{display:flex;align-items:center;gap:10px;background:var(--surface-soft);border-radius:9999px;padding:10px 16px;font-size:14px;font-weight:500;}
+    .topic-dot{width:8px;height:8px;border-radius:9999px;background:var(--ink);}
+
+    .digest-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;}
+    .digest-card{border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px;color:var(--ink);}
+    .digest-card.tall{padding-bottom:40px;}
+    .digest-card.c-mint{background:var(--mint);}
+    .digest-card.c-peach{background:var(--peach);}
+    .digest-card.c-cream{background:var(--cream);}
+    .diff-badge{align-self:flex-start;font-size:13.12px;font-weight:600;color:var(--ink);background:rgba(255,255,255,0.55);padding:4px 10px;border-radius:6px;}
+    .digest-card-title{font-size:18px;font-weight:500;line-height:1.4;}
+    .digest-card-tags{font-size:14px;color:var(--body);}
+    .digest-card-desc{font-size:14px;color:var(--body);line-height:1.4;}
+
+    .empty-card{background:var(--coral);color:var(--on-primary);border-radius:12px;padding:48px;display:flex;flex-direction:column;gap:10px;align-items:flex-start;}
+    .empty-title{font-size:22px;font-weight:400;}
+    .empty-sub{font-size:14px;opacity:0.85;max-width:420px;line-height:1.4;}
+
+    .stats-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;}
+    .stat{border-top:1px solid var(--hairline);padding-top:16px;display:flex;flex-direction:column;gap:6px;}
+    .stat-num{font-size:32px;font-weight:400;}
+    .stat-label{font-size:14px;color:var(--muted);}
+    @media (max-width: 860px){
+      .digest-grid{grid-template-columns:1fr;}
+      .stats-row{grid-template-columns:repeat(2,minmax(0,1fr));}
+      .hero{flex-direction:column;align-items:flex-start;}
+    }
+  </style>
+</helmet>
+<div class="nav">
+  <div class="nav-left">
+    <div class="wordmark">
+      <div class="wordmark-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      Challenge Scout
+    </div>
+    <div class="nav-links">
+      <div class="nav-link active">Dashboard</div>
+      <div class="nav-link">Topics</div>
+      <div class="nav-link">Questions</div>
+      <div class="nav-link">Challenges</div>
+      <div class="nav-link">Settings</div>
+    </div>
+  </div>
+  <div class="avatar"></div>
+</div>
+
+<div class="page">
+  <sc-if value="{{needsScoutConfirmation}}" hint-placeholder-val="{{true}}">
+    <div class="banner">
+      <div>
+        <div class="banner-text">Run the Scout this cycle?</div>
+        <div class="banner-sub">Setup Mode — $2.45 of $5.00 free credit used so far</div>
+      </div>
+      <div class="banner-actions">
+        <div class="banner-btn">No, skip</div>
+        <div class="banner-btn primary">Yes, run it</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <div class="hero">
+    <div>
+      <div class="hero-eyebrow">Next digest in {{daysUntil}} days</div>
+      <div class="hero-title">Your challenges are on their way</div>
+      <div class="hero-sub">Scout is discovering candidates on your current interval. {{questionCount}} questions are in the pool right now, waiting to be scored.</div>
+    </div>
+    <button class="btn-secondary">View last digest</button>
+  </div>
+
+  <div>
+    <div class="section-title">Your interests</div>
+    <div class="topics-row">
+      <sc-for list="{{topics}}" as="topic" hint-placeholder-count="3">
+        <div class="topic-chip"><div class="topic-dot"></div>{{topic.name}} — {{topic.weight}}%</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-title">Latest challenges</div>
+    <sc-if value="{{emptyDigest}}" hint-placeholder-val="{{false}}">
+      <div class="empty-card">
+        <div class="empty-title">No great challenges were found this cycle</div>
+        <div class="empty-sub">Nothing met the quality bar — that's fine, we don't lower it just to fill a digest. Your next challenge arrives in 3 days.</div>
+      </div>
+    </sc-if>
+    <sc-if value="{{hasDigest}}" hint-placeholder-val="{{true}}">
+      <div class="digest-grid">
+        <div class="digest-card c-mint tall">
+          <div class="diff-badge">Difficulty 4/5</div>
+          <div class="digest-card-title">Async Python — asyncio.gather() runs sequentially</div>
+          <div class="digest-card-tags">python · asyncio · concurrency</div>
+          <div class="digest-card-desc">A genuine debugging problem — no accepted answer yet, and few existing answers to lean on.</div>
+        </div>
+        <div class="digest-card c-peach">
+          <div class="diff-badge">Difficulty 3/5</div>
+          <div class="digest-card-title">PostgreSQL query planner picks a seq scan</div>
+          <div class="digest-card-tags">postgresql · performance</div>
+        </div>
+        <div class="digest-card c-cream tall">
+          <div class="diff-badge">Difficulty 5/5</div>
+          <div class="digest-card-title">FastAPI dependency injection breaks under async context managers</div>
+          <div class="digest-card-tags">fastapi · dependency-injection</div>
+          <div class="digest-card-desc">Advanced — touches lifecycle, scoping, and async context propagation.</div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="stat-num">{{interestingRate}}%</div><div class="stat-label">Marked interesting</div></div>
+    <div class="stat"><div class="stat-num">{{solveRate}}%</div><div class="stat-label">Attempted</div></div>
+    <div class="stat"><div class="stat-num">{{avgDifficulty}}</div><div class="stat-label">Average difficulty</div></div>
+    <div class="stat"><div class="stat-num">{{spend}}</div><div class="stat-label">Yutori spend to date</div></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{
+  "needsScoutConfirmation": {"editor":"boolean","default":true,"section":"State"},
+  "emptyDigest": {"editor":"boolean","default":false,"section":"State"}
+}'>
+class Component extends DCLogic {
+  renderVals() {
+    const emptyDigest = this.props.emptyDigest ?? false;
+    return {
+      needsScoutConfirmation: this.props.needsScoutConfirmation ?? true,
+      emptyDigest,
+      hasDigest: !emptyDigest,
+      daysUntil: 2,
+      questionCount: 11,
+      topics: [
+        { name: "Python", weight: 100 },
+        { name: "FastAPI", weight: 80 },
+        { name: "PostgreSQL", weight: 60 },
+      ],
+      interestingRate: 62,
+      solveRate: 31,
+      avgDifficulty: "3.8",
+      spend: "$2.45",
+    };
+  }
+}
+</script>
+</body>
+</html>

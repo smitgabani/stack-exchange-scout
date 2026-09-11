@@ -1,0 +1,316 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --ink:#181d26;--primary:#181d26;--primary-active:#0d1218;--body:#333840;--muted:#41454d;
+      --hairline:#dddddd;--border-strong:#9297a0;--canvas:#ffffff;--surface-soft:#f8fafc;--surface-strong:#e0e2e6;
+      --coral:#aa2d00;--on-primary:#ffffff;--link:#1b61c9;--link-active:#1a3866;--info:#254fad;--info-border:#458fff;--success:#006400;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);background:var(--canvas);}
+    a{color:var(--link);}
+    a:hover{color:var(--link-active);}
+    .nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 40px;border-bottom:1px solid var(--hairline);}
+    .nav-left{display:flex;align-items:center;gap:40px;}
+    .wordmark{font-size:16px;font-weight:500;display:flex;align-items:center;gap:10px;}
+    .wordmark-badge{width:28px;height:28px;border-radius:8px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+    .nav-links{display:flex;gap:28px;}
+    .nav-link{font-size:14px;font-weight:500;color:var(--muted);}
+    .nav-link.active{color:var(--ink);}
+    .avatar{width:32px;height:32px;border-radius:9999px;background:var(--surface-strong);}
+    .page{max-width:760px;margin:0 auto;padding:48px 40px 96px 40px;display:flex;flex-direction:column;gap:40px;}
+    .page-title{font-size:32px;font-weight:400;}
+    .page-sub{font-size:14px;color:var(--muted);margin-top:8px;}
+    .card{border:1px solid var(--hairline);border-radius:12px;padding:28px 32px;display:flex;flex-direction:column;gap:20px;}
+    .card-title{font-size:18px;font-weight:500;}
+    .topic-row{display:flex;align-items:center;gap:14px;}
+    .topic-avatar{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--ink);flex-shrink:0;}
+    .topic-name{width:100px;font-size:14px;font-weight:500;flex-shrink:0;}
+    .topic-slider{flex:1;accent-color:var(--ink);}
+    .topic-pct{width:40px;text-align:right;font-size:14px;color:var(--muted);flex-shrink:0;}
+    .remove-topic{width:40px;height:40px;flex-shrink:0;border:none;background:none;border-radius:9999px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);}
+    .remove-topic:active{background:var(--surface-soft);}
+    .add-topic{font-size:14px;font-weight:500;color:var(--link);cursor:pointer;align-self:flex-start;}
+    .chip-row{display:flex;flex-wrap:wrap;gap:10px;}
+    .chip{font-size:14px;font-weight:500;padding:10px 16px;border-radius:9999px;border:1px solid var(--hairline);cursor:pointer;background:var(--canvas);color:var(--body);}
+    .chip.on{background:var(--ink);border-color:var(--ink);color:var(--on-primary);}
+    .chip.excluded.on{background:var(--ink);border-color:var(--ink);color:var(--on-primary);}
+    .range-labels{display:flex;justify-content:space-between;font-size:14px;color:var(--muted);}
+    .stepper{display:flex;align-items:center;gap:16px;}
+    .step-btn{width:44px;height:44px;border-radius:9999px;border:1px solid var(--border-strong);background:var(--canvas);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;}
+    .step-btn:active{background:var(--surface-strong);}
+    .step-val{font-size:18px;font-weight:500;min-width:24px;text-align:center;}
+    .freq-row{display:flex;gap:10px;}
+    .freq-btn{flex:1;text-align:center;padding:14px;border-radius:10px;border:1px solid var(--hairline);font-size:14px;font-weight:500;cursor:pointer;background:var(--canvas);}
+    .freq-btn.on{border-color:var(--ink);background:var(--surface-soft);}
+    .diff-row{display:flex;gap:40px;flex-wrap:wrap;}
+    .diff-field{display:flex;flex-direction:column;gap:10px;}
+    .diff-label{font-size:14px;font-weight:500;color:var(--body);}
+    .pref-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:4px 0;}
+    .pref-row.locked{opacity:0.7;}
+    .pref-text{display:flex;flex-direction:column;gap:4px;}
+    .pref-name{font-size:15px;font-weight:500;}
+    .pref-hint{font-size:13.12px;color:var(--muted);line-height:1.35;}
+    .locked-badge{font-size:13.12px;font-weight:600;color:var(--muted);white-space:nowrap;flex-shrink:0;}
+    .toggle-switch{width:44px;height:26px;border-radius:9999px;background:var(--surface-strong);border:none;position:relative;cursor:pointer;flex-shrink:0;padding:0;}
+    .toggle-switch.on{background:var(--ink);}
+    .toggle-knob{width:20px;height:20px;border-radius:9999px;background:#ffffff;position:absolute;top:3px;left:3px;}
+    .toggle-switch.on .toggle-knob{left:21px;}
+    .save-row{position:sticky;bottom:0;display:flex;justify-content:flex-end;gap:12px;padding:20px 0;background:linear-gradient(to top, var(--canvas) 70%, transparent);}
+    .btn-primary{background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:500;border:none;border-radius:12px;padding:16px 32px;cursor:pointer;}
+    .btn-primary:active{background:var(--primary-active);}
+    .saved-toast{font-size:14px;font-weight:500;color:var(--success);align-self:center;}
+  </style>
+</helmet>
+<div class="nav">
+  <div class="nav-left">
+    <div class="wordmark">
+      <div class="wordmark-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12L10 17L19 7" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      Challenge Scout
+    </div>
+    <div class="nav-links">
+      <div class="nav-link">Dashboard</div>
+      <div class="nav-link active">Topics</div>
+      <div class="nav-link">Questions</div>
+      <div class="nav-link">Challenges</div>
+      <div class="nav-link">Settings</div>
+    </div>
+  </div>
+  <div class="avatar"></div>
+</div>
+
+<div class="page">
+  <div>
+    <div class="page-title">My interests</div>
+    <div class="page-sub">Changing topics never deletes questions already discovered — they just keep their old profile version.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Topics</div>
+    <sc-for list="{{topics}}" as="t" hint-placeholder-count="4">
+      <div class="topic-row">
+        <div class="topic-avatar" style="background:{{t.color}}">{{t.initial}}</div>
+        <div class="topic-name">{{t.name}}</div>
+        <input class="topic-slider" type="range" min="0" max="100" value="{{t.weight}}" onInput="{{t.onChange}}" />
+        <div class="topic-pct">{{t.weight}}%</div>
+        <button class="remove-topic" onClick="{{t.remove}}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </sc-for>
+    <div class="add-topic">+ Add topic</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Preferred concepts</div>
+    <div class="chip-row">
+      <sc-for list="{{concepts}}" as="c" hint-placeholder-count="5">
+        <div class="chip {{c.cls}}" onClick="{{c.toggle}}">{{c.name}}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Avoid</div>
+    <div class="chip-row">
+      <sc-for list="{{excluded}}" as="c" hint-placeholder-count="3">
+        <div class="chip excluded {{c.cls}}" onClick="{{c.toggle}}">{{c.name}}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Difficulty</div>
+    <div class="diff-row">
+      <div class="diff-field">
+        <div class="diff-label">Minimum</div>
+        <div class="stepper">
+          <div class="step-btn" onClick="{{onMinDecrement}}">−</div>
+          <div class="step-val">{{difficultyMin}}</div>
+          <div class="step-btn" onClick="{{onMinIncrement}}">+</div>
+        </div>
+      </div>
+      <div class="diff-field">
+        <div class="diff-label">Maximum</div>
+        <div class="stepper">
+          <div class="step-btn" onClick="{{onMaxDecrement}}">−</div>
+          <div class="step-val">{{difficultyMax}}</div>
+          <div class="step-btn" onClick="{{onMaxIncrement}}">+</div>
+        </div>
+      </div>
+    </div>
+    <div class="page-sub">Showing questions rated {{difficultyMin}}–{{difficultyMax}} out of 5.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Question preferences</div>
+    <div class="pref-row">
+      <div class="pref-text">
+        <div class="pref-name">Prefer unanswered questions</div>
+        <div class="pref-hint">Rank questions with fewer existing answers higher.</div>
+      </div>
+      <button class="toggle-switch {{preferUnansweredCls}}" onClick="{{onTogglePreferUnanswered}}"><div class="toggle-knob"></div></button>
+    </div>
+    <div class="pref-row">
+      <div class="pref-text">
+        <div class="pref-name">Prefer recent questions</div>
+        <div class="pref-hint">Rank newer questions higher over otherwise-similar older ones.</div>
+      </div>
+      <button class="toggle-switch {{preferRecentCls}}" onClick="{{onTogglePreferRecent}}"><div class="toggle-knob"></div></button>
+    </div>
+    <div class="pref-row">
+      <div class="pref-text">
+        <div class="pref-name">Maximum existing answers</div>
+        <div class="pref-hint">Skip questions that already have more answers than this.</div>
+      </div>
+      <div class="stepper">
+        <div class="step-btn" onClick="{{onMaxAnswersDecrement}}">−</div>
+        <div class="step-val">{{maxAnswers}}</div>
+        <div class="step-btn" onClick="{{onMaxAnswersIncrement}}">+</div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--hairline);margin:4px 0;" />
+    <div class="pref-row locked">
+      <div class="pref-text">
+        <div class="pref-name">Exclude closed questions</div>
+        <div class="pref-hint">Always applied — closed questions are never shown (prd.md §14).</div>
+      </div>
+      <div class="locked-badge">Always on</div>
+    </div>
+    <div class="pref-row locked">
+      <div class="pref-text">
+        <div class="pref-name">Exclude duplicates</div>
+        <div class="pref-hint">Always applied — duplicate questions are never shown (prd.md §14).</div>
+      </div>
+      <div class="locked-badge">Always on</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Questions per digest</div>
+    <div class="stepper">
+      <div class="step-btn" onClick="{{onDecrement}}">−</div>
+      <div class="step-val">{{questionCount}}</div>
+      <div class="step-btn" onClick="{{onIncrement}}">+</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Frequency</div>
+    <div class="freq-row">
+      <sc-for list="{{frequencies}}" as="f" hint-placeholder-count="3">
+        <div class="freq-btn {{f.cls}}" onClick="{{f.select}}">{{f.label}}</div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div class="save-row">
+    <sc-if value="{{showSaved}}" hint-placeholder-val="{{false}}">
+      <div class="saved-toast">Saved — Scout query regenerated</div>
+    </sc-if>
+    <button class="btn-primary" onClick="{{onSave}}">Save</button>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+const TOPIC_PALETTE = ["#a8d8c4", "#fcab79", "#f5e9d4", "#f4d35e", "#d9a441"];
+function colorForTopic(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 997;
+  return TOPIC_PALETTE[Math.abs(hash) % TOPIC_PALETTE.length];
+}
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      topics: [
+        { name: "Python", weight: 100 },
+        { name: "FastAPI", weight: 80 },
+        { name: "PostgreSQL", weight: 60 },
+        { name: "Redis", weight: 40 },
+      ],
+      concepts: [
+        { name: "Debugging", on: true },
+        { name: "Performance", on: true },
+        { name: "Architecture", on: true },
+        { name: "Async", on: true },
+        { name: "Database design", on: false },
+      ],
+      excluded: [
+        { name: "Homework", on: true },
+        { name: "Beginner syntax", on: true },
+        { name: "Installation", on: true },
+      ],
+      difficultyMin: 3,
+      difficultyMax: 5,
+      preferUnanswered: true,
+      preferRecent: true,
+      maxAnswers: 3,
+      questionCount: 5,
+      frequency: "3",
+      showSaved: false,
+    };
+  }
+  updateTopic(i, val) {
+    const topics = this.state.topics.slice();
+    topics[i] = { ...topics[i], weight: Number(val) };
+    this.setState({ topics, showSaved: false });
+  }
+  removeTopic(i) {
+    const topics = this.state.topics.slice();
+    topics.splice(i, 1);
+    this.setState({ topics, showSaved: false });
+  }
+  toggleConcept(list, i) {
+    const arr = this.state[list].slice();
+    arr[i] = { ...arr[i], on: !arr[i].on };
+    this.setState({ [list]: arr, showSaved: false });
+  }
+  renderVals() {
+    return {
+      topics: this.state.topics.map((t, i) => ({
+        ...t,
+        color: colorForTopic(t.name),
+        initial: t.name.charAt(0).toUpperCase(),
+        onChange: (e) => this.updateTopic(i, e.target.value),
+        remove: () => this.removeTopic(i),
+      })),
+      concepts: this.state.concepts.map((c, i) => ({ ...c, cls: c.on ? "on" : "", toggle: () => this.toggleConcept("concepts", i) })),
+      excluded: this.state.excluded.map((c, i) => ({ ...c, cls: c.on ? "on" : "", toggle: () => this.toggleConcept("excluded", i) })),
+      difficultyMin: this.state.difficultyMin,
+      difficultyMax: this.state.difficultyMax,
+      onMinIncrement: () => this.setState({ difficultyMin: Math.min(this.state.difficultyMax, this.state.difficultyMin + 1), showSaved: false }),
+      onMinDecrement: () => this.setState({ difficultyMin: Math.max(1, this.state.difficultyMin - 1), showSaved: false }),
+      onMaxIncrement: () => this.setState({ difficultyMax: Math.min(5, this.state.difficultyMax + 1), showSaved: false }),
+      onMaxDecrement: () => this.setState({ difficultyMax: Math.max(this.state.difficultyMin, this.state.difficultyMax - 1), showSaved: false }),
+      preferUnansweredCls: this.state.preferUnanswered ? "on" : "",
+      onTogglePreferUnanswered: () => this.setState({ preferUnanswered: !this.state.preferUnanswered, showSaved: false }),
+      preferRecentCls: this.state.preferRecent ? "on" : "",
+      onTogglePreferRecent: () => this.setState({ preferRecent: !this.state.preferRecent, showSaved: false }),
+      maxAnswers: this.state.maxAnswers,
+      onMaxAnswersIncrement: () => this.setState({ maxAnswers: Math.min(10, this.state.maxAnswers + 1), showSaved: false }),
+      onMaxAnswersDecrement: () => this.setState({ maxAnswers: Math.max(0, this.state.maxAnswers - 1), showSaved: false }),
+      questionCount: this.state.questionCount,
+      onIncrement: () => this.setState({ questionCount: Math.min(10, this.state.questionCount + 1), showSaved: false }),
+      onDecrement: () => this.setState({ questionCount: Math.max(1, this.state.questionCount - 1), showSaved: false }),
+      frequencies: ["1", "3", "7"].map((f) => ({
+        label: f === "1" ? "Every day" : "Every " + f + " days",
+        cls: this.state.frequency === f ? "on" : "",
+        select: () => this.setState({ frequency: f, showSaved: false }),
+      })),
+      showSaved: this.state.showSaved,
+      onSave: () => this.setState({ showSaved: true }),
+    };
+  }
+}
+</script>
+</body>
+</html>
