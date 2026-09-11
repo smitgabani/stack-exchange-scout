@@ -4,7 +4,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 
-engine = create_async_engine(settings.database_url)
+# statement_cache_size=0 disables asyncpg's server-side prepared-statement
+# cache. Required against Supabase's Transaction-mode pooler (PgBouncer):
+# in transaction pooling, consecutive queries aren't guaranteed to hit the
+# same underlying Postgres connection, so a statement prepared on one
+# connection can't be reused safely on another.
+engine = create_async_engine(
+    settings.database_url,
+    connect_args={"statement_cache_size": 0},
+)
 async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
