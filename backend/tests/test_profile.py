@@ -64,3 +64,80 @@ def test_patch_profile_switch_to_openai_with_key_succeeds(
     response = client.patch("/profile", json={"llm": {"provider": "openai"}}, cookies=auth_cookies)
     assert response.status_code == 200
     assert response.json()["data"]["llm"]["provider"] == "openai"
+
+
+# --- M3: server-side validation ---
+
+
+def test_patch_profile_topic_weight_out_of_bounds_rejected(client: TestClient, auth_cookies: dict[str, str]) -> None:
+    response = client.patch("/profile", json={"topics": [{"name": "python", "weight": 150}]}, cookies=auth_cookies)
+    assert response.status_code == 422
+
+
+def test_patch_profile_duplicate_topic_names_rejected(client: TestClient, auth_cookies: dict[str, str]) -> None:
+    response = client.patch(
+        "/profile",
+        json={"topics": [{"name": "Python", "weight": 50}, {"name": "python", "weight": 30}]},
+        cookies=auth_cookies,
+    )
+    assert response.status_code == 422
+
+
+def test_patch_profile_topics_valid_round_trip(client: TestClient, auth_cookies: dict[str, str]) -> None:
+    response = client.patch("/profile", json={"topics": [{"name": "Rust", "weight": 75}]}, cookies=auth_cookies)
+    assert response.status_code == 200
+    assert response.json()["data"]["topics"] == [{"name": "Rust", "weight": 75}]
+
+
+def test_patch_profile_difficulty_min_greater_than_max_rejected(
+    client: TestClient, auth_cookies: dict[str, str]
+) -> None:
+    response = client.patch("/profile", json={"difficulty": {"minimum": 5, "maximum": 2}}, cookies=auth_cookies)
+    assert response.status_code == 422
+
+
+def test_patch_profile_difficulty_out_of_1_to_5_rejected(client: TestClient, auth_cookies: dict[str, str]) -> None:
+    response = client.patch("/profile", json={"difficulty": {"minimum": 0, "maximum": 5}}, cookies=auth_cookies)
+    assert response.status_code == 422
+
+
+def test_patch_profile_digest_bounds_rejected(client: TestClient, auth_cookies: dict[str, str]) -> None:
+    assert client.patch("/profile", json={"digest": {"questions": 999}}, cookies=auth_cookies).status_code == 422
+    assert client.patch("/profile", json={"digest": {"frequency_days": 0}}, cookies=auth_cookies).status_code == 422
+
+
+def test_patch_profile_max_answers_out_of_bounds_rejected(client: TestClient, auth_cookies: dict[str, str]) -> None:
+    response = client.patch("/profile", json={"question_preferences": {"max_answers": 999}}, cookies=auth_cookies)
+    assert response.status_code == 422
+
+
+def test_patch_profile_exclude_flags_always_coerced_true(
+    client: TestClient, auth_cookies: dict[str, str]
+) -> None:
+    response = client.patch(
+        "/profile",
+        json={"question_preferences": {"exclude_closed": False, "exclude_duplicates": False}},
+        cookies=auth_cookies,
+    )
+    assert response.status_code == 200
+    prefs = response.json()["data"]["question_preferences"]
+    assert prefs["exclude_closed"] is True
+    assert prefs["exclude_duplicates"] is True
+
+
+def test_patch_profile_duplicate_preferred_concepts_rejected(
+    client: TestClient, auth_cookies: dict[str, str]
+) -> None:
+    response = client.patch("/profile", json={"preferred_concepts": ["debugging", "Debugging"]}, cookies=auth_cookies)
+    assert response.status_code == 422
+
+
+def test_patch_profile_concept_overlap_between_preferred_and_excluded_rejected(
+    client: TestClient, auth_cookies: dict[str, str]
+) -> None:
+    response = client.patch(
+        "/profile",
+        json={"preferred_concepts": ["performance"], "excluded_concepts": ["performance"]},
+        cookies=auth_cookies,
+    )
+    assert response.status_code == 422

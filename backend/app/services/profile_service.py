@@ -44,7 +44,14 @@ async def apply_patch(db: AsyncSession, patch: dict[str, Any]) -> Profile:
     try:
         validated = ProfileData.model_validate(merged)
     except ValidationError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.errors()) from exc
+        # include_context=False: our custom validators raise plain
+        # ValueError, which Pydantic surfaces via errors()[i]["ctx"]["error"]
+        # as the raw exception object — not JSON-serializable, which would
+        # otherwise crash the response instead of returning a clean 422.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=exc.errors(include_context=False, include_url=False),
+        ) from exc
 
     if validated.llm.provider == "openai" and not await has_api_key(db, "openai_api_key"):
         raise HTTPException(
