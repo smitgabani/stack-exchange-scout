@@ -134,3 +134,31 @@
   color: #41454d;
   border: 1px solid #dddddd;
 }
+
+.toggleRow {
+  display: flex;
+  gap: 8px;
+}
+
+.toggleOpt {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 9999px;
+  border: 1px solid #dddddd;
+  background: #f8fafc;
+  color: #333840;
+  cursor: pointer;
+}
+
+.toggleOpt.on {
+  background: #181d26;
+  color: #ffffff;
+  border-color: #181d26;
+}
+
+.toggleOpt.disabled {
+  color: #9297a0;
+  cursor: not-allowed;
+}
