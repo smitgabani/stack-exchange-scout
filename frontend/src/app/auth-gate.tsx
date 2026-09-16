@@ -1,8 +1,10 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { OnboardingGate } from "./onboarding-gate";
 
 async function fetchSession(): Promise<{ authenticated: boolean }> {
   const response = await fetch("/api/auth/session");
@@ -46,10 +48,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header style={{ display: "flex", justifyContent: "flex-end", padding: "12px 24px", borderBottom: "1px solid #ddd" }}>
+      <header style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "16px", padding: "12px 24px", borderBottom: "1px solid #ddd" }}>
+        <Link href="/settings">Settings</Link>
         <button onClick={handleLogout}>Log out</button>
       </header>
-      {children}
+      <OnboardingGate>{children}</OnboardingGate>
     </>
   );
 }
