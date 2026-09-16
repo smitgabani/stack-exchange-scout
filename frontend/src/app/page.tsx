@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 async function fetchHealth(): Promise<{ status: string }> {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/health`);
+  const response = await fetch("/api/health");
   if (!response.ok) {
     throw new Error(`backend returned ${response.status}`);
   }
