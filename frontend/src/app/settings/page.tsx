@@ -96,6 +96,64 @@ function KeyRow({ id, name, requirement }: { id: Provider; name: string; require
   );
 }
 
+type Profile = { data: { llm: { provider: "gemini" | "openai" } } };
+
+async function fetchProfile(): Promise<Profile> {
+  const response = await fetch("/api/profile");
+  if (!response.ok) {
+    throw new Error(`failed to fetch profile: ${response.status}`);
+  }
+  return response.json();
+}
+
+async function switchProvider(provider: "gemini" | "openai"): Promise<Response> {
+  return fetch("/api/profile", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ llm: { provider } }),
+  });
+}
+
+function ActiveProviderCard() {
+  const queryClient = useQueryClient();
+  const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
+  const { data: openaiConnected } = useQuery({
+    queryKey: ["settings", "openai-key", "status"],
+    queryFn: () => fetchStatus("openai"),
+  });
+  const activeProvider = profile?.data.llm.provider ?? "gemini";
+
+  async function handleSwitch(provider: "gemini" | "openai") {
+    if (provider === activeProvider) return;
+    if (provider === "openai" && !openaiConnected) return;
+    const response = await switchProvider(provider);
+    if (response.ok) {
+      await queryClient.invalidateQueries({ queryKey: ["profile"] });
+    }
+  }
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardTitle}>Active LLM provider</div>
+      <div className={styles.toggleRow}>
+        <button
+          className={`${styles.toggleOpt} ${activeProvider === "gemini" ? styles.on : ""}`}
+          onClick={() => handleSwitch("gemini")}
+        >
+          Gemini
+        </button>
+        <button
+          className={`${styles.toggleOpt} ${activeProvider === "openai" ? styles.on : ""} ${!openaiConnected ? styles.disabled : ""}`}
+          onClick={() => handleSwitch("openai")}
+          disabled={!openaiConnected}
+        >
+          {openaiConnected ? "OpenAI" : "OpenAI — add a key to enable"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <main className={styles.page}>
@@ -106,6 +164,7 @@ export default function SettingsPage() {
           <KeyRow key={provider.id} {...provider} />
         ))}
       </div>
+      <ActiveProviderCard />
     </main>
   );
 }
