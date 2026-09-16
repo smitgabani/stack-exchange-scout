@@ -118,3 +118,49 @@ This first commit went straight to `main` deliberately — it's a snapshot of pr
 - Vercel's Framework Preset controls how the platform *serves* build output, independent of whether the build command itself (`next build`) succeeds — a successful build log doesn't guarantee a working deployment.
 
 **Next up:** M0 is fully closed out (all backend/frontend tickets + M0-TEST done). No ADR warranted for this session — tactical execution/debugging, not a new architectural direction. Move to M1 (Access Gate & Credential Storage): app-wide password gate, credential encryption at rest.
+
+---
+
+## 2026-09-16 — M1 complete, M2 complete: session cookie, profile document, API key onboarding
+
+**Milestone / tickets:** M1-B1..B6, M1-F1,F2, M1-TEST; M2-B1..B9, M2-F1..F4, M2-TEST
+
+**Decisions made:**
+
+- Session-cookie vs. JWT/OAuth framing (M1's system-design kickoff): a plain signed cookie is the right-sized tool for a single-shared-password app — JWT's stateless-verification value and OAuth's delegated-identity value both solve problems this app doesn't have (multiple services, multiple real users).
+- Discovered mid-M1 that the Fly.io backend and Vercel frontend are genuinely different domains, so a cross-site session cookie would need `SameSite=None` and risk Safari's third-party-cookie blocking. Fixed by proxying frontend API calls through Vercel (`next.config.ts` rewrites, `/api/* -> BACKEND_URL`) so the browser only ever talks to its own origin — cookie is same-site, and CORS becomes mostly moot for these calls.
+- Signed cookie built with `itsdangerous` (`URLSafeTimedSerializer`), not a JWT library — no standardized claims/interop needed, just a signed+timestamped opaque value.
+- **Mid-M1, the user granted a temporary, explicit exception to ADR 0002**: asked Claude to run all commands directly (git/flyctl/vercel/npm included) through the rest of M1 and all of M2, rather than handing them off one at a time. This is a scoped exception, not a standing change — ADR 0002's default (user runs git/devops commands) resumes after M2 unless re-granted. Recorded in memory so a future session doesn't assume it persists.
+- Once running commands directly, moved the actual git work back onto proper ticket branches after initially drifting onto `main` — the autonomy grant was about *who* runs commands, not about abandoning the branch-per-ticket workflow.
+- PATCH /profile uses JSON-Merge-Patch semantics (RFC 7396: only keys present in the request are touched, at any nesting level) rather than requiring the full document — necessary because Pydantic sub-models with defaults would otherwise silently overwrite untouched sibling fields on a partial nested update.
+- Bounds validation (topic weight ranges, difficulty min<=max, etc.) deliberately deferred to M3 per the ticket list's own split — M2's profile schema validates structure/types only.
+
+**What got built:**
+
+- **M1-B1..B6:** `APP_ACCESS_PASSWORD`/`APP_SECRET_KEY` config; `credentials` table + Fernet encrypt/decrypt helper (key derived from `APP_SECRET_KEY` via SHA-256 + urlsafe-base64, since Fernet needs a 32-byte key and the secret is an arbitrary-length hex string); `POST /auth/login|logout` + `GET /auth/session`; an app-wide `require_session` dependency that no-ops for the exact exempt list from `prd.md` §27.1.
+- **M1-F1,F2:** mockup-matched login page; `AuthGate` checking `/auth/session` on load, redirecting unauthenticated visitors to `/login` and back.
+- **M2-B1..B9:** `profile` table (single JSONB row + version); `GET`/`PATCH /profile` with the merge-then-validate-then-save flow above; six `/settings/{provider}-key(+status)` endpoints for Yutori/Gemini/OpenAI; `require_yutori_key`/`require_gemini_key` dependencies built now for M4/M7 to attach later; switching `llm.provider` to `"openai"` rejected without a stored key.
+- **M2-F1..F4:** two-step onboarding wizard (Yutori, then Gemini) gated by a new `OnboardingGate`; Settings page with per-provider Connected/Not-set status, Rotate/Add-key inline editing, and (added after catching the gap against M2-TEST's own click-through spec) a Gemini/OpenAI active-provider toggle.
+- GitHub Actions `test` job gained a real ephemeral Postgres service container — M2 is the first milestone with tests that actually touch the database.
+
+**Bugs found and fixed this session (not just happy-path building):**
+
+1. **Async engine connection pooling across event loops.** The first DB-touching tests failed with `InterfaceError: cannot perform operation: another operation is in progress` — the app's `engine` had no `poolclass` override, so a pooled asyncpg connection (bound to the event loop it was created on) could outlive that loop. Each fresh `TestClient` spins up its own loop; production has the same latent risk from Fly's start/stop cycle. Fixed with `poolclass=NullPool`, matching what `alembic/env.py` already did for the same reason.
+2. **Shared database, no test isolation locally.** `backend/.env`'s `DATABASE_URL` points at the same Supabase project the deployed app uses — CI is safe (fresh Postgres container per run), but running `pytest` locally silently wrote real rows into `profile`/`credentials`, later confirmed by diffing `GET /profile` against production and finding test values (`digest.frequency_days: 9`, `llm.provider: openai`, three fake keys) instead of real defaults. Cleaned up manually (safe to do with certainty — no real onboarding UI existed yet, so every row was traceably test-created); documented as a standing risk in `rules.md` rather than silently building an auto-wipe mechanism, since blindly deleting `profile`/`credentials` after every test run would itself be dangerous once real user data exists. A genuinely separate test database is flagged as a future infra decision, not decided unilaterally.
+3. **`OnboardingGate` auto-redirect race.** Verified the onboarding flow end-to-end with a headless-Chromium script (Playwright) against the real deployed backend and caught a real bug: the gate redirected away from `/onboarding` the instant both keys became connected, firing mid-flow right after the Gemini key saved — the user was yanked to the dashboard before ever seeing the "All set" confirmation screen the mockup calls for. Fixed by removing that redirect direction entirely; the onboarding page's own "Go to dashboard" button is now the only way to leave.
+4. **M2-F3/F4 under-scoped against M2-TEST.** The ticket list's own click-through step ("add an OpenAI key and switch the active provider") requires a working provider toggle, which the initial Settings pass didn't include (scoped out as "not explicitly in M2-F1..F4's text"). Added it as a follow-up PR once the gap was noticed by actually walking the click-through instead of just reading the ticket bullets.
+
+**Git:**
+
+- `m1-frontend-access-gate` (Vercel proxy fix, then login/AuthGate), `m1-backend-access-gate`, `m2-backend-profile-onboarding`, `m2-frontend-onboarding-settings`, `m2-frontend-provider-toggle` — five branches, five PRs (#3-#7), all merged via `gh pr merge --merge` after CI (and, from M2 on, a real Vercel preview deployment check) passed.
+- Root-caused a `git status` mismatch where a branch showed the *previous* branch's files: `git checkout` had happened, but the working tree still reflected the old branch's content because the switch hadn't actually landed as expected — resolved by re-verifying with `git branch --show-current` before trusting file state, a good habit anytime branch state feels surprising.
+
+**Concepts introduced:**
+
+- Why a signed opaque cookie beats JWT/OAuth for a single-password app, and the separate, real problem of cross-site cookies when frontend and backend are genuinely different domains (`SameSite=None` + browser third-party-cookie blocking) — solved by proxying rather than by loosening cookie attributes.
+- JSON Merge Patch (RFC 7396) as the standard shape for "partial update" semantics, and why naively re-validating a partial payload through a Pydantic model with field defaults silently destroys untouched sibling data.
+- asyncpg connections are bound to the event loop that created them; a connection pool that outlives its loop breaks in a way that looks like a database problem but is a concurrency/lifecycle problem. `NullPool` trades a small per-checkout cost for eliminating that entire bug class — reasonable here since Supabase's PgBouncer already pools upstream.
+- Why testing against a shared, persistent database is a real hazard distinct from "did the test pass" — a green test suite can still mean real data got overwritten, and the only way to know is to check.
+- Using a real headless-browser script (Playwright driving Chromium) to verify a multi-step frontend flow end-to-end, rather than trusting `npm run build` succeeding or reading the code and assuming it's right — this is what actually caught the `OnboardingGate` race and the missing provider toggle.
+
+**Next up:** M1 and M2 are both fully closed out, including M2-TEST. No ADR warranted — the cookie/proxy decision was tactical (already covered by the M1 commit history and this log entry), and the test-database question is explicitly left open for the user rather than decided. The command-execution boundary (ADR 0002) resumes as the default for M3 unless the user grants another explicit exception. Next: M3 (Topic & Preference Management) — server-side validation for topics/concepts/difficulty/digest settings, including the weight/bounds checks this session deliberately deferred.
