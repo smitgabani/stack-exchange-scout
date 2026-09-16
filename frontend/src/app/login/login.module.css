@@ -1,0 +1,134 @@
+.bg {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% -8%, #fbf4e6 0%, #f5e9d4 38%, #ffffff 78%);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 48px 40px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  box-shadow:
+    0 40px 80px -32px rgba(24, 29, 38, 0.22),
+    0 2px 6px rgba(24, 29, 38, 0.05);
+}
+
+.iconBadge {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid #dddddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 24px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #181d26;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #41454d;
+  line-height: 1.4;
+  max-width: 300px;
+  margin-top: 6px;
+  margin-bottom: 28px;
+}
+
+.fieldWrap {
+  width: 100%;
+  position: relative;
+  margin-bottom: 8px;
+}
+
+.fieldWrap input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 16px 48px 16px 20px;
+  border-radius: 9999px;
+  border: 1px solid #dddddd;
+  background: #f8fafc;
+  color: #181d26;
+}
+
+.fieldWrap input::placeholder {
+  color: #41454d;
+}
+
+.fieldWrap input:focus {
+  outline: 2px solid #181d26;
+  outline-offset: 2px;
+}
+
+.toggleButton {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  color: #41454d;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 13px;
+}
+
+.error {
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16px;
+  color: #aa2d00;
+  margin: -2px 0 4px 8px;
+}
+
+.submitButton {
+  width: 100%;
+  background: #181d26;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 500;
+  border: none;
+  border-radius: 9999px;
+  padding: 16px 24px;
+  cursor: pointer;
+  margin-top: 16px;
+}
+
+.submitButton:active {
+  background: #0d1218;
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.footnote {
+  font-size: 13px;
+  color: #41454d;
+  line-height: 1.4;
+  margin-top: 24px;
+  max-width: 300px;
+}
