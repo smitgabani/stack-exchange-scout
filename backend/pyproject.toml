@@ -12,3 +12,21 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.52",
     "uvicorn[standard]>=0.52.4",
 ]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection system requires Depends(...)/Query(...)/etc.
+# as literal argument defaults — that's the framework's actual API, not the
+# mutable-default-argument bug B008 exists to catch.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+]

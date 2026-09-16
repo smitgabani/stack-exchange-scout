@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv==0.12.13
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # /health doesn't touch the DB, but Settings validation and engine
+      # creation need a well-formed DATABASE_URL to exist — this never
+      # needs to be reachable in the lint/test job.
+      DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv==0.12.13
+      - run: uv sync --frozen
+      - run: uv run pytest
