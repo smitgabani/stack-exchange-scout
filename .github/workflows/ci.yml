@@ -22,14 +22,27 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    services:
+      # M2's profile/credentials tests do real DB round-trips — a fresh,
+      # disposable Postgres per CI run, never the real Supabase dev project.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
     env:
-      # /health doesn't touch the DB or auth, but Settings validation and
-      # engine creation need these to exist — none need to be real/reachable
-      # in the lint/test job.
-      DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/placeholder
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test
       APP_ACCESS_PASSWORD: test-password
       APP_SECRET_KEY: test-secret-key
     steps:
@@ -39,4 +52,5 @@ jobs:
           python-version: "3.12"
       - run: pip install uv==0.12.13
       - run: uv sync --frozen
+      - run: uv run alembic upgrade head
       - run: uv run pytest
