@@ -1,0 +1,159 @@
+.bg {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% -8%, #fbf4e6 0%, #f5e9d4 38%, #ffffff 78%);
+}
+
+.card {
+  width: 100%;
+  max-width: 560px;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 56px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow:
+    0 40px 80px -32px rgba(24, 29, 38, 0.22),
+    0 2px 6px rgba(24, 29, 38, 0.05);
+}
+
+.eyebrow {
+  font-size: 14px;
+  font-weight: 500;
+  color: #181d26;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.2;
+  margin-top: 6px;
+  color: #181d26;
+}
+
+.subtitle {
+  font-size: 15px;
+  color: #41454d;
+  line-height: 1.45;
+  max-width: 420px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
+.steps {
+  display: flex;
+  gap: 8px;
+  margin: 24px 0 32px;
+}
+
+.stepDot {
+  flex: 1;
+  height: 4px;
+  border-radius: 9999px;
+  background: #dddddd;
+}
+
+.stepDot.done {
+  background: #181d26;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333840;
+}
+
+.field input {
+  font-family: inherit;
+  font-size: 16px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  border: 1px solid #9297a0;
+  background: #f8fafc;
+  color: #181d26;
+}
+
+.field input:focus {
+  outline: 2px solid #458fff;
+  outline-offset: 2px;
+}
+
+.hint {
+  font-size: 14px;
+  color: #41454d;
+  line-height: 1.4;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.badgeReq {
+  font-size: 13px;
+  font-weight: 600;
+  color: #181d26;
+}
+
+.btnPrimary {
+  background: #181d26;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 500;
+  border: none;
+  border-radius: 12px;
+  padding: 16px 24px;
+  cursor: pointer;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.btnPrimary:active {
+  background: #0d1218;
+}
+
+.btnPrimary:disabled {
+  background: #9297a0;
+  cursor: not-allowed;
+}
+
+.doneRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #a8d8c4;
+  margin-bottom: 12px;
+}
+
+.doneRow .hint {
+  color: #0a2e0e;
+}
+
+.checkmark {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: #006400;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 12px;
+}
