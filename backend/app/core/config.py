@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     # Vercel URL gets added here once M0-F2 exists.
     cors_origins: str = "http://localhost:3000"
 
+    # The single shared password gating the whole app (prd.md §27.1) — no
+    # user accounts, just one password. Compared directly in /auth/login.
+    app_access_password: str
+    # Signs the session cookie and encrypts stored API keys (prd.md §27) —
+    # one key for both, no second signing secret needed.
+    app_secret_key: str
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]

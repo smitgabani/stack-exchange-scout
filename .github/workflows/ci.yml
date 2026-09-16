@@ -26,10 +26,12 @@ jobs:
       run:
         working-directory: backend
     env:
-      # /health doesn't touch the DB, but Settings validation and engine
-      # creation need a well-formed DATABASE_URL to exist — this never
-      # needs to be reachable in the lint/test job.
+      # /health doesn't touch the DB or auth, but Settings validation and
+      # engine creation need these to exist — none need to be real/reachable
+      # in the lint/test job.
       DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/placeholder
+      APP_ACCESS_PASSWORD: test-password
+      APP_SECRET_KEY: test-secret-key
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
