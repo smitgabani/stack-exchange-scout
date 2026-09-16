@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     database_url: str
+    # Comma-separated list. Defaults to the Next.js dev server; the deployed
+    # Vercel URL gets added here once M0-F2 exists.
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",")]
 
 
 settings = Settings()
