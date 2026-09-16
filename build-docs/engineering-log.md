@@ -92,7 +92,7 @@ This first commit went straight to `main` deliberately — it's a snapshot of pr
 - **Mid-session fix (filed under B7):** discovered the deployed backend had no CORS headers, which would silently break any browser-based frontend call even though `curl`/server-to-server calls worked fine. Added `CORSMiddleware` + the `CORS_ORIGINS` setting, redeployed.
 - **M0-F1/F3:** Next.js (App Router, TypeScript, plain CSS) scaffolded in `frontend/`. `Providers` wraps the tree in a `QueryClientProvider`; the placeholder page uses `useQuery` to call the real backend's `GET /health` and renders the live result.
 - **M0-F2:** GitHub repo created; all three branches pushed; Vercel project imported and deployed.
-- **M0-TEST (in progress):** secrets-hygiene check passed (`backend/.env`/`frontend/.env.local` never in git history, both gitignored). Cold-start latency baseline still pending — scheduled to measure once the Fly machine has actually idled out.
+- **M0-TEST:** secrets-hygiene check passed (`backend/.env`/`frontend/.env.local` never in git history, both gitignored). Cold-start latency baseline recorded: confirmed the machine was `stopped` via `flyctl machines list`, then timed two consecutive requests — **~2.86s cold** vs. **~0.20s warm** (~2.67s of pure cold-start overhead), machine confirmed `started` immediately after. No threshold yet, just a real number on record — relevant later for M4's webhook-response-time budget. Frontend click-through done: `stack-exchange-scout.vercel.app` shows "backend: ok" against the live Fly backend.
 
 **Debugging, for the record (two real production issues, not just a happy-path deploy):**
 
@@ -117,4 +117,4 @@ This first commit went straight to `main` deliberately — it's a snapshot of pr
 - What a pull request actually is on top of plain git (diff review, comments, CI gating, a merge button) versus a bare `git merge` + push doing the same underlying merge.
 - Vercel's Framework Preset controls how the platform *serves* build output, independent of whether the build command itself (`next build`) succeeds — a successful build log doesn't guarantee a working deployment.
 
-**Next up:** finish the M0-TEST cold-start latency baseline (wakeup scheduled for ~15 min after the last request), then decide whether an ADR is warranted for anything here (current read: no — this session was tactical execution/debugging, not a new architectural direction) before moving to M1 (Access Gate & Credential Storage).
+**Next up:** M0 is fully closed out (all backend/frontend tickets + M0-TEST done). No ADR warranted for this session — tactical execution/debugging, not a new architectural direction. Move to M1 (Access Gate & Credential Storage): app-wide password gate, credential encryption at rest.
