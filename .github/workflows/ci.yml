@@ -45,6 +45,8 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test
       APP_ACCESS_PASSWORD: test-password
       APP_SECRET_KEY: test-secret-key
+      YUTORI_WEBHOOK_SECRET: test-webhook-secret
+      PUBLIC_BASE_URL: https://example.invalid
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
