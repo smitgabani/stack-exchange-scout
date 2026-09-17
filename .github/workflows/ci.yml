@@ -20,6 +20,27 @@ jobs:
       - run: uv sync --frozen
       - run: uv run ruff check .
 
+  # Catches the class of bug where runtime code imports a dev-only dependency:
+  # the Docker image builds with --no-dev, so such an import passes CI and then
+  # crashes the deployed app on startup (which is exactly how httpx got us).
+  production-imports:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/placeholder
+      APP_ACCESS_PASSWORD: test-password
+      APP_SECRET_KEY: test-secret-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install uv==0.12.13
+      - run: uv sync --frozen --no-dev
+      - run: uv run python -c "import app.main"
+
   test:
     runs-on: ubuntu-latest
     services:
