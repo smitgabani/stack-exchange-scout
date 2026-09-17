@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api import auth, profile, scout, webhooks
+from app.api import auth, profile, questions, scout, webhooks
 from app.api import settings as settings_api
 from app.core.config import settings
 from app.core.db import get_db
@@ -24,6 +24,7 @@ app.include_router(profile.router)
 app.include_router(settings_api.router)
 app.include_router(scout.router)
 app.include_router(webhooks.router)
+app.include_router(questions.router)
 
 
 @app.get("/")

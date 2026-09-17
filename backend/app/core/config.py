@@ -38,6 +38,21 @@ class Settings(BaseSettings):
     # can change (tdd.md §4.3a). Drives the M9 spend estimate.
     yutori_run_cost_usd: float = 0.35
 
+    # The quality bar for entering a digest. Deliberately config, not profile:
+    # prd.md §26 forbids lowering the threshold to fill a digest, so it must
+    # not be user-tunable. Calibrated so a solid candidate (~67) clears it and
+    # a merely-plausible one (~32) doesn't.
+    digest_min_score: float = 55.0
+    # A second, independent bar. Without it a deep, well-written, completely
+    # off-topic question can ride depth and quality into the inbox.
+    digest_min_topic_relevance: int = 40
+    # A third bar, added after scoring real Stack Overflow data: topic + depth
+    # + quality alone total 65, so a famous, well-written, on-topic question
+    # cleared the threshold despite having 50 answers and an accepted one —
+    # nothing left to solve, which is the whole point of the product. This
+    # floor blocks questions whose opportunity to solve has already gone.
+    digest_min_solve_opportunity: int = 30
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]

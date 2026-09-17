@@ -1,0 +1,190 @@
+.page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.pageTitle {
+  font-size: 32px;
+  font-weight: 400;
+  color: #181d26;
+}
+
+.pageSub {
+  font-size: 14px;
+  color: #41454d;
+  margin-top: 8px;
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filterChip {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 9999px;
+  border: 1px solid #dddddd;
+  cursor: pointer;
+  background: #ffffff;
+  color: #333840;
+}
+
+.filterChip.on {
+  background: #181d26;
+  border-color: #181d26;
+  color: #ffffff;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.qcard {
+  border: 1px solid #dddddd;
+  border-radius: 12px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.qtitle {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #181d26;
+}
+
+.qtagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qtag {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: #f8fafc;
+  color: #333840;
+}
+
+.qstatRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+  color: #333840;
+  flex-wrap: wrap;
+}
+
+.qstatAccepted {
+  color: #006400;
+  font-weight: 500;
+}
+
+.qstatNoAccepted {
+  color: #41454d;
+}
+
+.qdateRow {
+  font-size: 13px;
+  color: #41454d;
+}
+
+.qscore {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #41454d;
+}
+
+.qscoreBar {
+  flex: 1;
+  height: 4px;
+  border-radius: 9999px;
+  background: #e0e2e6;
+  position: relative;
+  overflow: hidden;
+}
+
+.qscoreFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: #181d26;
+  border-radius: 9999px;
+}
+
+.qsoLink {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1b61c9;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.empty {
+  border: 1px solid #dddddd;
+  border-radius: 12px;
+  padding: 48px 32px;
+  text-align: center;
+  color: #41454d;
+}
+
+.emptyTitle {
+  font-size: 18px;
+  font-weight: 500;
+  color: #181d26;
+  margin-bottom: 8px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.actionButton {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #dddddd;
+  cursor: pointer;
+  background: #ffffff;
+  color: #333840;
+}
+
+.actionButton:disabled {
+  color: #9297a0;
+  cursor: not-allowed;
+}
+
+.stageResult {
+  font-size: 13px;
+  color: #41454d;
+}
