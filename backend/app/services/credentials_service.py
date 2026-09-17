@@ -14,7 +14,14 @@ async def set_api_key(db: AsyncSession, key_name: str, plaintext_value: str) -> 
 
 
 async def has_api_key(db: AsyncSession, key_name: str) -> bool:
-    return await credential_repository.get(db, key_name) is not None
+    """Whether a *usable* key is stored.
+
+    Deliberately decrypts rather than just checking the row exists: a key
+    encrypted under a previous APP_SECRET_KEY is still a row, but it can't be
+    used for anything. Reporting that as "connected" would leave the UI and
+    the key gates insisting everything is fine while every API call fails.
+    """
+    return await get_api_key(db, key_name) is not None
 
 
 async def get_api_key(db: AsyncSession, key_name: str) -> str | None:
