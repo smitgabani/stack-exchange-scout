@@ -159,6 +159,77 @@ function ActiveProviderCard() {
   );
 }
 
+type ScoutStatus = {
+  configured: boolean;
+  external_scout_id: string | null;
+  sync_status: string | null;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+};
+
+async function fetchScout(): Promise<ScoutStatus> {
+  const response = await fetch("/api/scout");
+  if (!response.ok) {
+    throw new Error(`failed to fetch scout status: ${response.status}`);
+  }
+  return response.json();
+}
+
+function ScoutCard() {
+  const queryClient = useQueryClient();
+  const { data: scout, isLoading } = useQuery({ queryKey: ["scout"], queryFn: fetchScout });
+  const [syncing, setSyncing] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function handleSync() {
+    setSyncing(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/scout/sync", { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) {
+        setMessage(typeof body.detail === "string" ? body.detail : "Sync failed");
+        return;
+      }
+      setMessage(body.error ? `${body.action}: ${body.error}` : `Scout ${body.action}`);
+      await queryClient.invalidateQueries({ queryKey: ["scout"] });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardTitle}>Discovery Scout</div>
+      <div className={styles.keyRow}>
+        <div>
+          <div className={styles.keyName}>
+            {isLoading
+              ? "Checking…"
+              : scout?.configured
+                ? "Scout active"
+                : "No Scout created yet"}
+          </div>
+          <div className={styles.keyReq}>
+            {scout?.last_synced_at
+              ? `Scout last synced: ${new Date(scout.last_synced_at).toLocaleString()}`
+              : "Never synced — creating the Scout starts a billable Yutori run."}
+          </div>
+          {scout?.last_sync_error && (
+            <div className={styles.keyReq} style={{ color: "#aa2d00" }}>
+              Last error: {scout.last_sync_error}
+            </div>
+          )}
+          {message && <div className={styles.keyReq}>{message}</div>}
+        </div>
+        <button className={styles.btnText} onClick={handleSync} disabled={syncing} type="button">
+          {syncing ? "Syncing…" : scout?.configured ? "Re-sync" : "Create Scout"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DigestDifficultyCard() {
   const queryClient = useQueryClient();
   const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
@@ -315,6 +386,7 @@ export default function SettingsPage() {
         ))}
       </div>
       <ActiveProviderCard />
+      <ScoutCard />
       <DigestDifficultyCard />
     </main>
   );

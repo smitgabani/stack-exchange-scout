@@ -59,4 +59,14 @@ async def apply_patch(db: AsyncSession, patch: dict[str, Any]) -> Profile:
             detail="Cannot switch llm.provider to 'openai' without a stored OpenAI key",
         )
 
-    return await profile_repository.save(db, profile, validated.model_dump(mode="json"))
+    saved = await profile_repository.save(db, profile, validated.model_dump(mode="json"))
+
+    # Keep the Scout's query in step with the profile (prd.md §8 step 4). Runs
+    # after the save and never raises, so Yutori being down can't cost the user
+    # their edit (tdd.md §8.2) — a failure is recorded on the scout row and
+    # surfaced in the Settings sync status instead. Won't create a Scout; that
+    # would be a billable run nobody asked for.
+    from app.services import scout_service  # local import: avoids a cycle
+
+    await scout_service.sync(db, validated)
+    return saved

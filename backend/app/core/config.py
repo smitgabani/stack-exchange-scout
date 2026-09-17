@@ -25,9 +25,26 @@ class Settings(BaseSettings):
     # one key for both, no second signing secret needed.
     app_secret_key: str
 
+    # Yutori has no webhook signing mechanism of its own, so authenticity rests
+    # on an unguessable token we put in the registered webhook URL and compare
+    # in constant time. Empty means "not configured" and the webhook fails
+    # closed rather than accepting anonymous candidate data.
+    yutori_webhook_secret: str = ""
+    # This backend's own public origin, used to build the webhook URL handed to
+    # Yutori. Must be HTTPS and externally reachable — Yutori rejects anything
+    # else, and localhost obviously can't receive callbacks.
+    public_base_url: str = ""
+    # Per-run Yutori price, in config rather than inline because their pricing
+    # can change (tdd.md §4.3a). Drives the M9 spend estimate.
+    yutori_run_cost_usd: float = 0.35
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]
+
+    @property
+    def yutori_webhook_url(self) -> str:
+        return f"{self.public_base_url.rstrip('/')}/webhooks/yutori?token={self.yutori_webhook_secret}"
 
 
 settings = Settings()
