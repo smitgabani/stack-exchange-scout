@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { colorForTopic } from "@/lib/topic-color";
 import styles from "./dashboard.module.css";
 
 type DigestSummary = {
@@ -90,6 +91,7 @@ export default function DashboardPage() {
           <div className={styles.chipRow}>
             {topics.map((topic) => (
               <span key={topic.name} className={styles.chip}>
+                <span className={styles.chipDot} style={{ background: colorForTopic(topic.name) }} />
                 {topic.name} — {Math.round(topic.weight)}%
               </span>
             ))}

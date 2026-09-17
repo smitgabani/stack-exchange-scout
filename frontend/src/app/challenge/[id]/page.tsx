@@ -79,19 +79,19 @@ export default function ChallengePage() {
       <h1 className={styles.title}>{challenge.question_title ?? "Challenge"}</h1>
 
       <div className={styles.headerGrid}>
-        <div className={styles.card}>
+        <div className={styles.whyCard}>
           <div className={styles.cardLabel}>Why this was selected</div>
           <div className={styles.cardBody}>{challenge.why_interesting}</div>
         </div>
-        <div className={styles.card}>
+        <div className={styles.metaCard}>
           <div className={styles.cardLabel}>At a glance</div>
-          <div>
+          <div className={styles.diffRow}>
             <span className={styles.difficultyNumber}>{challenge.estimated_difficulty ?? "—"}</span>
             <span className={styles.difficultySuffix}>/ 5 difficulty</span>
           </div>
           <div className={styles.chipRow}>
             {challenge.question_tags.map((tag) => (
-              <span key={tag} className={styles.chip}>
+              <span key={tag} className={styles.chipTag}>
                 {tag}
               </span>
             ))}
@@ -103,16 +103,16 @@ export default function ChallengePage() {
         </div>
       </div>
 
-      <div className={styles.block}>
-        <div className={styles.blockLabel}>Problem</div>
-        <div className={styles.blockBody}>{challenge.problem_summary}</div>
+      <div className={styles.problemBlock}>
+        <div className={styles.problemLabel}>Problem</div>
+        <div className={styles.problemText}>{challenge.problem_summary}</div>
       </div>
 
       <div className={styles.block}>
         <div className={styles.blockLabel}>Concepts</div>
         <div className={styles.chipRow}>
           {challenge.concepts.map((concept) => (
-            <span key={concept} className={styles.chip}>
+            <span key={concept} className={styles.conceptChip}>
               {concept}
             </span>
           ))}
@@ -144,6 +144,8 @@ export default function ChallengePage() {
           )}
         </div>
       </div>
+
+      {challenge.question_url && <hr className={styles.hr} />}
 
       {challenge.question_url && (
         <a

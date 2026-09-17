@@ -1,14 +1,20 @@
 .page {
-  max-width: 720px;
+  max-width: var(--content-narrow);
+  /* body is a flex column, and auto side margins there suppress the
+     default stretch — without width:100% the page shrinks to fit its
+     content and no two pages end up the same width. */
+  width: 100%;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: var(--page-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
 }
 
 .pageTitle {
-  font-size: 28px;
-  font-weight: 500;
+  font-size: 32px;
+  font-weight: 400;
   color: #181d26;
-  margin-bottom: 24px;
 }
 
 .card {
@@ -16,7 +22,6 @@
   border: 1px solid #dddddd;
   border-radius: 16px;
   padding: 24px;
-  margin-bottom: 20px;
 }
 
 .cardTitle {
@@ -269,4 +274,31 @@
   font-size: 14px;
   font-weight: 500;
   color: #006400;
+}
+
+/* Pressed states — design.md §4 evaluates components as Default and
+   Active/Pressed, and these were missing entirely. */
+
+.saveButton:active:not(:disabled) {
+  background: var(--primary-active);
+}
+
+.btnText:active {
+  color: var(--link-active);
+}
+
+.toggleOpt:active:not(.disabled) {
+  background: var(--surface-strong);
+}
+
+.freqBtn:active {
+  background: var(--surface-strong);
+}
+
+.editRow button:active:not(:disabled) {
+  background: var(--primary-active);
+}
+
+.stepper button:active {
+  background: var(--surface-strong);
 }

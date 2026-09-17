@@ -1,10 +1,14 @@
 .page {
-  max-width: 1180px;
+  max-width: var(--content-wide);
+  /* body is a flex column, and auto side margins there suppress the
+     default stretch — without width:100% the page shrinks to fit its
+     content and no two pages end up the same width. */
+  width: 100%;
   margin: 0 auto;
-  padding: 48px 24px 96px;
+  padding: var(--page-padding);
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--page-gap);
 }
 
 .pageTitle {
@@ -187,4 +191,19 @@
 .stageResult {
   font-size: 13px;
   color: #41454d;
+}
+
+/* Pressed states — design.md §4 evaluates components as Default and
+   Active/Pressed, and these were missing entirely. */
+
+.filterChip:active {
+  background: var(--surface-strong);
+}
+
+.filterChip.on:active {
+  background: var(--primary-active);
+}
+
+.actionButton:active:not(:disabled) {
+  background: var(--surface-strong);
 }

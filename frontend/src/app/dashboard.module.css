@@ -1,10 +1,14 @@
 .page {
-  max-width: 1100px;
+  max-width: var(--content-wide);
+  /* body is a flex column, and auto side margins there suppress the
+     default stretch — without width:100% the page shrinks to fit its
+     content and no two pages end up the same width. */
+  width: 100%;
   margin: 0 auto;
-  padding: 40px 24px 96px;
+  padding: var(--page-padding);
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: var(--page-gap);
 }
 
 .hero {
@@ -49,13 +53,24 @@
 }
 
 .chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 14px;
   font-weight: 500;
-  padding: 8px 14px;
+  padding: 10px 16px;
   border-radius: 9999px;
-  background: #f8fafc;
-  border: 1px solid #dddddd;
-  color: #333840;
+  background: var(--surface-soft);
+  color: var(--body-text);
+}
+
+/* Carries the topic's palette colour, so a topic is recognisable here, on the
+   Topics page and on its question cards. */
+.chipDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
 }
 
 .digestGrid {
@@ -93,9 +108,13 @@
 }
 
 .difficultyBadge {
+  align-self: flex-start;
   font-size: 13px;
   font-weight: 600;
-  color: #333840;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.55);
+  padding: 4px 10px;
+  border-radius: 6px;
 }
 
 .cardTitle {
@@ -190,4 +209,15 @@
   border-radius: 9999px;
   background: #f8fafc;
   color: #41454d;
+}
+
+/* Pressed states — design.md §4 evaluates components as Default and
+   Active/Pressed, and these were missing entirely. */
+
+.button:active:not(:disabled) {
+  background: var(--primary-active);
+}
+
+.secondaryButton:active:not(:disabled) {
+  background: var(--surface-strong);
 }

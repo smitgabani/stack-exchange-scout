@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { colorForTopic } from "@/lib/topic-color";
 import styles from "./questions.module.css";
 
 type QuestionRow = {
@@ -63,7 +64,7 @@ function QuestionCard({ question }: { question: QuestionRow }) {
       {question.tags.length > 0 && (
         <div className={styles.qtagRow}>
           {question.tags.slice(0, 5).map((tag) => (
-            <span key={tag} className={styles.qtag}>
+            <span key={tag} className={styles.qtag} style={{ background: colorForTopic(tag) }}>
               {tag}
             </span>
           ))}

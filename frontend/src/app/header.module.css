@@ -1,0 +1,85 @@
+.header {
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas);
+}
+
+/* The bar spans the viewport, but its contents line up with the widest
+   page body so the wordmark sits above the page title rather than off
+   in the corner. */
+.inner {
+  max-width: var(--content-wide);
+  margin: 0 auto;
+  min-height: 64px;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+/* Mockup treatment: plain text links, the current page distinguished by ink
+   against muted rather than by a filled pill. */
+.navLink {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.navLink:hover,
+.navLink:active {
+  color: var(--ink);
+}
+
+.navLink.active {
+  color: var(--ink);
+}
+
+.logout {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--body-text);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 9999px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.logout:hover {
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.logout:active {
+  background: var(--surface-strong);
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+@media (max-width: 640px) {
+  .inner {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 20px;
+  }
+
+  .nav {
+    gap: 18px;
+  }
+}

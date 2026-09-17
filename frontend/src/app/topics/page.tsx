@@ -1,8 +1,76 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { colorForTopic } from "@/lib/topic-color";
 import styles from "./topics.module.css";
+
+// What the backend actually does with this page's fields, in the order it does
+// it: filter_service.evaluate rejects, then ranking_service.score_topic_relevance
+// ranks, then profile_service.apply_patch re-syncs the Scout query.
+const TOPIC_GUIDE = [
+  {
+    title: "Matching is literal",
+    body: "A question is yours when a topic name appears in its tags or title. “rust” matches; “systems programming” almost never will.",
+  },
+  {
+    title: "No match, no question",
+    body: "A question matching none of your topics is dropped before it is ever scored, however good it looks otherwise.",
+  },
+  {
+    title: "Weight ranks, it doesn’t filter",
+    body: "The heaviest matching topic sets the topic score, which is 30% of a question’s Match %. Matching several topics adds a small bonus.",
+  },
+  {
+    title: "Preferred nudges, Avoid rejects",
+    body: "A preferred concept found anywhere in the question adds a bonus. An avoided concept throws the question out.",
+  },
+  {
+    title: "Saving re-aims the Scout",
+    body: "Your topics are rewritten into the search the Scout runs next. Questions already found are kept, scored under the profile version they arrived with.",
+  },
+];
+
+function TopicGuide() {
+  const dialog = useRef<HTMLDialogElement>(null);
+
+  return (
+    <>
+      <button type="button" className={styles.guideOpen} onClick={() => dialog.current?.showModal()}>
+        How topics work
+      </button>
+      {/* <dialog>/showModal gives Esc-to-close, a focus trap and ::backdrop for
+          free — none of which a hand-rolled div overlay would have. */}
+      <dialog
+        ref={dialog}
+        className={styles.guide}
+        onClick={(event) => event.target === dialog.current && dialog.current?.close()}
+      >
+        <div className={styles.guideInner}>
+          <div className={styles.guideHead}>
+            <div className={styles.guideTitle}>How topics work</div>
+            <button
+              type="button"
+              className={styles.guideClose}
+              onClick={() => dialog.current?.close()}
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+          <ol className={styles.guideList}>
+            {TOPIC_GUIDE.map((item) => (
+              <li key={item.title} className={styles.guideItem}>
+                <div className={styles.guideItemTitle}>{item.title}</div>
+                <div className={styles.guideItemBody}>{item.body}</div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </dialog>
+    </>
+  );
+}
 
 type Topic = { name: string; weight: number };
 type Difficulty = { minimum: number; maximum: number };
@@ -228,6 +296,7 @@ export default function TopicsPage() {
         <div className={styles.pageSub}>
           Changing topics never deletes questions already discovered — they just keep their old profile version.
         </div>
+        <TopicGuide />
       </div>
 
       {error && <div className={styles.errorBanner}>{error}</div>}
@@ -236,7 +305,9 @@ export default function TopicsPage() {
         <div className={styles.cardTitle}>Topics</div>
         {form.topics.map((topic, index) => (
           <div className={styles.topicRow} key={`${topic.name}-${index}`}>
-            <div className={styles.topicAvatar}>{topic.name.charAt(0).toUpperCase()}</div>
+            <div className={styles.topicAvatar} style={{ background: colorForTopic(topic.name) }}>
+              {topic.name.charAt(0).toUpperCase()}
+            </div>
             <div className={styles.topicName}>{topic.name}</div>
             <input
               className={styles.topicSlider}

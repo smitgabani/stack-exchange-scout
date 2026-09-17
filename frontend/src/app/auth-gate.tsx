@@ -4,7 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import styles from "./header.module.css";
 import { OnboardingGate } from "./onboarding-gate";
+
+const NAV_LINKS = [
+  { href: "/topics", label: "Topics" },
+  { href: "/questions", label: "Questions" },
+  { href: "/settings", label: "Settings" },
+];
 
 async function fetchSession(): Promise<{ authenticated: boolean }> {
   const response = await fetch("/api/auth/session");
@@ -48,11 +55,29 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <header style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "16px", padding: "12px 24px", borderBottom: "1px solid #ddd" }}>
-        <Link href="/topics">Topics</Link>
-        <Link href="/questions">Questions</Link>
-        <Link href="/settings">Settings</Link>
-        <button onClick={handleLogout}>Log out</button>
+      <header className={styles.header}>
+        <div className={styles.inner}>
+          <Link href="/" className={styles.brand}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size
+                inline SVG mark needs no optimisation pipeline */}
+            <img src="/icon.svg" alt="" width={24} height={24} />
+            Stack Exchange Scout
+          </Link>
+          <nav className={styles.nav}>
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`${styles.navLink} ${pathname === link.href ? styles.active : ""}`}
+              >
+                {link.label}
+              </Link>
+            ))}
+            <button className={styles.logout} onClick={handleLogout}>
+              Log out
+            </button>
+          </nav>
+        </div>
       </header>
       <OnboardingGate>{children}</OnboardingGate>
     </>

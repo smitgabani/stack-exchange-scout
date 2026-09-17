@@ -1,10 +1,14 @@
 .page {
-  max-width: 820px;
+  max-width: var(--content-narrow);
+  /* body is a flex column, and auto side margins there suppress the
+     default stretch — without width:100% the page shrinks to fit its
+     content and no two pages end up the same width. */
+  width: 100%;
   margin: 0 auto;
-  padding: 40px 24px 96px;
+  padding: var(--page-padding);
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: var(--page-gap);
 }
 
 .back {
@@ -32,58 +36,121 @@
   }
 }
 
-.card {
-  border: 1px solid #dddddd;
+/* The mockup's colour pairing: a mint "why" card beside a cream metadata card,
+   with the coral label — signature colours as whole blocks, per design.md §1. */
+.whyCard {
+  background: var(--mint);
+  color: var(--forest);
   border-radius: 12px;
-  padding: 22px;
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metaCard {
+  background: var(--cream);
+  border-radius: 12px;
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .cardLabel {
   font-size: 13px;
   font-weight: 600;
-  color: #41454d;
-  margin-bottom: 10px;
+  letter-spacing: 0.16px;
+  text-transform: uppercase;
+}
+
+.whyCard .cardLabel {
+  color: var(--forest);
+}
+
+.metaCard .cardLabel {
+  color: var(--coral);
 }
 
 .cardBody {
   font-size: 15px;
-  line-height: 1.5;
-  color: #333840;
+  line-height: 1.45;
+}
+
+.diffRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .difficultyNumber {
-  font-size: 40px;
+  font-size: 32px;
   font-weight: 400;
-  color: #181d26;
   line-height: 1;
+  color: var(--ink);
 }
 
 .difficultySuffix {
   font-size: 14px;
-  color: #41454d;
-  margin-left: 6px;
+  color: var(--body-text);
 }
 
 .chipRow {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
 }
 
-.chip {
+/* Sits on the cream card, so it is a translucent white rather than a fill of
+   its own — the guidelines reserve solid colour for whole blocks. */
+.chipTag {
   font-size: 13px;
   font-weight: 500;
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: 9999px;
-  background: #f8fafc;
-  color: #333840;
+  border: 1px solid rgba(24, 29, 38, 0.18);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--body-text);
+}
+
+.conceptChip {
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 9999px;
+  background: rgba(244, 211, 94, 0.28);
+  color: var(--body-text);
 }
 
 .metaLine {
   font-size: 13px;
-  color: #41454d;
-  margin-top: 12px;
+  color: var(--body-text);
+}
+
+/* The one full-ink block on the page: the problem statement is what the reader
+   came for, so it gets the strongest contrast available. */
+.problemBlock {
+  background: var(--ink);
+  color: var(--on-primary);
+  border-radius: 16px;
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.problemLabel {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16px;
+  text-transform: uppercase;
+  color: var(--surface-strong);
+}
+
+.problemText {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .block {
@@ -94,14 +161,16 @@
 .blockLabel {
   font-size: 13px;
   font-weight: 600;
-  color: #41454d;
+  letter-spacing: 0.16px;
+  text-transform: uppercase;
+  color: var(--muted);
   margin-bottom: 10px;
 }
 
 .blockBody {
   font-size: 16px;
-  line-height: 1.6;
-  color: #181d26;
+  line-height: 1.5;
+  color: var(--body-text);
 }
 
 .hints {
@@ -131,26 +200,40 @@
 
 .revealBtn {
   font-family: inherit;
-  border: 1px dashed #9297a0;
+  border: 1px dashed var(--hairline);
   border-radius: 10px;
   padding: 14px;
   background: none;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  color: #333840;
+  color: var(--link);
   width: 100%;
 }
 
+.revealBtn:active {
+  background: var(--surface-soft);
+}
+
+.hr {
+  border: none;
+  border-top: 1px solid var(--hairline);
+  margin: 4px 0;
+}
+
+/* Coral, because leaving for Stack Overflow is the page's terminal action —
+   the one place a signature colour earns a button-sized block. */
 .soButton {
-  display: inline-block;
-  background: #181d26;
-  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  background: var(--coral);
+  color: var(--on-primary);
   font-size: 16px;
   font-weight: 500;
   border-radius: 12px;
   padding: 16px 28px;
-  text-align: center;
 }
 
 .notice {
