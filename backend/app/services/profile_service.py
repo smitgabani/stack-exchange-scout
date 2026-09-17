@@ -50,7 +50,7 @@ async def apply_patch(db: AsyncSession, patch: dict[str, Any]) -> Profile:
         # otherwise crash the response instead of returning a clean 422.
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=exc.errors(include_context=False, include_url=False),
+            detail=exc.errors(include_context=False, include_url=False, include_input=False),
         ) from exc
 
     if validated.llm.provider == "openai" and not await has_api_key(db, "openai_api_key"):
