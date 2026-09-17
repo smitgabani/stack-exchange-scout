@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     # A second, independent bar. Without it a deep, well-written, completely
     # off-topic question can ride depth and quality into the inbox.
     digest_min_topic_relevance: int = 40
+    # Email delivery (prd.md §21). There is exactly one recipient, so it's a
+    # deploy-time setting rather than profile state.
+    resend_api_key: str = ""
+    digest_recipient_email: str = ""
+    email_from: str = ""
+    # Public URL of the frontend, used for challenge links in the email.
+    app_base_url: str = ""
+
     # A third bar, added after scoring real Stack Overflow data: topic + depth
     # + quality alone total 65, so a famous, well-written, on-topic question
     # cleared the threshold despite having 50 answers and an accepted one —
