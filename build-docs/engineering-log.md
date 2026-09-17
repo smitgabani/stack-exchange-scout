@@ -206,3 +206,38 @@ Separately, mid-session, `flyctl status` started failing with "trial has ended, 
 - Why "clean up test data" is a fundamentally different, harder problem once a database is shared with real usage instead of only tests — snapshot-and-restore instead of reset-to-empty.
 
 **Next up:** M3 fully closed out. No ADR warranted — the shared-database escalation is process, not architecture (already captured in `rules.md`), and every bug fixed here was tactical. Command-execution boundary status for M4 needs to be explicitly re-asked, per the standing pattern. Next: M4 (Yutori Scout Integration) — real discovery starts flowing into the database; system-design theme is webhook idempotency and at-least-once delivery.
+
+---
+
+## 2026-09-17 — M4–M7 built: the whole product loop, stopped one step before first light
+
+**Milestone / tickets:** M4-B1..B7/F1, M5-B1..B6/F1-F2, M6-B1..B3/F1, M7-B1..B9/F1-F3. All merged and deployed. **Live verification of M4's Scout and all of M7 is still outstanding** — see "Resume here".
+
+**Decisions made:** captured properly in `decisions/0003-pipeline-architecture-and-scoring.md` rather than repeated here — durable-inbox webhook, secret-in-URL authenticity (Yutori doesn't sign), event-table idempotency, DB-state stage boundaries, and the scoring formulas. Two process decisions also worth recording: the user extended the ADR-0002 autonomy exception through M7, and planning happened in plan mode with the approved plan at `.claude/plans/parsed-sauteeing-sonnet.md`.
+
+**What got built:** the entire discover → enrich → score → curate → email loop. Yutori client against a contract recovered from their live docs (the `docs/yutori-api.md` the PRD cites was never committed); keyless Stack Exchange enrichment with a retry path that never rejects on an outage; six-factor scoring as pure functions; Gemini/OpenAI behind one interface; Resend email with hints behind `<details>`. Frontend gained `/questions`, `/challenge/[id]`, and a real Dashboard replacing the M0 placeholder. 103 backend tests.
+
+**Four bugs that only real execution could have found:**
+
+1. **`httpx` was a dev-only dependency** while M4's Yutori client imported it at module scope. The container builds with `--no-dev`, so production crash-looped on startup while CI stayed green. Fixed, and CI gained a `production-imports` job that installs `--no-dev` and imports `app.main` — reproducing what the container actually does.
+2. **A single out-of-range question id 400s an entire Stack Exchange batch.** The transient-failure path would have retried that forever. Implausible ids are now filtered before the call, and 4xx (bar 429) is permanent rather than queued for retry.
+3. **The digest quality guard let through exactly what the product exists to avoid.** Topic + depth + quality total 65, so a 2008 question with 51 answers and an accepted one cleared the 55 threshold with nothing left to solve. Found by scoring real Stack Overflow data, not by any unit test. Added a solve-opportunity floor; calibration now separates cleanly (0/7 ancient-or-off-topic eligible, 8/8 recent on-topic eligible).
+4. **`has_api_key` reported "connected" for credentials that cannot be decrypted.** Every stored key was encrypted under a previous `APP_SECRET_KEY`, so the UI and the key gates insisted all was well while every outbound call would fail. "Connected" now means "usable", which also makes the condition self-healing: the UI drops to "Not set" and prompts for re-entry.
+
+**Concepts introduced:** why a scale-to-zero host plus an at-least-once webhook with no redelivery forces durability into the database rather than the process; the difference between transient and permanent upstream failures, and why conflating them creates infinite retry loops; deriving a secret-in-URL scheme when a provider offers no payload signing; structural versus advisory safety — the LLM cannot leak an accepted answer because the answer is never in the request, which the test asserts by inspecting the real payload rather than trusting the prompt.
+
+**Git:** branches `m4-scout-integration`, `m5-enrichment-filtering`, `m7-digest-llm-email`, plus fixes `fix-httpx-runtime-dep` and `fix-unusable-credential-reporting`. PRs #12–#16, all merged after CI.
+
+### Resume here
+
+Everything is built, merged, deployed, and green. What remains is **live verification only**, and it is blocked on one thing.
+
+**The blocker:** `POST /scout/sync` will create a real Scout from `profile.topics`, and that profile currently contains exactly one topic — `{"name": "Rust", "weight": 75}` — which is **test pollution from `test_patch_profile_topics_valid_round_trip` running against the shared production database**. Creating the Scout now would spend a billable run (~$0.35) hunting Rust questions nobody asked for. **The user needs to set their real topics on the Topics page first.**
+
+Ready and waiting: Yutori and Gemini keys are stored and decrypt correctly; `RESEND_API_KEY`, `DIGEST_RECIPIENT_EMAIL`, `APP_BASE_URL`, `YUTORI_WEBHOOK_SECRET` and `PUBLIC_BASE_URL` are all set on Fly; Resend delivery is confirmed working with a real test email.
+
+Note `DIGEST_RECIPIENT_EMAIL` is `dmodee111@gmail.com`, not the requested `gabanismit11@gmail.com` — Resend's free tier only delivers to the account's own address until a domain is verified at resend.com/domains. Also: the Resend API key was pasted into a chat transcript and is worth rotating.
+
+**Then, in order:** set real topics → `POST /scout/sync` (billable) → wait for the first webhook → `POST /candidates/ingest` → `/candidates/enrich` → `/candidates/rank` → `/digest/generate` → `/digest/send` → check the inbox → the four click-throughs (M4/M5/M6/M7-TEST) → record actual Yutori spend.
+
+**Next up:** the user is taking a deliberate detour before finishing this. The strongly recommended detour is giving dev/test its own database — the shared one has now caused three separate problems, escalating from junk rows, to unreadable credentials, to nearly spending money on the wrong topics.
