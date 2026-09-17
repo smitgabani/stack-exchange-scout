@@ -54,7 +54,11 @@ async def sync(db: AsyncSession, profile_data: ProfileData, *, allow_create: boo
 
     api_key = await get_api_key(db, "yutori_api_key")
     if api_key is None:
-        return SyncResult(action="skipped", error="No Yutori API key stored")
+        return SyncResult(
+            action="skipped",
+            error="No usable Yutori API key — it is missing, or was encrypted under a "
+            "previous APP_SECRET_KEY and must be re-entered in Settings.",
+        )
 
     if not settings.public_base_url:
         return SyncResult(action="skipped", error="PUBLIC_BASE_URL is not configured")

@@ -3,7 +3,7 @@ from fastapi import HTTPException
 
 from app.api.deps import require_gemini_key, require_yutori_key
 from app.core.security import decrypt_value, encrypt_value
-from app.services.credentials_service import has_api_key, set_api_key
+from app.services.credentials_service import get_api_key, has_api_key, set_api_key
 
 
 def test_fernet_round_trip() -> None:
@@ -35,3 +35,25 @@ async def test_require_gemini_key_rejects_when_missing_then_allows_once_set(db_s
 
     await set_api_key(db_session, "gemini_api_key", "test-key")
     await require_gemini_key(db=db_session)  # no exception
+
+
+@pytest.mark.anyio
+async def test_has_api_key_is_false_for_an_undecryptable_row(db_session) -> None:
+    """A key encrypted under a previous APP_SECRET_KEY is not a usable key.
+
+    Reporting it as connected would leave the UI and the key gates claiming
+    everything is fine while every outbound API call fails.
+    """
+    from app.repositories import credential_repository
+
+    await credential_repository.upsert(db_session, "test_unreadable_key", "not-valid-fernet-ciphertext")
+    try:
+        assert await has_api_key(db_session, "test_unreadable_key") is False
+        assert await get_api_key(db_session, "test_unreadable_key") is None
+    finally:
+        from sqlalchemy import delete
+
+        from app.models.credential import Credential
+
+        await db_session.execute(delete(Credential).where(Credential.key_name == "test_unreadable_key"))
+        await db_session.commit()
