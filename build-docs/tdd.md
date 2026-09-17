@@ -1037,7 +1037,7 @@ The canonical Stack Overflow question **and** the system's evaluation of it, mer
 questions
 ---------
 id UUID PK
-stackoverflow_id BIGINT UNIQUE
+stackoverflow_question_id BIGINT UNIQUE
 url
 title
 tags                    -- array/JSON column, not a separate tags table
@@ -1047,13 +1047,19 @@ answer_count
 accepted_answer_id
 is_closed
 is_duplicate
-created_at
+canonical_url           -- normalised SO URL; the ingest-time dedupe key (M5-B4)
+question_created_at     -- when the SO question was posted, not when this row was
 last_activity_at
 fetched_at
 
 problem_summary
 difficulty
 interesting_reason
+
+enrichment_attempts     -- retry state for the enrichment_pending path (M5-B3)
+next_retry_at
+enrichment_error
+rejection_reason        -- why §14 rejected it; also answers "why was the digest empty"
 
 profile_version
 topic_relevance

@@ -229,15 +229,15 @@ Yutori should not be the canonical storage location for preferences.
   "topics": [
     {
       "name": "python",
-      "weight": 1.0
+      "weight": 100
     },
     {
       "name": "fastapi",
-      "weight": 1.0
+      "weight": 100
     },
     {
       "name": "postgresql",
-      "weight": 0.7
+      "weight": 70
     }
   ],
 
