@@ -164,3 +164,45 @@ This first commit went straight to `main` deliberately — it's a snapshot of pr
 - Using a real headless-browser script (Playwright driving Chromium) to verify a multi-step frontend flow end-to-end, rather than trusting `npm run build` succeeding or reading the code and assuming it's right — this is what actually caught the `OnboardingGate` race and the missing provider toggle.
 
 **Next up:** M1 and M2 are both fully closed out, including M2-TEST. No ADR warranted — the cookie/proxy decision was tactical (already covered by the M1 commit history and this log entry), and the test-database question is explicitly left open for the user rather than decided. The command-execution boundary (ADR 0002) resumes as the default for M3 unless the user grants another explicit exception. Next: M3 (Topic & Preference Management) — server-side validation for topics/concepts/difficulty/digest settings, including the weight/bounds checks this session deliberately deferred.
+
+---
+
+## 2026-09-16/17 — M3 complete: server-side validation, Topics page, a dark-mode bug, and a real production scare
+
+**Milestone / tickets:** M3-B1..B5, M3-F1..F6, M3-TEST, plus one unplanned fix (forced light theme)
+
+**Decisions made:**
+
+- The user extended the M1-M2 autonomy exception (Claude running git/devops/flyctl/vercel/npm commands directly, not handing them off) through M3, after explicitly being asked whether to revert. Pattern now established: each extension is its own explicit ask, never assumed to persist or lapse — see the memory note on this.
+- Numeric bounds prd.md/tdd.md didn't specify were taken from the Topics mockup's own JS clamping logic instead of invented from scratch: topic weight 0–100, digest.questions and question_preferences.max_answers capped at 10, difficulty 1–5. digest.frequency_days bounded 1–30 on the backend even though the UI only exposes three presets (1/3/7 days) — the mockup's stepper limits are a UI choice, not necessarily the full valid backend range.
+- exclude_closed/exclude_duplicates are silently coerced to `true` server-side (M3-B5) rather than rejected when a client sends `false` — matches the ticket's own wording ("always coerced," not "rejected").
+- Topics page saves the whole form in one PATCH on an explicit "Save" click (matching the mockup's sticky save bar + toast), not per-field autosave — Settings' digest/difficulty card is a second, independently-saved surface per M3-F6, so last-write-wins between the two tabs is accepted for MVP exactly as the ticket specifies.
+
+**What got built:**
+
+- **M3-B1..B5:** Pydantic field/model validators on `ProfileData` — topic name uniqueness + weight bounds, concept dedup within each list and no overlap between preferred/excluded, difficulty min<=max within 1-5, digest bounds, and the forced-true exclusion coercion.
+- **M3-F1..F6:** full Topics page (add/remove topics with a weight slider, concept chips, difficulty steppers, question-preference toggles with the two locked always-on rows, digest count stepper, frequency presets, Save + toast) and a second digest/difficulty card on Settings.
+- **Unplanned fix:** the user reported black text on a black background on the live Settings page. Root cause: `globals.css` honored `prefers-color-scheme: dark`, flipping `body`'s background to near-black, but every mockup-matched page (login/onboarding/settings/topics) uses hardcoded light-theme colors with no dark variant. Forced light theme site-wide instead of half-supporting dark mode — verified by reproducing the exact bug locally first (Playwright with `colorScheme: "dark"`), then confirming the fix.
+
+**A real production incident, and a real process gap it exposed:**
+
+Mid-M3, a Playwright verification run against the real deployed backend unexpectedly failed at the onboarding step — investigation found the user had, in parallel, been manually using the actual deployed app in their own browser (that's how the dark-mode bug got reported at all): real login, real onboarding, a real Yutori/Gemini key, a real (default-valued) profile. Automated testing and real usage were hitting the *same* Supabase database at the same time. Until now, the standing rule (see M2's entry) was "clean up after test runs" on the assumption everything in `profile`/`credentials` was test-created — that assumption was simply wrong the moment real usage began. Recovered by snapshotting the real profile row before further testing and restoring it exactly (a targeted DB write, not a reset to defaults) once done; credentials were never touched. Escalated the standing rule in `rules.md`: **never wipe `profile`/`credentials` wholesale again** — snapshot first, test additively or restore exactly, treat the database as shared with a live user rather than disposable scratch space.
+
+Separately, mid-session, `flyctl status` started failing with "trial has ended, please add a credit card" — Fly.io's free trial period expired, taking the backend offline (this was flagged as a real risk all the way back in the M0 deployment guide). Not something Claude could resolve; the user added a card and things resumed normally within minutes.
+
+**Bugs found and fixed:**
+
+1. Pydantic's `exc.errors()` includes a `ctx.error` field holding the raw exception object when a custom validator raises a plain `ValueError` — not JSON-serializable, so the first real validation failure crashed the response instead of returning a clean 422. Fixed with `include_context=False`; later also added `include_input=False` once testing showed the error responses, while no longer crashing, were dumping the entire validated document back at the client.
+2. React's newer `react-hooks/set-state-in-effect` lint rule caught a real anti-pattern in both new pages: calling `setState` inside a `useEffect` to seed local editable state from a TanStack Query result. Fixed using React's documented alternative — adjusting state during render, keyed on a `loadedVersion` guard so it only re-syncs when the server's profile version actually changes, not on every render.
+3. The dark-mode black-on-black bug above, caught by the user in production rather than by any of this session's own testing — a reminder that Playwright verification against one fixed browser context (light mode, as it happened) doesn't substitute for a real user on a real device.
+
+**Git:** `m3-backend-validation`, `m3-frontend-topics`, `fix-forced-light-theme`, `fix-profile-error-detail` — four branches, four PRs (#8-#11, plus #9 for the backend validation itself), all merged via `gh pr merge --merge` after CI + Vercel preview checks passed, each redeployed to Fly/Vercel immediately after merging rather than batching deploys.
+
+**Concepts introduced:**
+
+- `prefers-color-scheme: dark` is opt-in per app, not automatic safety — a design system built for one theme needs either a real dark variant or an explicit `color-scheme` override forcing the theme it actually supports.
+- React's "adjust state during render" pattern (a plain conditional in the component body, not a `useEffect`) for syncing local state to an async data source without an extra render or a lint violation — documented at react.dev's "you might not need an effect."
+- Pydantic v2's `ValidationError.errors()` has `include_context`/`include_url`/`include_input` flags specifically because the full error object is often unsafe or unwieldy to hand to a client as-is.
+- Why "clean up test data" is a fundamentally different, harder problem once a database is shared with real usage instead of only tests — snapshot-and-restore instead of reset-to-empty.
+
+**Next up:** M3 fully closed out. No ADR warranted — the shared-database escalation is process, not architecture (already captured in `rules.md`), and every bug fixed here was tactical. Command-execution boundary status for M4 needs to be explicitly re-asked, per the standing pattern. Next: M4 (Yutori Scout Integration) — real discovery starts flowing into the database; system-design theme is webhook idempotency and at-least-once delivery.
