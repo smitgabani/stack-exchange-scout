@@ -49,6 +49,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "16px", padding: "12px 24px", borderBottom: "1px solid #ddd" }}>
+        <Link href="/topics">Topics</Link>
         <Link href="/settings">Settings</Link>
         <button onClick={handleLogout}>Log out</button>
       </header>

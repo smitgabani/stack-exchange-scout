@@ -162,3 +162,111 @@
   color: #9297a0;
   cursor: not-allowed;
 }
+
+.settingsField {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.settingsField:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.fieldLabel {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333840;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stepper button {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 1px solid #9297a0;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.stepper button:hover {
+  background: #e0e2e6;
+}
+
+.stepVal {
+  font-size: 16px;
+  font-weight: 500;
+  min-width: 20px;
+  text-align: center;
+}
+
+.freqRow {
+  display: flex;
+  gap: 8px;
+}
+
+.freqBtn {
+  flex: 1;
+  text-align: center;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #dddddd;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: #ffffff;
+  font-family: inherit;
+}
+
+.freqBtn.on {
+  border-color: #181d26;
+  background: #f8fafc;
+}
+
+.diffRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+  color: #41454d;
+}
+
+.saveRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.saveButton {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: #181d26;
+  color: #ffffff;
+}
+
+.saveButton:disabled {
+  background: #9297a0;
+  cursor: not-allowed;
+}
+
+.savedToast {
+  font-size: 14px;
+  font-weight: 500;
+  color: #006400;
+}

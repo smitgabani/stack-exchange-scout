@@ -96,7 +96,12 @@ function KeyRow({ id, name, requirement }: { id: Provider; name: string; require
   );
 }
 
-type Profile = { data: { llm: { provider: "gemini" | "openai" } } };
+type Digest = { frequency_days: number; questions: number };
+type Difficulty = { minimum: number; maximum: number };
+type Profile = {
+  data: { llm: { provider: "gemini" | "openai" }; digest: Digest; difficulty: Difficulty };
+  version: number;
+};
 
 async function fetchProfile(): Promise<Profile> {
   const response = await fetch("/api/profile");
@@ -154,6 +159,151 @@ function ActiveProviderCard() {
   );
 }
 
+function DigestDifficultyCard() {
+  const queryClient = useQueryClient();
+  const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: fetchProfile });
+
+  const [digest, setDigest] = useState<Digest | null>(null);
+  const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
+  const [loadedVersion, setLoadedVersion] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+
+  // See topics/page.tsx for why this is done during render, not a useEffect.
+  if (profile && loadedVersion !== profile.version) {
+    setDigest(profile.data.digest);
+    setDifficulty(profile.data.difficulty);
+    setLoadedVersion(profile.version);
+  }
+
+  if (!digest || !difficulty) {
+    return null;
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ digest, difficulty }),
+      });
+      if (response.ok) {
+        await queryClient.invalidateQueries({ queryKey: ["profile"] });
+        setShowSaved(true);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={styles.card}>
+      <div className={styles.cardTitle}>Digest & difficulty</div>
+
+      <div className={styles.settingsField}>
+        <div className={styles.fieldLabel}>Questions per digest</div>
+        <div className={styles.stepper}>
+          <button
+            type="button"
+            onClick={() => {
+              setDigest({ ...digest, questions: Math.max(1, digest.questions - 1) });
+              setShowSaved(false);
+            }}
+          >
+            −
+          </button>
+          <div className={styles.stepVal}>{digest.questions}</div>
+          <button
+            type="button"
+            onClick={() => {
+              setDigest({ ...digest, questions: Math.min(10, digest.questions + 1) });
+              setShowSaved(false);
+            }}
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.settingsField}>
+        <div className={styles.fieldLabel}>Frequency</div>
+        <div className={styles.freqRow}>
+          {[1, 3, 7].map((days) => (
+            <button
+              key={days}
+              type="button"
+              className={`${styles.freqBtn} ${digest.frequency_days === days ? styles.on : ""}`}
+              onClick={() => {
+                setDigest({ ...digest, frequency_days: days });
+                setShowSaved(false);
+              }}
+            >
+              {days === 1 ? "Every day" : `Every ${days} days`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.settingsField}>
+        <div className={styles.fieldLabel}>Difficulty range</div>
+        <div className={styles.diffRow}>
+          <div className={styles.stepper}>
+            <button
+              type="button"
+              onClick={() => {
+                setDifficulty({ ...difficulty, minimum: Math.max(1, difficulty.minimum - 1) });
+                setShowSaved(false);
+              }}
+            >
+              −
+            </button>
+            <div className={styles.stepVal}>{difficulty.minimum}</div>
+            <button
+              type="button"
+              onClick={() => {
+                setDifficulty({ ...difficulty, minimum: Math.min(difficulty.maximum, difficulty.minimum + 1) });
+                setShowSaved(false);
+              }}
+            >
+              +
+            </button>
+          </div>
+          <span>to</span>
+          <div className={styles.stepper}>
+            <button
+              type="button"
+              onClick={() => {
+                setDifficulty({ ...difficulty, maximum: Math.max(difficulty.minimum, difficulty.maximum - 1) });
+                setShowSaved(false);
+              }}
+            >
+              −
+            </button>
+            <div className={styles.stepVal}>{difficulty.maximum}</div>
+            <button
+              type="button"
+              onClick={() => {
+                setDifficulty({ ...difficulty, maximum: Math.min(5, difficulty.maximum + 1) });
+                setShowSaved(false);
+              }}
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.saveRow}>
+        {showSaved && <span className={styles.savedToast}>Saved</span>}
+        <button className={styles.saveButton} onClick={handleSave} disabled={saving} type="button">
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   return (
     <main className={styles.page}>
@@ -165,6 +315,7 @@ export default function SettingsPage() {
         ))}
       </div>
       <ActiveProviderCard />
+      <DigestDifficultyCard />
     </main>
   );
 }
