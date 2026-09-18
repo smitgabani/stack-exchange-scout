@@ -433,13 +433,28 @@ async def _begin_run(
         scout.external_scout_id = str(response.get("id"))
         return scout, "recreate"
 
-    # Default: make sure the query and interval are current, then restart.
+    # Default: make the query and interval current, stop the Scout, then
+    # restart it.
+    #
+    # The stop is not optional. Yutori rejects restart on a live Scout with
+    # 400 "Scout is not completed" — restart is the counterpart of done, not a
+    # general "start it now". done → restart is therefore the whole mechanism,
+    # and it is also why the parked posture and this button fit together: a
+    # Scout that is already parked is exactly what restart expects.
     await client.update_scout(
         scout.external_scout_id,
         query=query,
         webhook_url=settings.yutori_webhook_url,
         output_interval_seconds=interval,
     )
+    try:
+        await client.mark_done(scout.external_scout_id)
+    except YutoriNotFound:
+        raise
+    except YutoriError as exc:
+        # Already done is the state we want, and Yutori may object to being
+        # told twice. Let restart be the step that decides success.
+        logger.info("mark_done before restart was rejected (continuing): %s", exc)
     await client.restart(scout.external_scout_id)
     return scout, "restart"
 

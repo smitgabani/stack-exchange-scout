@@ -13,7 +13,7 @@ from sqlalchemy import delete, select
 
 from app.api.scout import mask_webhook_url
 from app.core.config import settings
-from app.integrations.yutori import YutoriNotFound
+from app.integrations.yutori import YutoriError, YutoriNotFound
 from app.models.scout import Scout, ScoutEvent
 from app.models.webhook_event import WebhookEvent
 from app.schemas.profile import ProfileData
@@ -174,6 +174,10 @@ async def test_start_run_restarts_an_existing_scout(
     assert "restart" in client.names()
     assert "create_scout" not in client.names()
 
+    # Yutori rejects restart on a live Scout with 400 "Scout is not completed",
+    # so the stop has to come first. Asserted as an order, not a presence.
+    assert client.names().index("mark_done") < client.names().index("restart")
+
     await db_session.refresh(scout_row)
     assert scout_row.run_state == "running"
     assert scout_row.run_baseline_update_count == 3
@@ -244,6 +248,28 @@ async def test_start_run_reports_whether_the_run_began_immediately(
     result = await scout_service.start_run(db_session, profile_data)
 
     assert result.started_immediately is False
+
+
+@pytest.mark.anyio
+@pytest.mark.anyio
+async def test_start_run_continues_when_mark_done_is_rejected(
+    db_session, scout_row, profile_data, monkeypatch
+):
+    """An already-parked Scout may refuse another `done`. That must not stop the
+    restart, which is the step that decides whether the run happened."""
+
+    class RefusesDone(FakeClient):
+        async def mark_done(self, scout_id):
+            self.calls.append(("mark_done", (scout_id,)))
+            raise YutoriError("400: Scout is not active")
+
+    client = RefusesDone(detail={"status": "done"})
+    _patch_client(monkeypatch, client)
+
+    result = await scout_service.start_run(db_session, profile_data)
+
+    assert result.action == "started"
+    assert "restart" in client.names()
 
 
 @pytest.mark.anyio
