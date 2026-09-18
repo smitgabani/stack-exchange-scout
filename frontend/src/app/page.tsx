@@ -4,6 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { colorForTopic } from "@/lib/topic-color";
+import { RunScoutButton } from "./run-scout-button";
+import { useScout } from "./use-scout";
 import styles from "./dashboard.module.css";
 
 type DigestSummary = {
@@ -37,6 +39,7 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [running, setRunning] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const { scout, isRunning, message: scoutMessage } = useScout();
 
   const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: () => getJson<Profile>("/api/profile") });
   const { data: digests } = useQuery({
@@ -73,15 +76,37 @@ export default function DashboardPage() {
   const frequency = profile?.data.digest.frequency_days ?? 3;
   const challenges = latestDetail?.challenges ?? [];
   const isEmptyDigest = latest?.status === "empty";
+  const parked =
+    !scout?.configured || scout.external_status === "done" || scout.external_status === "paused";
+  // Only claim a schedule when Yutori actually told us there is one — an
+  // unknown status is not evidence that challenges are on their way.
+  const scheduled = scout?.external_status === "active" && Boolean(scout.next_run_at);
 
   return (
     <main className={styles.page}>
+      {/* Nothing is scheduled while the Scout is parked, so claiming challenges
+          are "on their way" would be false. The hero says which it is. */}
       <section className={styles.hero}>
-        <div className={styles.eyebrow}>Every {frequency} days</div>
-        <h1 className={styles.heroTitle}>Your challenges are on their way</h1>
+        <div className={styles.eyebrow}>
+          {isRunning
+            ? "Scout running now"
+            : parked
+              ? "On demand"
+              : scheduled
+                ? `Next run ${new Date(scout!.next_run_at!).toLocaleString()}`
+                : "Discovery Scout"}
+        </div>
+        <h1 className={styles.heroTitle}>
+          {isRunning
+            ? "The Scout is searching"
+            : scheduled
+              ? "Your challenges are on their way"
+              : "Ready when you are"}
+        </h1>
         <p className={styles.heroSub}>
-          The Scout is discovering candidates on your current interval. Questions are enriched, scored,
-          and the best of them become challenges.
+          {scheduled || isRunning
+            ? "The Scout is discovering candidates. Questions are enriched, scored, and the best of them become challenges."
+            : `The Scout runs when you ask it to. Start a run to find new questions, then enrich and score them into challenges. Digests are set to every ${frequency} days once scheduling exists.`}
         </p>
       </section>
 
@@ -136,8 +161,9 @@ export default function DashboardPage() {
       {/* Manual triggers until M11 turns these into scheduled jobs. */}
       <section>
         <div className={styles.actions}>
+          <RunScoutButton className={styles.button} />
           <button
-            className={styles.button}
+            className={styles.secondaryButton}
             onClick={() => run("/api/digest/generate", "Digest generation")}
             disabled={running !== null}
             type="button"
@@ -153,6 +179,7 @@ export default function DashboardPage() {
             {running === "Digest send" ? "Sending…" : "Send latest digest"}
           </button>
           {message && <span className={styles.message}>{message}</span>}
+          {scoutMessage && <span className={styles.message}>{scoutMessage}</span>}
         </div>
       </section>
 

@@ -1,7 +1,10 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
+import { RunScoutButton } from "../run-scout-button";
+import { useScout } from "../use-scout";
 import styles from "./settings.module.css";
 
 type Provider = "yutori" | "gemini" | "openai";
@@ -159,72 +162,48 @@ function ActiveProviderCard() {
   );
 }
 
-type ScoutStatus = {
-  configured: boolean;
-  external_scout_id: string | null;
-  sync_status: string | null;
-  last_synced_at: string | null;
-  last_sync_error: string | null;
-};
-
-async function fetchScout(): Promise<ScoutStatus> {
-  const response = await fetch("/api/scout");
-  if (!response.ok) {
-    throw new Error(`failed to fetch scout status: ${response.status}`);
-  }
-  return response.json();
-}
-
 function ScoutCard() {
-  const queryClient = useQueryClient();
-  const { data: scout, isLoading } = useQuery({ queryKey: ["scout"], queryFn: fetchScout });
-  const [syncing, setSyncing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { scout, isLoading, isRunning, message } = useScout();
 
-  async function handleSync() {
-    setSyncing(true);
-    setMessage(null);
-    try {
-      const response = await fetch("/api/scout/sync", { method: "POST" });
-      const body = await response.json();
-      if (!response.ok) {
-        setMessage(typeof body.detail === "string" ? body.detail : "Sync failed");
-        return;
-      }
-      setMessage(body.error ? `${body.action}: ${body.error}` : `Scout ${body.action}`);
-      await queryClient.invalidateQueries({ queryKey: ["scout"] });
-    } finally {
-      setSyncing(false);
-    }
-  }
+  const parked =
+    scout?.external_status === "done" || scout?.external_status === "paused";
+  const state = !scout?.configured
+    ? "No Scout created yet"
+    : isRunning
+      ? "Running now"
+      : parked
+        ? "Parked \u2014 runs only when you ask"
+        : "Active";
 
   return (
     <div className={styles.card}>
       <div className={styles.cardTitle}>Discovery Scout</div>
       <div className={styles.keyRow}>
         <div>
-          <div className={styles.keyName}>
-            {isLoading
-              ? "Checking…"
-              : scout?.configured
-                ? "Scout active"
-                : "No Scout created yet"}
-          </div>
+          <div className={styles.keyName}>{isLoading ? "Checking\u2026" : state}</div>
           <div className={styles.keyReq}>
             {scout?.last_synced_at
-              ? `Scout last synced: ${new Date(scout.last_synced_at).toLocaleString()}`
-              : "Never synced — creating the Scout starts a billable Yutori run."}
+              ? `Last synced ${new Date(scout.last_synced_at).toLocaleString()}`
+              : "Never synced."}
           </div>
+          {scout?.rejection_reason && (
+            <div className={styles.keyReq} style={{ color: "var(--coral)" }}>
+              Yutori stopped this Scout: {scout.rejection_reason.replace(/_/g, " ")}
+            </div>
+          )}
           {scout?.last_sync_error && (
-            <div className={styles.keyReq} style={{ color: "#aa2d00" }}>
+            <div className={styles.keyReq} style={{ color: "var(--coral)" }}>
               Last error: {scout.last_sync_error}
             </div>
           )}
           {message && <div className={styles.keyReq}>{message}</div>}
         </div>
-        <button className={styles.btnText} onClick={handleSync} disabled={syncing} type="button">
-          {syncing ? "Syncing…" : scout?.configured ? "Re-sync" : "Create Scout"}
-        </button>
+        <div className={styles.scoutActions}>
+          <RunScoutButton className={styles.btnText} label="Run now" />
+          <Link className={styles.btnText} href="/scout">
+            Manage Scout \u2192
+          </Link>
+        </div>
       </div>
     </div>
   );

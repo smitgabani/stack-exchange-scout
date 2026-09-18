@@ -1,0 +1,75 @@
+/* globals.css zeroes margin on everything, which would strip a modal dialog of
+   the auto margins it centres itself with — hence margin: auto here. */
+.dialog {
+  margin: auto;
+  width: calc(100% - 32px);
+  max-width: 460px;
+  padding: 0;
+  border: none;
+  border-radius: 16px;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.dialog::backdrop {
+  background: rgba(24, 29, 38, 0.45);
+}
+
+.inner {
+  padding: 28px 32px 24px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--body-text);
+  margin-top: 10px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.cancel,
+.confirm {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.cancel {
+  background: var(--canvas);
+  color: var(--body-text);
+  border: 1px solid var(--hairline);
+}
+
+.cancel:active {
+  background: var(--surface-strong);
+}
+
+.confirm {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: none;
+}
+
+.confirm:active:not(:disabled) {
+  background: var(--primary-active);
+}
+
+.cancel:disabled,
+.confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

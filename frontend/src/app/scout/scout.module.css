@@ -1,0 +1,335 @@
+.page {
+  max-width: var(--content-wide);
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--page-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  font-size: 32px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.pageSub {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.45;
+  max-width: 640px;
+}
+
+.headerActions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.primary {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 22px;
+  border-radius: 12px;
+  border: none;
+  background: var(--primary);
+  color: var(--on-primary);
+  cursor: pointer;
+}
+
+.primary:active:not(:disabled) {
+  background: var(--primary-active);
+}
+
+.primary:disabled {
+  background: var(--border-strong);
+  cursor: not-allowed;
+}
+
+.secondary {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 22px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--body-text);
+  cursor: pointer;
+}
+
+.secondary:active:not(:disabled) {
+  background: var(--surface-strong);
+}
+
+.secondary:disabled {
+  color: var(--border-strong);
+  cursor: not-allowed;
+}
+
+.textButton {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--link);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.textButton:active:not(:disabled) {
+  color: var(--link-active);
+}
+
+.textButton:disabled {
+  color: var(--border-strong);
+  cursor: not-allowed;
+}
+
+/* Coral is reserved for things that have actually gone wrong — here, a Scout
+   Yutori has stopped, or one billing outside our knowledge. */
+.alert {
+  background: var(--coral);
+  color: var(--on-primary);
+  border-radius: 12px;
+  padding: 16px 20px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.notice {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 14px;
+  color: var(--body-text);
+  line-height: 1.45;
+}
+
+.blocks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 720px) {
+  .blocks {
+    grid-template-columns: 1fr;
+  }
+}
+
+.block {
+  border-radius: 12px;
+  padding: 24px 26px;
+  color: var(--ink);
+}
+
+.blockLabel {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16px;
+  text-transform: uppercase;
+}
+
+.blockValue {
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.2;
+  margin-top: 8px;
+}
+
+.blockNote {
+  font-size: 14px;
+  color: var(--body-text);
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+.parked {
+  background: var(--mint);
+}
+
+.active {
+  background: var(--mint);
+}
+
+.running {
+  background: var(--yellow);
+}
+
+.idle {
+  background: var(--surface-soft);
+}
+
+.spend {
+  background: var(--cream);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* The rendered query, verbatim. Monospace because whitespace and bullet
+   structure are what Yutori actually receives. */
+.query {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--body-text);
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 20px 22px;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.config {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px 32px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 20px;
+}
+
+.config div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config dt {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.config dd {
+  font-size: 15px;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 10px 14px 10px 0;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 12px 14px 12px 0;
+  border-bottom: 1px solid var(--surface-strong);
+  color: var(--body-text);
+  white-space: nowrap;
+}
+
+.ok {
+  color: var(--success);
+  font-weight: 500;
+}
+
+.missed {
+  color: var(--coral);
+  font-weight: 500;
+}
+
+.empty {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.timeline {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--hairline);
+}
+
+.event {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--surface-strong);
+}
+
+.eventHead {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.eventType {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.eventTime {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.eventCost {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--cream);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.eventDetail {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+  line-height: 1.45;
+  word-break: break-word;
+}

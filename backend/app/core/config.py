@@ -35,8 +35,23 @@ class Settings(BaseSettings):
     # else, and localhost obviously can't receive callbacks.
     public_base_url: str = ""
     # Per-run Yutori price, in config rather than inline because their pricing
-    # can change (tdd.md §4.3a). Drives the M9 spend estimate.
+    # can change (tdd.md §4.3a). Drives the M9 spend estimate. Confirmed against
+    # docs.yutori.com/pricing: $0.35 per scout-run, $5 free credits per account.
     yutori_run_cost_usd: float = 0.35
+
+    # How an on-demand run is started. "restart" stops the Scout and starts it
+    # again, which keeps its id, query and change-baseline; "recreate" deletes
+    # and creates it, which is the fallback if restart turns out to only resume
+    # the schedule rather than fire a run. Yutori documents neither behaviour,
+    # so this is a switch rather than a decision baked into the code.
+    scout_run_mechanism: str = "restart"
+    # After this long with no update, a run is treated as finished and the Scout
+    # is parked. A run that finds nothing never sends a webhook, so without this
+    # the Scout would sit "running" forever.
+    scout_run_timeout_seconds: int = 7200
+    # What a run's Scout interval is set to. Long on purpose: if parking fails,
+    # this is what stops the Scout billing again before anyone notices.
+    scout_run_interval_seconds: int = 30 * 24 * 3600
 
     # The quality bar for entering a digest. Deliberately config, not profile:
     # prd.md §26 forbids lowering the threshold to fill a digest, so it must

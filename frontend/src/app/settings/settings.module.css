@@ -86,6 +86,13 @@
   min-width: 70px;
 }
 
+.scoutActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .btnText {
   background: none;
   border: none;
