@@ -92,10 +92,20 @@ def _parse_timestamp(value: Any) -> datetime | None:
             parsed = datetime.fromisoformat(value)
         except ValueError:
             return None
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        parsed = parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        return _reject_epoch_zero(parsed)
     if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=UTC)
+        value = value if value.tzinfo else value.replace(tzinfo=UTC)
+        return _reject_epoch_zero(value)
     return None
+
+
+def _reject_epoch_zero(value: datetime) -> datetime | None:
+    """Yutori signals "nothing scheduled" with epoch 0, which arrives as
+    1970-01-01 rather than null. Displayed literally it reads as a real date,
+    and compared arithmetically it makes any "is this soon?" test come out true.
+    """
+    return None if value.year < 1980 else value
 
 
 async def record_event(
@@ -360,9 +370,14 @@ async def start_run(db: AsyncSession, profile_data: ProfileData) -> RunResult:
     # resumed the schedule and the mechanism should be switched to "recreate".
     scout = await refresh_detail(db, force=True) or scout
     next_run_at = scout.next_run_at
+    # Only a next run in the near *future* is evidence a run just began. An
+    # absent one (Yutori sends epoch 0) proves nothing either way, so this stays
+    # None rather than guessing — the real answer comes from whether
+    # update_count moves, which the Scout page now tracks live.
     started_immediately = None
     if next_run_at is not None:
-        started_immediately = (next_run_at - started_at).total_seconds() < 300
+        delta = (next_run_at - started_at).total_seconds()
+        started_immediately = -60 <= delta <= 300
 
     await record_event(
         db,

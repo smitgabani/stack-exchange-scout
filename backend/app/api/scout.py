@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -184,6 +184,7 @@ async def scout_panel(db: AsyncSession = Depends(get_db)) -> dict:
 
     detail: dict[str, Any] = {}
     updates: list[dict[str, Any]] = []
+    usage_raw: dict[str, Any] = {}
     if scout is not None and scout.external_scout_id is not None:
         client = await scout_service.get_client(db)
         if client is not None:
@@ -198,6 +199,10 @@ async def scout_panel(db: AsyncSession = Depends(get_db)) -> dict:
                 updates = response.get("updates") or []
             except Exception:  # noqa: BLE001
                 updates = []
+            try:
+                usage_raw = await client.get_usage("30d")
+            except Exception:  # noqa: BLE001
+                usage_raw = {}
 
     # Per-update yield: how many questions each stored event actually produced,
     # which is what answers "did that $0.35 buy anything".
@@ -255,6 +260,66 @@ async def scout_panel(db: AsyncSession = Depends(get_db)) -> dict:
         ],
         "events": await _recent_events(db),
         "health": await _health(db, scout, usage),
+        "run_diagnostics": await _run_diagnostics(db, scout),
+        # Yutori's responses verbatim. Their documentation says nothing about
+        # what restart does, whether next_run_timestamp is meaningful, or why
+        # /v1/usage disagrees with scout detail — so the raw payloads are the
+        # only way to reason about it.
+        "raw": {
+            "scout_detail": _redact(detail),
+            "usage": usage_raw,
+            "latest_update": _redact(updates[0]) if updates else None,
+        },
+    }
+
+
+def _redact(payload: dict[str, Any]) -> dict[str, Any]:
+    """Strip anything carrying the webhook secret before it reaches a browser."""
+    safe = dict(payload)
+    if "webhook_url" in safe:
+        safe["webhook_url"] = mask_webhook_url(safe.get("webhook_url"))
+    # Update bodies can be very large; the page shows shape, not content.
+    if "content" in safe and isinstance(safe["content"], str):
+        safe["content"] = f"<{len(safe['content'])} chars>"
+    return safe
+
+
+async def _run_diagnostics(db: AsyncSession, scout: Any) -> dict[str, Any]:
+    """Evidence about the run in flight, rather than a claim about it.
+
+    Whether a Scout run actually started is not something Yutori will tell us —
+    `next_run_timestamp` comes back as epoch 0 — so the honest answer is to show
+    what has and has not changed since the run began and let it speak.
+    """
+    if scout is None or scout.run_started_at is None:
+        return {"run_state": "idle", "has_run_record": False}
+
+    now = datetime.now(UTC)
+    elapsed = (now - scout.run_started_at).total_seconds()
+    webhooks_since = await db.scalar(
+        select(func.count())
+        .select_from(WebhookEvent)
+        .where(WebhookEvent.received_at > scout.run_started_at)
+    )
+    baseline = scout.run_baseline_update_count
+    current = scout.update_count
+    return {
+        "run_state": scout.run_state,
+        "has_run_record": True,
+        "run_started_at": scout.run_started_at.isoformat(),
+        "run_finished_at": scout.run_finished_at.isoformat() if scout.run_finished_at else None,
+        "elapsed_seconds": int(elapsed),
+        "timeout_seconds": settings.scout_run_timeout_seconds,
+        "baseline_update_count": baseline,
+        "current_update_count": current,
+        # The single most informative line on the page: if this stays false for
+        # the whole run window, whatever we did to Yutori did not cause a run.
+        "update_count_moved": bool(
+            current is not None and baseline is not None and current > baseline
+        ),
+        "webhooks_since_run_started": webhooks_since or 0,
+        "run_mechanism": settings.scout_run_mechanism,
+        "run_interval_seconds": settings.scout_run_interval_seconds,
     }
 
 

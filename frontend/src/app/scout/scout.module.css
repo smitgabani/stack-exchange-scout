@@ -241,6 +241,23 @@
   font-size: 13px;
 }
 
+.details {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.summary {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--body-text);
+  cursor: pointer;
+}
+
+.details[open] .summary {
+  margin-bottom: 12px;
+}
+
 .tableWrap {
   overflow-x: auto;
 }

@@ -60,7 +60,34 @@ type Panel = {
     orphan_scout_ids: string[];
     last_sync_error: string | null;
   };
+  run_diagnostics: {
+    run_state: string;
+    has_run_record: boolean;
+    run_started_at?: string;
+    run_finished_at?: string | null;
+    elapsed_seconds?: number;
+    timeout_seconds?: number;
+    baseline_update_count?: number | null;
+    current_update_count?: number | null;
+    update_count_moved?: boolean;
+    webhooks_since_run_started?: number;
+    run_mechanism?: string;
+    run_interval_seconds?: number;
+  };
+  raw: {
+    scout_detail: Record<string, unknown> | null;
+    usage: Record<string, unknown> | null;
+    latest_update: Record<string, unknown> | null;
+  };
 };
+
+function duration(seconds: number | undefined): string {
+  if (seconds === undefined) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
 
 async function fetchPanel(): Promise<Panel> {
   const response = await fetch("/api/scout/panel");
@@ -137,7 +164,11 @@ function StatusCard({ status }: { status: ScoutStatus }) {
       <div className={styles.blockLabel}>Status</div>
       <div className={styles.blockValue}>{parked ? "Parked" : "Active"}</div>
       <div className={styles.blockNote}>
-        {parked ? "Runs only when you ask" : `Next run ${when(status.next_run_at)}`}
+        {parked
+          ? "Runs only when you ask"
+          : status.next_run_at
+            ? `Next run ${when(status.next_run_at)}`
+            : "Awake, but no run scheduled"}
         {status.last_update_at && ` · last update ${when(status.last_update_at)}`}
       </div>
     </div>
@@ -158,6 +189,10 @@ export default function ScoutPage() {
 
   const status = scout ?? panel.status;
   const { configuration: config, usage, health } = panel;
+  // Vercel and Fly deploy separately, so the frontend is routinely newer than
+  // the backend it talks to. Default anything the older API won't send.
+  const diag = panel.run_diagnostics ?? { run_state: "idle", has_run_record: false };
+  const raw = panel.raw ?? { scout_detail: null, usage: null, latest_update: null };
   const busy = park.isPending || sync.isPending || pull.isPending;
 
   return (
@@ -316,6 +351,88 @@ export default function ScoutPage() {
             </table>
           </div>
         )}
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Last run</h2>
+        <div className={styles.pageSub}>
+          Yutori won&apos;t say whether a run actually started — its
+          next_run_timestamp comes back as epoch 0. So this shows what changed
+          after the run began and lets that answer the question.
+        </div>
+        {!diag.has_run_record ? (
+          <div className={styles.empty}>No run has been started yet.</div>
+        ) : (
+          <>
+            <dl className={styles.config}>
+              <div><dt>Run state</dt><dd>{diag.run_state}</dd></div>
+              <div><dt>Started</dt><dd>{when(diag.run_started_at ?? null)}</dd></div>
+              <div>
+                <dt>Elapsed</dt>
+                <dd>
+                  {duration(diag.elapsed_seconds)} of {duration(diag.timeout_seconds)} before timeout
+                </dd>
+              </div>
+              <div><dt>Finished</dt><dd>{when(diag.run_finished_at ?? null)}</dd></div>
+              <div>
+                <dt>Yutori update count</dt>
+                <dd>
+                  {diag.baseline_update_count ?? "—"} at start → {diag.current_update_count ?? "—"} now
+                </dd>
+              </div>
+              <div>
+                <dt>Did a run happen?</dt>
+                {/* The whole question, in one field. */}
+                <dd className={diag.update_count_moved ? styles.ok : styles.missed}>
+                  {diag.update_count_moved
+                    ? "yes — Yutori produced a new update"
+                    : "no new update from Yutori yet"}
+                </dd>
+              </div>
+              <div>
+                <dt>Webhooks since start</dt>
+                <dd>{diag.webhooks_since_run_started ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Mechanism · interval</dt>
+                <dd>
+                  {diag.run_mechanism} · {duration(diag.run_interval_seconds)}
+                </dd>
+              </div>
+            </dl>
+            {diag.run_mechanism === "restart" &&
+              diag.update_count_moved === false &&
+              (diag.elapsed_seconds ?? 0) > 1800 && (
+                <div className={styles.alert}>
+                  Half an hour with no new update. Restart appears to resume the Scout&apos;s
+                  schedule rather than run it — and the run interval is{" "}
+                  {duration(diag.run_interval_seconds)}, so the next scheduled run is a long way
+                  off. Switching SCOUT_RUN_MECHANISM to &ldquo;recreate&rdquo; would delete and
+                  recreate the Scout, which does start a run immediately.
+                </div>
+              )}
+          </>
+        )}
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Raw Yutori responses</h2>
+        <div className={styles.pageSub}>
+          Exactly what their API returned, webhook secret removed. Their docs
+          don&apos;t describe most of this behaviour, so the payloads are the evidence.
+        </div>
+        <details className={styles.details}>
+          <summary className={styles.summary}>Scout detail</summary>
+          <pre className={styles.query}>{JSON.stringify(raw.scout_detail, null, 2)}</pre>
+        </details>
+        <details className={styles.details}>
+          <summary className={styles.summary}>Usage (/v1/usage)</summary>
+          <pre className={styles.query}>{JSON.stringify(raw.usage, null, 2)}</pre>
+        </details>
+        <details className={styles.details}>
+          <summary className={styles.summary}>Latest update</summary>
+          <pre className={styles.query}>{JSON.stringify(raw.latest_update, null, 2)}</pre>
+        </details>
       </section>
 
       <section className={styles.section}>
