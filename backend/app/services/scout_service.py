@@ -672,11 +672,18 @@ async def usage_summary(db: AsyncSession, *, period: str = "30d") -> UsageSummar
         logger.warning("Fetching usage failed: %s", exc)
         return UsageSummary(period=period, error=str(exc))
 
-    runs = int(usage.get("scout_runs") or 0)
+    # scout_runs lives under `activity`, not at the top level — confirmed
+    # against the live response. Read from the top level it is always None,
+    # which silently reports zero runs and zero spend.
+    activity = usage.get("activity") or {}
+    runs = int(activity.get("scout_runs") or usage.get("scout_runs") or 0)
     return UsageSummary(
-        period=period,
+        period=str(activity.get("period") or period),
         scout_runs=runs,
         estimated_spend_usd=round(runs * settings.yutori_run_cost_usd, 2),
+        # Observed to mean "scouts executing right now", not "scouts whose
+        # status is active" — it reads 0 for a Scout sitting in `active` with
+        # no run in progress, which makes it a useful liveness signal.
         num_active_scouts=int(usage.get("num_active_scouts") or 0),
         active_scout_ids=[str(i) for i in (usage.get("active_scout_ids") or [])],
     )

@@ -467,7 +467,10 @@ export default function ScoutPage() {
         <dl className={styles.config}>
           <div><dt>Events awaiting ingest</dt><dd>{health.events_awaiting_ingest}</dd></div>
           <div>
-            <dt>Active Scouts at Yutori</dt>
+            {/* Observed to mean "runs executing right now" rather than
+                "scouts whose status is active" — so it doubles as a liveness
+                check while a run is supposed to be in progress. */}
+            <dt>Runs executing now</dt>
             <dd>{usage.error ? "—" : usage.num_active_scouts}</dd>
           </div>
           <div>
