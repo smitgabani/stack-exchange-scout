@@ -47,8 +47,10 @@ class Settings(BaseSettings):
     scout_run_mechanism: str = "restart"
     # After this long with no update, a run is treated as finished and the Scout
     # is parked. A run that finds nothing never sends a webhook, so without this
-    # the Scout would sit "running" forever.
-    scout_run_timeout_seconds: int = 7200
+    # the Scout would sit "running" forever — and a stuck run is expensive in a
+    # second way, because the Scout page polls while one is in flight. Set from
+    # the one real run observed end to end, which took about 12 minutes.
+    scout_run_timeout_seconds: int = 2700
     # What a run's Scout interval is set to. Long on purpose: if parking fails,
     # this is what stops the Scout billing again before anyone notices.
     scout_run_interval_seconds: int = 30 * 24 * 3600

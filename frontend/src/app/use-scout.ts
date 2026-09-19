@@ -20,6 +20,10 @@ export type ScoutStatus = {
   run_cost_usd: number;
 };
 
+// Slightly longer than the backend's run timeout, so polling outlives a run
+// that is going to be finalized but not one that never will be.
+const RUN_POLL_CEILING_MS = 50 * 60 * 1000;
+
 async function fetchScout(): Promise<ScoutStatus> {
   const response = await fetch("/api/scout");
   if (!response.ok) {
@@ -33,18 +37,31 @@ async function fetchScout(): Promise<ScoutStatus> {
  * and settings — all three can start a run, so all three must agree on whether
  * one is already in flight.
  *
- * Polls only while a run is running: that poll is also what finalizes the run
- * and parks the Scout server-side, so it is doing real work, not just refreshing
- * a label.
+ * Polling is opt-in and off by default. Every poll is a Vercel function
+ * proxying to a scale-to-zero Fly machine, and this hook is mounted on three
+ * pages — polling unconditionally meant a run stuck in `running` quietly
+ * generated hundreds of billed requests from any open tab. Only the Scout
+ * page, where someone is actually watching a run, asks for it.
  */
-export function useScout() {
+export function useScout({ poll = false }: { poll?: boolean } = {}) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string | null>(null);
 
   const query = useQuery({
     queryKey: ["scout"],
     queryFn: fetchScout,
-    refetchInterval: (q) => (q.state.data?.run_state === "running" ? 15_000 : false),
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!poll || data?.run_state !== "running") return false;
+      // Give up once the run is past the point where the backend would have
+      // timed it out anyway. Without this, a run that never finalizes polls
+      // forever.
+      if (data.run_started_at) {
+        const elapsed = Date.now() - new Date(data.run_started_at).getTime();
+        if (elapsed > RUN_POLL_CEILING_MS) return false;
+      }
+      return 30_000;
+    },
   });
 
   const invalidate = async () => {

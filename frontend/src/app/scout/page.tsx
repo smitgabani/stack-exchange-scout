@@ -176,11 +176,13 @@ function StatusCard({ status }: { status: ScoutStatus }) {
 }
 
 export default function ScoutPage() {
-  const { scout, message, park, sync, pull, isRunning } = useScout();
+  // The one page where someone is watching a run, so the only one that polls.
+  const { scout, message, park, sync, pull, isRunning } = useScout({ poll: true });
   const { data: panel, isLoading } = useQuery({
     queryKey: ["scout-panel"],
     queryFn: fetchPanel,
-    refetchInterval: isRunning ? 15_000 : false,
+    refetchInterval: isRunning ? 30_000 : false,
+    staleTime: 15_000,
   });
 
   if (isLoading || !panel) {
