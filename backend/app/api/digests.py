@@ -155,6 +155,40 @@ async def get_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(get_
     return _challenge_out(challenge, question)
 
 
+@router.post("/challenges/{challenge_id}/reformat")
+async def reformat_challenge(
+    challenge_id: uuid.UUID,
+    format_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Add the blocks a format wants that this challenge does not have yet.
+
+    A top-up, not a regeneration: existing blocks are left alone, so hints
+    already revealed do not change mid-solve. The challenge keeps its id, which
+    is what keeps the link in an already-sent digest working.
+
+    Costs one LLM call, and nothing at all when there is nothing to add.
+    """
+    challenge = await db.get(Challenge, challenge_id)
+    if challenge is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
+    question = await db.get(Question, challenge.question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+    profile = await get_or_create_profile(db)
+    profile_data = ProfileData.model_validate(profile.data)
+
+    try:
+        return await digest_service.reformat_challenge(
+            db, profile_data, challenge, question, format_id=format_id
+        )
+    except digest_service.PromotionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except digest_service.DigestError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
 @router.delete("/challenges/{challenge_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
     """Delete one challenge, leaving its question and its digest alone.

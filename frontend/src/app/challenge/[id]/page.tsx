@@ -1,8 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { llmApi } from "@/lib/llm-api";
+import { ConfirmDialog } from "../../confirm-dialog";
 import { useState } from "react";
 import { Block, ProgressiveHints, SPECIAL_BLOCKS, isGated, labelFor } from "./blocks";
 import styles from "./challenge.module.css";
@@ -25,6 +27,7 @@ type ChallengeDetail = {
   hints: Hint[];
   estimated_difficulty: number | null;
   /** Everything the format produced. Null on challenges made before formats. */
+  digest_id: string | null;
   content: Record<string, unknown> | null;
   format_name: string | null;
   /** Render order, resolved against the backend's block registry. */
@@ -60,6 +63,30 @@ export default function ChallengePage() {
   // rather than secrecy.
   const [allHintsShown, setAllHintsShown] = useState(false);
   const [stuckOpen, setStuckOpen] = useState(false);
+  const [formatOpen, setFormatOpen] = useState(false);
+  const [chosenFormat, setChosenFormat] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
+  const { data: formats } = useQuery({ queryKey: ["llm-formats"], queryFn: llmApi.formats });
+
+  const reformat = useMutation({
+    mutationFn: () => llmApi.reformatChallenge(params.id, chosenFormat),
+    onSuccess: async (result) => {
+      setFormatOpen(false);
+      setNote(
+        result.added.length === 0
+          ? `Already has everything ${result.format} asks for — no call was made.`
+          : `Added ${result.added.length} section${result.added.length === 1 ? "" : "s"} from ${result.format}.`,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["challenge"] });
+      await queryClient.invalidateQueries({ queryKey: ["challenges"] });
+    },
+    onError: (e: Error) => {
+      setFormatOpen(false);
+      setNote(e.message);
+    },
+  });
 
   if (isLoading) {
     return <main className={styles.page}><div className={styles.notice}>Loading…</div></main>;
@@ -94,7 +121,14 @@ export default function ChallengePage() {
         ← Back to dashboard
       </Link>
 
-      <h1 className={styles.title}>{challenge.question_title ?? "Challenge"}</h1>
+      <div className={styles.titleRow}>
+        <h1 className={styles.title}>{challenge.question_title ?? "Challenge"}</h1>
+        <button type="button" className={styles.formatButton} onClick={() => setFormatOpen(true)}>
+          {challenge.format_name ? `Format: ${challenge.format_name}` : "Add sections"}
+        </button>
+      </div>
+
+      {note && <div className={styles.notice}>{note}</div>}
 
       <div className={styles.headerGrid}>
         <div className={styles.whyCard}>
@@ -156,6 +190,51 @@ export default function ChallengePage() {
       )}
 
       {challenge.question_url && <hr className={styles.hr} />}
+
+      <ConfirmDialog
+        open={formatOpen}
+        title="Add sections to this challenge?"
+        body={
+          <>
+            <p>
+              Sections this challenge already has are left exactly as they are — including hints
+              you have revealed. Only what the chosen format adds is generated.
+            </p>
+            <p>
+              This costs <strong>one LLM call</strong>, or nothing at all if there is nothing to
+              add. The challenge keeps its address, so any link to it keeps working.
+            </p>
+            {/* The archive and the inbox can diverge, and that is worth saying. */}
+            {challenge.digest_id && (
+              <p className={styles.warnText}>
+                This challenge was part of a digest. If that digest was emailed to you, this page
+                will no longer match what you received.
+              </p>
+            )}
+            <label className={styles.dialogField}>
+              <span className={styles.dialogLabel}>Format</span>
+              <select
+                className={styles.dialogSelect}
+                value={chosenFormat ?? ""}
+                onChange={(e) => setChosenFormat(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">Default — {formats?.active.name ?? "Standard"}</option>
+                {(formats?.formats ?? [])
+                  .filter((f) => !f.is_default)
+                  .map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.blocks.length} blocks)
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </>
+        }
+        confirmLabel="Add sections"
+        busy={reformat.isPending}
+        onConfirm={() => reformat.mutate()}
+        onCancel={() => setFormatOpen(false)}
+      />
 
       {challenge.question_url && (
         <a

@@ -5,13 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.gemini import GeminiProvider
-from app.integrations.llm import LLMProvider
+from app.integrations.llm import LLMError, LLMProvider
 from app.integrations.openai import OpenAIProvider
 from app.models.challenge import Challenge as ChallengeRow
 from app.models.digest import Digest, DigestQuestion
 from app.models.question import Question
 from app.schemas.profile import ProfileData
 from app.services import (
+    challenge_blocks,
     challenge_service,
     format_service,
     prompt_service,
@@ -225,6 +226,96 @@ async def promote_question(
     await db.commit()
     await db.refresh(row)
     return row
+
+
+def content_for(challenge: ChallengeRow) -> dict:
+    """A challenge's blocks, materialised for ones made before formats existed.
+
+    Those rows have `content` null and their six fields only in columns, so
+    without this a top-up would think every core block was missing and ask the
+    model to produce them all again.
+    """
+    if challenge.content:
+        return dict(challenge.content)
+    return {
+        "problem_summary": challenge.problem_summary,
+        "why_interesting": challenge.why_interesting,
+        "concepts": challenge.concepts or [],
+        "starting_direction": challenge.starting_direction,
+        "hints": challenge.hints or [],
+        **(
+            {"estimated_difficulty": challenge.estimated_difficulty}
+            if challenge.estimated_difficulty is not None
+            else {}
+        ),
+    }
+
+
+async def reformat_challenge(
+    db: AsyncSession,
+    profile_data: ProfileData,
+    challenge: ChallengeRow,
+    question: Question,
+    *,
+    format_id: int | None = None,
+    provider: LLMProvider | None = None,
+) -> dict:
+    """Add the blocks a format wants that this challenge does not have yet.
+
+    A top-up rather than a regeneration. Blocks already present are left
+    exactly as they are, so hints you have already revealed do not change
+    under you mid-solve, and the challenge keeps its id — which is what keeps
+    the link in an already-sent digest working.
+
+    Costs one LLM call, and none at all when there is nothing to add.
+    """
+    try:
+        fmt = await format_service.resolve_for_run(db, format_id)
+    except format_service.FormatError as exc:
+        raise PromotionError(str(exc)) from exc
+
+    current = content_for(challenge)
+    missing = [block for block in fmt.blocks if block.key not in current]
+
+    if not missing:
+        # Still record the format: the challenge now satisfies it, and saying
+        # so is cheaper and truer than pretending nothing happened.
+        challenge.format_name = fmt.name
+        await db.commit()
+        return {"added": [], "format": fmt.name, "spent_call": False}
+
+    provider = provider or await resolve_provider(db, profile_data)
+    template = await prompt_service.get_active(db)
+
+    prompt = challenge_service.build_prompt(
+        question, question.interesting_reason, challenge_service.TOP_UP_PREAMBLE
+    )
+    system_instruction = challenge_service.compose_system_instruction(
+        template.system_instruction, missing
+    )
+    schema = challenge_blocks.build_schema(missing)
+    # build_schema marks core blocks required; none of the missing ones can be
+    # required here, since a core block absent from an existing challenge is
+    # not something this path is meant to repair.
+    schema["required"] = []
+
+    try:
+        payload = await provider.generate_json(
+            system_instruction=system_instruction, prompt=prompt, schema=schema
+        )
+        added = challenge_service.validate_partial(payload, missing)
+    except (challenge_service.ChallengeValidationError, LLMError) as exc:
+        raise PromotionError(f"Could not add those sections: {exc}") from exc
+
+    await format_service.verify_content_links(added, missing)
+
+    challenge.content = {**current, **added}
+    challenge.format_name = fmt.name
+    challenge.provider = provider.name
+    challenge.model = provider.model
+    await db.commit()
+    await db.refresh(challenge)
+    return {"added": list(added.keys()), "format": fmt.name, "spent_call": True}
 
 
 async def load_digest_questions(db: AsyncSession, digest_id) -> list[tuple[Question, ChallengeRow]]:

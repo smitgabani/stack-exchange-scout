@@ -179,6 +179,14 @@ export const llmApi = {
   makeFormatDefault: (id: number) =>
     json<ChallengeFormat>(`/api/llm/formats/${id}/default`, { method: "POST" }),
 
+  /** Adds the blocks a format wants that a challenge lacks. One LLM call,
+   *  or none when there is nothing to add. Keeps the challenge's id. */
+  reformatChallenge: (challengeId: string, formatId: number | null) =>
+    json<{ added: string[]; format: string; spent_call: boolean }>(
+      `/api/challenges/${challengeId}/reformat${formatId === null ? "" : `?format_id=${formatId}`}`,
+      { method: "POST" },
+    ),
+
   deleteFormat: async (id: number) => {
     const response = await fetch(`/api/llm/formats/${id}`, { method: "DELETE" });
     if (!response.ok) throw new Error(`delete failed: ${response.status}`);

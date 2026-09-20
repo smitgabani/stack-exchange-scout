@@ -401,3 +401,58 @@
   padding: 14px 16px;
   text-align: center;
 }
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.formatButton {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--body-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.formatButton:hover {
+  border-color: var(--border-strong);
+}
+
+.warnText {
+  color: var(--coral);
+  font-weight: 500;
+}
+
+.dialogField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.dialogLabel {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dialogSelect {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+}
