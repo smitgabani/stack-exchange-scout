@@ -120,6 +120,78 @@ async def generate(
     return digest
 
 
+class PromotionError(RuntimeError):
+    """A question cannot be turned into a challenge on demand."""
+
+
+async def promote_question(
+    db: AsyncSession,
+    profile_data: ProfileData,
+    question: Question,
+    *,
+    provider: LLMProvider | None = None,
+) -> ChallengeRow:
+    """Curate one question into a challenge outside any digest.
+
+    The counterpart to `generate`: same curator, same prompt, same validation,
+    but the caller chose the question instead of the scoring formula. That
+    matters because the formula is a proxy for interest, not interest itself —
+    a question it passed over can still be the one worth solving.
+
+    Costs one LLM call. Unlike a discovery run it spends no Yutori credit, so
+    it is cheap enough to sit behind an ordinary button.
+    """
+    if question.status == "enrichment_pending":
+        raise PromotionError(
+            "This question has not been enriched yet, so there is no content to build a "
+            "challenge from. Run Enrich pending first."
+        )
+    if not (question.body or question.title):
+        raise PromotionError("This question has no title or body to build a challenge from.")
+
+    existing = await db.scalar(
+        select(ChallengeRow).where(
+            ChallengeRow.question_id == question.id, ChallengeRow.digest_id.is_(None)
+        )
+    )
+    if existing is not None:
+        raise PromotionError("This question already has a challenge.")
+
+    provider = provider or await resolve_provider(db, profile_data)
+
+    try:
+        challenge = await challenge_service.generate_challenge(
+            provider, question, selection_reason="you picked this question yourself"
+        )
+    except Exception as exc:
+        raise PromotionError(f"Challenge generation failed: {exc}") from exc
+
+    row = ChallengeRow(
+        digest_id=None,
+        question_id=question.id,
+        problem_summary=challenge.problem_summary,
+        why_interesting=challenge.why_interesting,
+        concepts=challenge.concepts,
+        starting_direction=challenge.starting_direction,
+        hints=challenge.hints,
+        estimated_difficulty=challenge.estimated_difficulty,
+        provider=provider.name,
+        model=provider.model,
+        prompt_version=challenge_service.PROMPT_VERSION,
+    )
+    db.add(row)
+
+    # `select_candidates` only ever looks at rows still marked `candidate`, so
+    # this is what stops the next digest curating a second challenge for a
+    # question that already has one.
+    if question.status == "candidate":
+        question.status = "selected"
+
+    await db.commit()
+    await db.refresh(row)
+    return row
+
+
 async def load_digest_questions(db: AsyncSession, digest_id) -> list[tuple[Question, ChallengeRow]]:
     """Questions and their challenges, in the order the digest defines."""
     rows = (

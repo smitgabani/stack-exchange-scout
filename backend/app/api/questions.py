@@ -7,12 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
+from app.models.challenge import Challenge
 from app.models.question import Question
 from app.schemas.profile import ProfileData
-from app.services import enrichment_service, rank_stage
+from app.services import digest_service, enrichment_service, rank_stage
 from app.services.profile_service import get_or_create_profile
 
 router = APIRouter(tags=["questions"])
+
+# What `rejection_reason` is set to when the user dismissed a question by hand,
+# as opposed to the enrichment filters rejecting it (M5-B5).
+USER_DISMISSED = "user_dismissed"
 
 
 class QuestionOut(BaseModel):
@@ -32,10 +37,14 @@ class QuestionOut(BaseModel):
     question_created_at: datetime | None
     last_activity_at: datetime | None
     rejection_reason: str | None
+    # Whether a challenge already exists for this question, so the UI can show
+    # a link to it instead of offering to spend another LLM call making one.
+    challenge_id: uuid.UUID | None = None
 
     @classmethod
-    def from_model(cls, question: Question) -> "QuestionOut":
+    def from_model(cls, question: Question, challenge_id: uuid.UUID | None = None) -> "QuestionOut":
         return cls(
+            challenge_id=challenge_id,
             id=question.id,
             stackoverflow_question_id=question.stackoverflow_question_id,
             url=question.url,
@@ -64,6 +73,7 @@ class QuestionOut(BaseModel):
 async def list_questions(
     db: AsyncSession = Depends(get_db),
     status_filter: str = Query("candidate", alias="status"),
+    rejection_reason: str | None = None,
     topic: str | None = None,
     difficulty_min: int | None = Query(None, ge=1, le=5),
     difficulty_max: int | None = Query(None, ge=1, le=5),
@@ -77,6 +87,14 @@ async def list_questions(
 
     if status_filter != "all":
         statement = statement.where(Question.status == status_filter)
+    # Separates the questions the user dismissed from the ones the enrichment
+    # filters rejected — both are `rejected`, but only one was a decision.
+    if rejection_reason == USER_DISMISSED:
+        statement = statement.where(Question.rejection_reason == USER_DISMISSED)
+    elif rejection_reason == "automatic":
+        statement = statement.where(
+            Question.rejection_reason.is_not(None), Question.rejection_reason != USER_DISMISSED
+        )
     if topic:
         statement = statement.where(Question.tags.any(topic.lower()))
     if difficulty_min is not None:
@@ -99,7 +117,25 @@ async def list_questions(
     ).limit(limit).offset(offset)
 
     questions = (await db.scalars(statement)).all()
-    return [QuestionOut.from_model(question) for question in questions]
+
+    # One query for the whole page rather than one per row.
+    challenge_ids = await _challenge_ids_for(db, [question.id for question in questions])
+    return [
+        QuestionOut.from_model(question, challenge_ids.get(question.id)) for question in questions
+    ]
+
+
+async def _challenge_ids_for(db: AsyncSession, question_ids: list[uuid.UUID]) -> dict:
+    if not question_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(Challenge.question_id, Challenge.id).where(
+                Challenge.question_id.in_(question_ids)
+            )
+        )
+    ).all()
+    return {question_id: challenge_id for question_id, challenge_id in rows}
 
 
 @router.get("/questions/{question_id}", response_model=QuestionOut)
@@ -107,7 +143,86 @@ async def get_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db
     question = await db.get(Question, question_id)
     if question is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
-    return QuestionOut.from_model(question)
+    challenge_ids = await _challenge_ids_for(db, [question.id])
+    return QuestionOut.from_model(question, challenge_ids.get(question.id))
+
+
+@router.post("/questions/{question_id}/dismiss", response_model=QuestionOut)
+async def dismiss_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> QuestionOut:
+    """Take a question out of the pool without deleting it.
+
+    Deliberately not a DELETE. Ingest dedupes on `canonical_url`, so a deleted
+    row is simply an unknown URL the next time a run sees it — the question
+    would come back, possibly having been paid for twice. Keeping the row is
+    what makes the dismissal stick.
+    """
+    question = await db.get(Question, question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+    question.status = "rejected"
+    question.rejection_reason = USER_DISMISSED
+    await db.commit()
+    await db.refresh(question)
+    challenge_ids = await _challenge_ids_for(db, [question.id])
+    return QuestionOut.from_model(question, challenge_ids.get(question.id))
+
+
+@router.post("/questions/{question_id}/restore", response_model=QuestionOut)
+async def restore_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> QuestionOut:
+    """Undo a dismissal, putting the question back in the candidate pool.
+
+    Only undoes the user's own dismissal — a question the enrichment filters
+    rejected is left alone, since restoring it would just be re-rejected by the
+    same rule on the next run.
+    """
+    question = await db.get(Question, question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    if question.rejection_reason != USER_DISMISSED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question was not dismissed by hand, so there is nothing to restore.",
+        )
+
+    question.status = "candidate"
+    question.rejection_reason = None
+    await db.commit()
+    await db.refresh(question)
+    challenge_ids = await _challenge_ids_for(db, [question.id])
+    return QuestionOut.from_model(question, challenge_ids.get(question.id))
+
+
+@router.post("/questions/{question_id}/challenge", status_code=status.HTTP_201_CREATED)
+async def promote_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Turn a question into a challenge regardless of what it scored.
+
+    The scoring formula decides what a digest contains; this is the escape
+    hatch for when the formula and the user disagree. Costs one LLM call and no
+    Yutori credit.
+
+    No `require_gemini_key` guard, unlike `/digest/generate`: the profile may
+    select OpenAI, and that dependency would refuse a perfectly usable OpenAI
+    setup for want of a Gemini key. `resolve_provider` checks the key belonging
+    to the provider actually chosen, and its failure is surfaced as the 403
+    below.
+    """
+    question = await db.get(Question, question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+    profile = await get_or_create_profile(db)
+    profile_data = ProfileData.model_validate(profile.data)
+
+    try:
+        challenge = await digest_service.promote_question(db, profile_data, question)
+    except digest_service.PromotionError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except digest_service.DigestError as exc:
+        # resolve_provider only raises for a missing/unusable key.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    return {"challenge_id": str(challenge.id), "question_id": str(question.id)}
 
 
 @router.post("/candidates/enrich")

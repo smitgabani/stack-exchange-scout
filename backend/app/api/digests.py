@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.models.challenge import Challenge
 from app.models.digest import Digest
+from app.models.question import Question
 from app.schemas.profile import ProfileData
 from app.services import digest_service, email_service
 from app.services.profile_service import get_or_create_profile
@@ -21,6 +22,9 @@ router = APIRouter(tags=["digests"])
 class ChallengeOut(BaseModel):
     id: uuid.UUID
     question_id: uuid.UUID
+    digest_id: uuid.UUID | None = None
+    source: str = "digest"
+    created_at: datetime | None = None
     question_title: str | None = None
     question_url: str | None = None
     question_tags: list[str] = []
@@ -48,6 +52,9 @@ def _challenge_out(challenge: Challenge, question=None) -> ChallengeOut:
     return ChallengeOut(
         id=challenge.id,
         question_id=challenge.question_id,
+        digest_id=challenge.digest_id,
+        source=challenge.source,
+        created_at=challenge.created_at,
         question_title=question.title if question else None,
         question_url=question.url if question else None,
         question_tags=(question.tags or []) if question else [],
@@ -97,16 +104,57 @@ async def get_digest(digest_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -
     )
 
 
+@router.get("/challenges", response_model=list[ChallengeOut])
+async def list_challenges(
+    db: AsyncSession = Depends(get_db),
+    source: str = Query("all", pattern="^(all|digest|manual)$"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[ChallengeOut]:
+    """Every challenge ever generated, newest first, whatever digest it came from.
+
+    Without this the only reachable challenges were those in whichever digest
+    the dashboard happened to show — anything in an older digest, or promoted
+    by hand and so belonging to no digest at all, had no route to it.
+    """
+    statement = (
+        select(Challenge, Question)
+        .join(Question, Question.id == Challenge.question_id)
+        .order_by(Challenge.created_at.desc())
+    )
+    if source == "manual":
+        statement = statement.where(Challenge.digest_id.is_(None))
+    elif source == "digest":
+        statement = statement.where(Challenge.digest_id.is_not(None))
+
+    rows = (await db.execute(statement.limit(limit).offset(offset))).all()
+    return [_challenge_out(challenge, question) for challenge, question in rows]
+
+
 @router.get("/challenges/{challenge_id}", response_model=ChallengeOut)
 async def get_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> ChallengeOut:
     challenge = await db.get(Challenge, challenge_id)
     if challenge is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
 
-    from app.models.question import Question
-
     question = await db.get(Question, challenge.question_id)
     return _challenge_out(challenge, question)
+
+
+@router.delete("/challenges/{challenge_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
+    """Delete one challenge, leaving its question and its digest alone.
+
+    Deleting a challenge that shipped in a sent digest is allowed — the UI
+    warns that the link in that email stops working — but the digest row
+    survives, so the history stays honest about what was sent and when.
+    """
+    challenge = await db.get(Challenge, challenge_id)
+    if challenge is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
+
+    await db.delete(challenge)
+    await db.commit()
 
 
 @router.post("/digest/generate", response_model=DigestOut, dependencies=[Depends(require_gemini_key)])

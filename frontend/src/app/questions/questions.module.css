@@ -145,8 +145,63 @@
   font-size: 14px;
   font-weight: 500;
   color: #1b61c9;
-  margin-top: auto;
+  /* The actions row below now owns the bottom of the card, so the link no
+     longer pushes itself down with margin-top: auto. */
   padding-top: 8px;
+}
+
+.qactions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid #eeeeee;
+}
+
+.qactionPrimary,
+.qactionGhost,
+.qactionDanger {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid #dddddd;
+  background: #ffffff;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.qactionPrimary {
+  background: #181d26;
+  border-color: #181d26;
+  color: #ffffff;
+}
+
+.qactionPrimary:hover:not(:disabled) {
+  background: #0d1218;
+}
+
+.qactionGhost {
+  color: #333840;
+}
+
+.qactionDanger {
+  color: #aa2d00;
+}
+
+.qactionDanger:hover:not(:disabled) {
+  border-color: #aa2d00;
+}
+
+.qactionPrimary:disabled,
+.qactionGhost:disabled,
+.qactionDanger:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .empty {

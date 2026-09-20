@@ -1,8 +1,10 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 import { colorForTopic } from "@/lib/topic-color";
+import { ConfirmDialog } from "../confirm-dialog";
 import styles from "./questions.module.css";
 
 type QuestionRow = {
@@ -22,6 +24,7 @@ type QuestionRow = {
   question_created_at: string | null;
   last_activity_at: string | null;
   rejection_reason: string | null;
+  challenge_id: string | null;
 };
 
 type Filter = { label: string; params: Record<string, string> };
@@ -31,7 +34,10 @@ const FILTERS: Filter[] = [
   { label: "Unanswered", params: { max_answers: "0" } },
   { label: "No accepted answer", params: { has_accepted_answer: "false" } },
   { label: "Difficulty 4+", params: { difficulty_min: "4" } },
-  { label: "Rejected", params: { status: "rejected" } },
+  // Split apart: a question the filters threw out and one the user dismissed
+  // are both `rejected`, but only one of them was a decision worth reviewing.
+  { label: "Rejected", params: { status: "rejected", rejection_reason: "automatic" } },
+  { label: "Dismissed", params: { status: "rejected", rejection_reason: "user_dismissed" } },
   { label: "Awaiting enrichment", params: { status: "enrichment_pending" } },
 ];
 
@@ -44,6 +50,14 @@ async function fetchQuestions(filter: Filter): Promise<QuestionRow[]> {
   return response.json();
 }
 
+async function postTo(path: string): Promise<void> {
+  const response = await fetch(path, { method: "POST" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `request failed: ${response.status}`);
+  }
+}
+
 function relativeDate(value: string | null): string {
   if (!value) return "unknown";
   const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
@@ -54,8 +68,21 @@ function relativeDate(value: string | null): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-function QuestionCard({ question }: { question: QuestionRow }) {
+function QuestionCard({
+  question,
+  onPromote,
+  onDismiss,
+  onRestore,
+  busy,
+}: {
+  question: QuestionRow;
+  onPromote: (question: QuestionRow) => void;
+  onDismiss: (question: QuestionRow) => void;
+  onRestore: (question: QuestionRow) => void;
+  busy: boolean;
+}) {
   const match = question.candidate_score;
+  const dismissed = question.rejection_reason === "user_dismissed";
 
   return (
     <div className={styles.qcard}>
@@ -101,12 +128,58 @@ function QuestionCard({ question }: { question: QuestionRow }) {
       )}
 
       {question.rejection_reason && (
-        <div className={styles.qdateRow}>Rejected: {question.rejection_reason.replace(/_/g, " ")}</div>
+        <div className={styles.qdateRow}>
+          {dismissed ? "Dismissed by you" : `Rejected: ${question.rejection_reason.replace(/_/g, " ")}`}
+        </div>
       )}
 
       <a className={styles.qsoLink} href={question.url} target="_blank" rel="noopener noreferrer">
         Open on Stack Overflow ↗
       </a>
+
+      <div className={styles.qactions}>
+        {question.challenge_id ? (
+          <Link href={`/challenge/${question.challenge_id}`} className={styles.qactionPrimary}>
+            View challenge →
+          </Link>
+        ) : (
+          <button
+            type="button"
+            className={styles.qactionPrimary}
+            onClick={() => onPromote(question)}
+            disabled={busy || question.status === "enrichment_pending"}
+            // Enrichment fills in the body the curator needs; without it the
+            // prompt would be empty and the call would be wasted.
+            title={
+              question.status === "enrichment_pending"
+                ? "Enrich this question first — there is no content to build a challenge from yet."
+                : "Generate a challenge from this question"
+            }
+          >
+            Make this a challenge
+          </button>
+        )}
+
+        {dismissed ? (
+          <button
+            type="button"
+            className={styles.qactionGhost}
+            onClick={() => onRestore(question)}
+            disabled={busy}
+          >
+            Restore
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={styles.qactionDanger}
+            onClick={() => onDismiss(question)}
+            disabled={busy}
+          >
+            Dismiss
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -116,11 +189,53 @@ export default function QuestionsPage() {
   const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
   const [running, setRunning] = useState<string | null>(null);
   const [stageMessage, setStageMessage] = useState<string | null>(null);
+  const [pendingDismiss, setPendingDismiss] = useState<QuestionRow | null>(null);
+  const [pendingPromote, setPendingPromote] = useState<QuestionRow | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: questions, isLoading } = useQuery({
     queryKey: ["questions", activeFilter.label],
     queryFn: () => fetchQuestions(activeFilter),
   });
+
+  async function refresh() {
+    await queryClient.invalidateQueries({ queryKey: ["questions"] });
+    await queryClient.invalidateQueries({ queryKey: ["challenges"] });
+  }
+
+  const promote = useMutation({
+    mutationFn: (question: QuestionRow) => postTo(`/api/questions/${question.id}/challenge`),
+    onSuccess: async () => {
+      setPendingPromote(null);
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error: Error) => {
+      setPendingPromote(null);
+      setActionError(error.message);
+    },
+  });
+
+  const dismiss = useMutation({
+    mutationFn: (question: QuestionRow) => postTo(`/api/questions/${question.id}/dismiss`),
+    onSuccess: async () => {
+      setPendingDismiss(null);
+      setActionError(null);
+      await refresh();
+    },
+    onError: (error: Error) => {
+      setPendingDismiss(null);
+      setActionError(error.message);
+    },
+  });
+
+  const restore = useMutation({
+    mutationFn: (question: QuestionRow) => postTo(`/api/questions/${question.id}/restore`),
+    onSuccess: refresh,
+    onError: (error: Error) => setActionError(error.message),
+  });
+
+  const busy = promote.isPending || dismiss.isPending || restore.isPending;
 
   async function runStage(path: string, label: string) {
     setRunning(label);
@@ -193,6 +308,8 @@ export default function QuestionsPage() {
         ))}
       </div>
 
+      {actionError && <div className={styles.stageResult}>{actionError}</div>}
+
       {isLoading ? (
         <div className={styles.empty}>Loading…</div>
       ) : !questions || questions.length === 0 ? (
@@ -203,10 +320,60 @@ export default function QuestionsPage() {
       ) : (
         <div className={styles.grid}>
           {questions.map((question) => (
-            <QuestionCard key={question.id} question={question} />
+            <QuestionCard
+              key={question.id}
+              question={question}
+              onPromote={setPendingPromote}
+              onDismiss={setPendingDismiss}
+              onRestore={(q) => restore.mutate(q)}
+              busy={busy}
+            />
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingPromote !== null}
+        title="Make this a challenge?"
+        body={
+          <>
+            <p>
+              A challenge will be generated from “{pendingPromote?.title ?? "this question"}”,
+              whatever it scored.
+            </p>
+            {/* Named explicitly because the Scout's Run button spends $0.35 and
+                this button looks similar — the difference is worth stating. */}
+            <p>
+              This costs one call to your LLM provider. It does not spend any Yutori credit and does
+              not start a discovery run.
+            </p>
+          </>
+        }
+        confirmLabel="Generate challenge"
+        busy={promote.isPending}
+        onConfirm={() => pendingPromote && promote.mutate(pendingPromote)}
+        onCancel={() => setPendingPromote(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingDismiss !== null}
+        title="Dismiss this question?"
+        body={
+          <>
+            <p>
+              “{pendingDismiss?.title ?? "This question"}” will be taken out of your candidate pool.
+            </p>
+            <p>
+              Nothing is deleted. The record is kept so a future run recognises the question and
+              does not discover it again — and you can restore it from the Dismissed filter.
+            </p>
+          </>
+        }
+        confirmLabel="Dismiss"
+        busy={dismiss.isPending}
+        onConfirm={() => pendingDismiss && dismiss.mutate(pendingDismiss)}
+        onCancel={() => setPendingDismiss(null)}
+      />
     </main>
   );
 }

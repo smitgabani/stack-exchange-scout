@@ -27,8 +27,12 @@ class Challenge(Base):
     __table_args__ = (UniqueConstraint("digest_id", "question_id", name="uq_challenges_digest_question"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    digest_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("digests.id", ondelete="CASCADE")
+    # Nullable: a challenge promoted by hand from the candidate pool belongs to
+    # no digest. `uq_challenges_manual_question` (partial, WHERE digest_id IS
+    # NULL) is what stops the same question being promoted twice — the
+    # composite constraint below cannot, since NULLs compare as distinct.
+    digest_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("digests.id", ondelete="CASCADE"), nullable=True
     )
     question_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("questions.id", ondelete="CASCADE")
@@ -51,3 +55,12 @@ class Challenge(Base):
     prompt_version: Mapped[int | None] = mapped_column(SmallInteger)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def source(self) -> str:
+        """Where this challenge came from, for the UI to label it.
+
+        Derived rather than stored — `digest_id IS NULL` already carries the
+        fact, and a second column could disagree with it.
+        """
+        return "digest" if self.digest_id is not None else "manual"

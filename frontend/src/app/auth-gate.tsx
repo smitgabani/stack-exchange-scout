@@ -10,6 +10,7 @@ import { OnboardingGate } from "./onboarding-gate";
 const NAV_LINKS = [
   { href: "/topics", label: "Topics" },
   { href: "/questions", label: "Questions" },
+  { href: "/challenges", label: "Challenges" },
   { href: "/scout", label: "Scout" },
   { href: "/accounts", label: "Accounts" },
   { href: "/settings", label: "Settings" },
