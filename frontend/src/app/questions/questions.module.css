@@ -262,3 +262,34 @@
 .actionButton:active:not(:disabled) {
   background: var(--surface-strong);
 }
+
+/* The format picker inside the promote dialog. */
+.dialogField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.dialogLabel {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14px;
+  text-transform: uppercase;
+  color: #41454d;
+}
+
+.dialogSelect {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #181d26;
+}
+
+.dialogHint {
+  font-size: 13px;
+  color: #41454d;
+}

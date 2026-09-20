@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { llmApi } from "@/lib/llm-api";
 import { colorForTopic } from "@/lib/topic-color";
 import { ConfirmDialog } from "../confirm-dialog";
 import styles from "./questions.module.css";
@@ -191,12 +192,18 @@ export default function QuestionsPage() {
   const [stageMessage, setStageMessage] = useState<string | null>(null);
   const [pendingDismiss, setPendingDismiss] = useState<QuestionRow | null>(null);
   const [pendingPromote, setPendingPromote] = useState<QuestionRow | null>(null);
+  // Null means "use the default". Kept per-dialog rather than persisted: the
+  // format is a property of this generation, not a setting.
+  const [promoteFormat, setPromoteFormat] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: questions, isLoading } = useQuery({
     queryKey: ["questions", activeFilter.label],
     queryFn: () => fetchQuestions(activeFilter),
   });
+  // Only needed when the dialog is open, but formats are a tiny list and
+  // TanStack caches it across both pages that read it.
+  const { data: formats } = useQuery({ queryKey: ["llm-formats"], queryFn: llmApi.formats });
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["questions"] });
@@ -204,9 +211,15 @@ export default function QuestionsPage() {
   }
 
   const promote = useMutation({
-    mutationFn: (question: QuestionRow) => postTo(`/api/questions/${question.id}/challenge`),
+    mutationFn: (question: QuestionRow) =>
+      postTo(
+        `/api/questions/${question.id}/challenge${
+          promoteFormat === null ? "" : `?format_id=${promoteFormat}`
+        }`,
+      ),
     onSuccess: async () => {
       setPendingPromote(null);
+      setPromoteFormat(null);
       setActionError(null);
       await refresh();
     },
@@ -347,12 +360,38 @@ export default function QuestionsPage() {
               This costs one call to your LLM provider. It does not spend any Yutori credit and does
               not start a discovery run.
             </p>
+
+            <label className={styles.dialogField}>
+              <span className={styles.dialogLabel}>Format</span>
+              <select
+                className={styles.dialogSelect}
+                value={promoteFormat ?? ""}
+                onChange={(e) => setPromoteFormat(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">
+                  Default — {formats?.active.name ?? "Standard"}
+                </option>
+                {(formats?.formats ?? [])
+                  .filter((f) => !f.is_default)
+                  .map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({f.blocks.length} blocks)
+                    </option>
+                  ))}
+              </select>
+              <span className={styles.dialogHint}>
+                Which blocks the challenge is built from. Manage these under LLM → Formats.
+              </span>
+            </label>
           </>
         }
         confirmLabel="Generate challenge"
         busy={promote.isPending}
         onConfirm={() => pendingPromote && promote.mutate(pendingPromote)}
-        onCancel={() => setPendingPromote(null)}
+        onCancel={() => {
+          setPendingPromote(null);
+          setPromoteFormat(null);
+        }}
       />
 
       <ConfirmDialog
