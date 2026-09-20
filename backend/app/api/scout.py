@@ -122,10 +122,17 @@ async def get_scout(db: AsyncSession = Depends(get_db)) -> ScoutStatus:
     dependencies=[Depends(require_yutori_key)],
 )
 async def sync_scout(db: AsyncSession = Depends(get_db)) -> SyncResponse:
-    """Manual re-trigger of the same sync the profile save performs (prd.md §24)."""
+    """Push the current query to an existing Scout (prd.md §24). Free.
+
+    `allow_create=False` deliberately. Creating a Scout starts a billable run,
+    and this endpoint is reached from a plain "Re-sync" link with no
+    confirmation — so with no Scout present it now reports that instead of
+    quietly spending $0.35. Creating one is what the Run button is for, behind
+    a dialog that names the price.
+    """
     profile = await get_or_create_profile(db)
     result = await scout_service.sync(
-        db, ProfileData.model_validate(profile.data), allow_create=True
+        db, ProfileData.model_validate(profile.data), allow_create=False
     )
     return SyncResponse(
         action=result.action, scout_id=result.scout_id, error=result.error
@@ -309,9 +316,43 @@ async def scout_panel(include_raw: bool = False, db: AsyncSession = Depends(get_
             "scout_detail": _redact(detail),
             "usage": usage_raw,
             "latest_update": _redact(updates[0]) if updates else None,
+            # The in-flight research task verbatim. Yutori's own dashboard can
+            # show a task as finished while our poll still reports running, and
+            # this is the only way to see which of the two is wrong.
+            "research_task": await _raw_research_task(db, scout),
         }
         if include_raw
         else None,
+    }
+
+
+async def _raw_research_task(db: AsyncSession, scout: Any) -> dict[str, Any] | None:
+    if scout is None or scout.run_kind != "research_task" or not scout.run_external_id:
+        return None
+    client = await scout_service.get_client(db)
+    if client is None:
+        return None
+    try:
+        task = await client.get_research_task(scout.run_external_id)
+    except Exception as exc:  # noqa: BLE001 - diagnostics must not break the page
+        return {"error": str(exc)[:300]}
+    # Trimmed: the findings themselves can be very long, and the shape is what
+    # is being diagnosed here, not the content.
+    return {
+        "task_id": task.get("task_id"),
+        "status": task.get("status"),
+        "structured_output_status": task.get("structured_output_status"),
+        "has_structured_result": bool(task.get("structured_result")),
+        "structured_result_keys": sorted((task.get("structured_result") or {}).keys())
+        if isinstance(task.get("structured_result"), dict)
+        else None,
+        "question_count": len((task.get("structured_result") or {}).get("questions") or [])
+        if isinstance(task.get("structured_result"), dict)
+        else None,
+        "result_chars": len(task.get("result") or ""),
+        "rejection_reason": task.get("rejection_reason"),
+        "created_at": task.get("created_at"),
+        "update_count": len(task.get("updates") or []),
     }
 
 
@@ -428,12 +469,41 @@ async def _health(
         .where(WebhookEvent.status == "received")
     )
     ours = scout.external_scout_id if scout else None
-    # Any active Scout that isn't ours is one nobody is tracking — and an
-    # untracked Scout bills on its own interval forever.
-    orphans = [i for i in usage.active_scout_ids if ours is None or i != ours]
+
+    # Yutori's own list, not usage.active_scout_ids — that counts runs
+    # executing right now, so it reports nothing for an idle Scout that is
+    # nonetheless alive and will bill again on its interval.
+    account_scouts: list[dict[str, Any]] = []
+    listing_error: str | None = None
+    client = await scout_service.get_client(db)
+    if client is not None:
+        try:
+            listing = await client.list_scouts()
+            for item in listing.get("scouts") or listing.get("items") or []:
+                account_scouts.append(
+                    {
+                        "id": str(item.get("id")),
+                        "status": item.get("status"),
+                        "created_at": item.get("created_at"),
+                        "update_count": item.get("update_count"),
+                        "is_ours": str(item.get("id")) == ours,
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001 - the page must still render
+            listing_error = str(exc)[:300]
+
     return {
         "events_awaiting_ingest": pending or 0,
-        "orphan_scout_ids": orphans,
+        # Anything alive on the account this app is not tracking. An untracked
+        # Scout bills on its own interval and nobody is watching it.
+        "orphan_scout_ids": [
+            item["id"]
+            for item in account_scouts
+            if not item["is_ours"] and item["status"] in ("active", "paused")
+        ],
+        "account_scouts": account_scouts,
+        "account_scouts_error": listing_error,
+        "runs_executing_now": usage.num_active_scouts,
         "last_sync_error": scout.last_sync_error if scout else None,
     }
 

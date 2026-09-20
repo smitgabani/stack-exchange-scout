@@ -301,3 +301,49 @@ M12.
 **Resume here:** M12-B1. Before building, run one real research task as an
 experiment — nobody has called that endpoint yet, and its result shape, latency
 and webhook behaviour are assumptions until they aren't.
+
+---
+
+## 2026-09-20 — The research primitive works, and two bugs found by using it
+
+First live research task: **succeeded, 18 questions, $0.35**, ~19 minutes
+(04:57 → 05:16). `structured_result` matched the registered `output_schema`
+exactly, so the parser needed no changes — the envelope adapter from ADR 0004
+was sufficient, and ingest/enrich/rank processed it without knowing research
+tasks exist. Pool afterwards: 38 candidates, all scored, top 71.0.
+
+**The webhook was never needed.** `events_awaiting_ingest` never moved; the
+poll collected the result. That is the clearest vindication of ADR 0004:
+under the Scout model this would have been a paid run lost to the 10-second
+delivery deadline.
+
+**Two bugs surfaced by doing it for real:**
+
+- **Re-sync created Scouts silently.** `POST /scout/sync` passed
+  `allow_create=True`, a leftover from M4 when creating was the only way to
+  get a Scout. It is reached from a plain text link with no confirmation, so
+  after Forget cleared the reference, pressing it created a Scout — a
+  billable run — from what looks like a free action. Now `allow_create=False`;
+  creating is the Run button's job, behind a dialog that names the price.
+- **The orphan check was watching the wrong field.** It used
+  `usage.active_scout_ids`, which counts runs *executing right now* — so an
+  idle-but-alive Scout, exactly the kind that bills unattended, showed as no
+  orphan. Health now lists every Scout on the account from
+  `GET /v1/scouting/tasks` with its status and whether we track it.
+
+**Account switching, resolved.** Using a key from another account produced
+`403 "Only the creator of a scout can edit it"`. Remote objects now record
+`sha256(key)[:16]`; a proven 403 (`sync_status = "unreachable"`) also counts
+as a mismatch, because a row created before fingerprinting has nothing to
+compare and would otherwise show the error with no way out. `POST
+/scout/forget` clears the link without touching a single discovered question.
+
+**Resume here:** M4–M7 is two clicks from closed — Generate digest, then Send
+latest digest. The newest digest (04:54) predates the research results
+(05:16) and holds 2 stale questions. After that, M12-B1.
+
+One thing to look at while reading the first real challenges: all 38
+candidates scored between 69 and 71. That is a suspiciously narrow band and
+suggests one sub-score is dominating. §26 forbids lowering the threshold to
+fill a digest; it says nothing about fixing a formula that is not
+discriminating.

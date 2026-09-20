@@ -365,5 +365,12 @@ Supersedes `tdd.md` Decision 2 and reshapes `prd.md` §9, §9.1, §12, §24.
 - 🧩 A research result arriving by webhook and by polling ingests once, not twice.
 - Manual: create two definitions, run one as research and one as a monitor, confirm the history, yield and per-key spend read correctly; delete the key and confirm the candidate pool is intact.
 
-**Open question for M12**
-- Research tasks have never been run against the live API. The first one should be treated as an experiment like the restart test was: confirm the result shape, how long it takes, and that the `scout_update` webhook arrives as the docs claim.
+**Open question for M12 — settled 2026-09-20**
+
+The first real research task ran (`0d8944ee`, $0.35) and answered all three parts:
+
+- **Result shape:** `structured_result` came back matching the registered `output_schema` exactly — `{"questions": [...]}`, 18 of them, `structured_output_status: succeeded`. The parser needed no changes; the envelope adapter was enough.
+- **Duration:** ~19 minutes (04:57 → 05:16), longer than the ~12 a Scout run took. M11's scheduler and the dashboard should both expect twenty-minute latency rather than seconds.
+- **Webhook:** never needed. The poll collected the result and `events_awaiting_ingest` never moved, so the webhook either did not arrive or arrived later. Building polling first turned what would have been a lost $0.35 into a non-event — which is the strongest argument for the research primitive, and now evidence rather than prediction.
+
+Downstream, untouched: 38 candidates, all scored, top 71.0. Ingest, enrich and rank handled research output without knowing research tasks exist.
