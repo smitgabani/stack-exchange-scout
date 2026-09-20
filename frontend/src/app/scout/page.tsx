@@ -333,7 +333,28 @@ export default function ScoutPage() {
           </div>
           <div><dt>Run mechanism</dt><dd>{config.run_mechanism}</dd></div>
           <div><dt>Created</dt><dd>{when(config.created_at)}</dd></div>
-          <div><dt>Scout ID</dt><dd className={styles.mono}>{status.external_scout_id ?? "—"}</dd></div>
+          <div>
+            <dt>Scout ID</dt>
+            <dd className={styles.mono}>{status.external_scout_id ?? "—"}</dd>
+          </div>
+          {status.external_scout_id && (
+            <div>
+              {/* Always offered, not only when a mismatch is detected: the
+                  detection can be wrong or absent, and being unable to
+                  unstick a dead reference is worse than an extra button. */}
+              <dt>Link</dt>
+              <dd>
+                <button
+                  type="button"
+                  className={styles.textButton}
+                  onClick={() => forget.mutate()}
+                  disabled={busy}
+                >
+                  Forget this Scout
+                </button>
+              </dd>
+            </div>
+          )}
         </dl>
       </section>
 

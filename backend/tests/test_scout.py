@@ -663,3 +663,17 @@ def test_fingerprint_identifies_without_revealing():
     assert printed == scout_service.fingerprint(key)
     assert printed != scout_service.fingerprint(key + "x")
     assert key not in printed
+
+
+@pytest.mark.anyio
+async def test_a_proven_403_counts_as_a_mismatch_without_a_fingerprint(
+    db_session, scout_row
+):
+    """The gap that left the app describing the problem with no way out: a row
+    created before fingerprinting has nothing to compare, but a 403 already
+    proved the answer."""
+    scout_row.account_fingerprint = None
+    scout_row.sync_status = "unreachable"
+    await db_session.commit()
+
+    assert await scout_service.account_mismatch(db_session, scout_row) is True

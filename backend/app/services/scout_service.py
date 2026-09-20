@@ -162,15 +162,21 @@ async def current_fingerprint(db: AsyncSession) -> str | None:
 async def account_mismatch(db: AsyncSession, scout: Scout | None) -> bool:
     """True when the stored Scout was created by a different API key.
 
-    A NULL fingerprint means "created before we started recording this", which
-    is unknown rather than mismatched — so it is not treated as a mismatch, and
-    the first successful edit repairs it.
+    Two ways to know. The cheap one is the recorded fingerprint. The other is
+    that Yutori already told us: a 403 sets `sync_status = "unreachable"`, and
+    that is proof, not a guess — it matters because a row created before
+    fingerprinting has no fingerprint to compare, and without this the app
+    would describe the problem in an error message while showing no way out
+    of it.
+
+    A NULL fingerprint on its own is "created before we recorded this", which
+    is unknown rather than mismatched — the first successful edit repairs it.
     """
-    if (
-        scout is None
-        or scout.external_scout_id is None
-        or not scout.account_fingerprint
-    ):
+    if scout is None or scout.external_scout_id is None:
+        return False
+    if scout.sync_status == "unreachable":
+        return True
+    if not scout.account_fingerprint:
         return False
     current = await current_fingerprint(db)
     return current is not None and current != scout.account_fingerprint
