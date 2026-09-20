@@ -194,7 +194,11 @@ async def restore_question(question_id: uuid.UUID, db: AsyncSession = Depends(ge
 
 
 @router.post("/questions/{question_id}/challenge", status_code=status.HTTP_201_CREATED)
-async def promote_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+async def promote_question(
+    question_id: uuid.UUID,
+    format_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """Turn a question into a challenge regardless of what it scored.
 
     The scoring formula decides what a digest contains; this is the escape
@@ -215,7 +219,9 @@ async def promote_question(question_id: uuid.UUID, db: AsyncSession = Depends(ge
     profile_data = ProfileData.model_validate(profile.data)
 
     try:
-        challenge = await digest_service.promote_question(db, profile_data, question)
+        challenge = await digest_service.promote_question(
+            db, profile_data, question, format_id=format_id
+        )
     except digest_service.PromotionError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except digest_service.DigestError as exc:

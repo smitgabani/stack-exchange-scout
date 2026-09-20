@@ -233,25 +233,25 @@ export default function PromptPage() {
         <div className={ws.section}>
           <h2 className={ws.sectionTitle}>Test result</h2>
           <div className={ws.sub}>
-            {testResult.provider} · {testResult.model} · prompt v
+            {testResult.provider} · {testResult.model} · {testResult.format.name} · prompt v
             {testResult.prompt_version || "default"} · nothing was saved
           </div>
           {testResult.ok ? (
             <>
               <div className={`${ws.pill} ${ws.pillOn}`}>Passed validation</div>
-              <div className={ws.blockLabel} style={{ marginTop: 14 }}>
-                Problem summary
-              </div>
-              <div className={styles.promptBlock}>{testResult.challenge.problem_summary}</div>
-              <div className={ws.blockLabel} style={{ marginTop: 14 }}>
-                Hints
-              </div>
-              <div className={styles.promptBlock}>
-                {testResult.challenge.hints.map((h) => `${h.label}\n${h.text}`).join("\n\n")}
-              </div>
-              <div className={ws.hint} style={{ marginTop: 10 }}>
-                Concepts: {testResult.challenge.concepts.join(", ") || "—"} · difficulty{" "}
-                {testResult.challenge.estimated_difficulty ?? "—"}/5
+              {testResult.dropped_links.length > 0 && (
+                /* Reported rather than hidden: a model that invents links is
+                   worth knowing about when judging a prompt. */
+                <div className={ws.notice} style={{ marginTop: 10 }}>
+                  {testResult.dropped_links.length} resource link
+                  {testResult.dropped_links.length === 1 ? "" : "s"} did not resolve and would have
+                  been dropped.
+                </div>
+              )}
+              {/* Raw, on purpose: this view is for judging what the model
+                  returned, not for reading a finished challenge. */}
+              <div className={styles.promptBlock} style={{ marginTop: 14 }}>
+                {JSON.stringify(testResult.content, null, 2)}
               </div>
             </>
           ) : (

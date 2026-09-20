@@ -11,7 +11,12 @@ from app.models.challenge import Challenge as ChallengeRow
 from app.models.digest import Digest, DigestQuestion
 from app.models.question import Question
 from app.schemas.profile import ProfileData
-from app.services import challenge_service, prompt_service, ranking_service
+from app.services import (
+    challenge_service,
+    format_service,
+    prompt_service,
+    ranking_service,
+)
 from app.services.credentials_service import get_api_key
 
 logger = logging.getLogger(__name__)
@@ -86,6 +91,9 @@ async def generate(
     # Resolved once, not per question: a digest whose challenges were made by
     # two different prompts would be untraceable.
     template = await prompt_service.get_active(db)
+    # One format for the whole digest, for the same reason as the prompt: a
+    # digest whose challenges have different shapes is not one digest.
+    fmt = await format_service.get_default(db)
 
     try:
         for position, question in enumerate(selected):
@@ -94,7 +102,9 @@ async def generate(
                 question,
                 selection_reason=question.interesting_reason,
                 template=template,
+                blocks=fmt.blocks,
             )
+            await format_service.verify_content_links(challenge.content, fmt.blocks)
             db.add(
                 ChallengeRow(
                     digest_id=digest.id,
@@ -108,6 +118,8 @@ async def generate(
                     provider=provider.name,
                     model=provider.model,
                     prompt_version=template.version or challenge_service.PROMPT_VERSION,
+                    content=challenge.content,
+                    format_name=fmt.name,
                 )
             )
             db.add(DigestQuestion(digest_id=digest.id, question_id=question.id, position=position))
@@ -136,6 +148,7 @@ async def promote_question(
     question: Question,
     *,
     provider: LLMProvider | None = None,
+    format_id: int | None = None,
 ) -> ChallengeRow:
     """Curate one question into a challenge outside any digest.
 
@@ -166,6 +179,10 @@ async def promote_question(
     provider = provider or await resolve_provider(db, profile_data)
 
     template = await prompt_service.get_active(db)
+    try:
+        fmt = await format_service.resolve_for_run(db, format_id)
+    except format_service.FormatError as exc:
+        raise PromotionError(str(exc)) from exc
 
     try:
         challenge = await challenge_service.generate_challenge(
@@ -173,9 +190,14 @@ async def promote_question(
             question,
             selection_reason="you picked this question yourself",
             template=template,
+            blocks=fmt.blocks,
         )
     except Exception as exc:
         raise PromotionError(f"Challenge generation failed: {exc}") from exc
+
+    # Dead links are dropped before the challenge is stored: a page full of
+    # 404s undermines confidence in everything else on it.
+    await format_service.verify_content_links(challenge.content, fmt.blocks)
 
     row = ChallengeRow(
         digest_id=None,
@@ -189,6 +211,8 @@ async def promote_question(
         provider=provider.name,
         model=provider.model,
         prompt_version=template.version or challenge_service.PROMPT_VERSION,
+        content=challenge.content,
+        format_name=fmt.name,
     )
     db.add(row)
 

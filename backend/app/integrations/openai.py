@@ -24,7 +24,9 @@ class OpenAIProvider:
         self.model = model
         self._timeout = timeout
 
-    async def generate_json(self, *, system_instruction: str, prompt: str) -> dict[str, Any]:
+    async def generate_json(
+        self, *, system_instruction: str, prompt: str, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         payload = {
             "model": self.model,
             "messages": [
@@ -33,7 +35,7 @@ class OpenAIProvider:
             ],
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "challenge", "schema": CHALLENGE_SCHEMA, "strict": False},
+                "json_schema": {"name": "challenge", "schema": schema or CHALLENGE_SCHEMA, "strict": False},
             },
             "temperature": 0.7,
         }

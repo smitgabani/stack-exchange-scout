@@ -252,3 +252,152 @@
   text-align: center;
   color: #41454d;
 }
+
+/* --- dynamic blocks ---------------------------------------------------- */
+
+.bulletList,
+.checklist {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--body-text);
+  max-width: 72ch;
+}
+
+.checklist {
+  list-style: none;
+  padding-left: 0;
+}
+
+.checklist li {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 8px;
+}
+
+.checklist li::before {
+  content: "☐";
+  position: absolute;
+  left: 4px;
+  color: var(--muted);
+}
+
+.steps {
+  margin: 0;
+  padding-left: 22px;
+  max-width: 76ch;
+}
+
+.steps li {
+  margin-bottom: 12px;
+  line-height: 1.55;
+}
+
+.stepText {
+  display: block;
+  font-size: 16px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.stepDetail {
+  display: block;
+  font-size: 15px;
+  color: var(--body-text);
+  margin-top: 2px;
+}
+
+.definitions {
+  margin: 0;
+  max-width: 76ch;
+}
+
+.definitionRow {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.definitionRow dt {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.definitionRow dd {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--body-text);
+}
+
+.resourceList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  max-width: 100%;
+}
+
+.resource {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  text-decoration: none;
+  background: var(--canvas);
+}
+
+.resource:hover {
+  border-color: var(--border-strong);
+}
+
+.resourceTitle {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--link);
+}
+
+.resourceWhy {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--body-text);
+}
+
+.resourceHost {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.statBig {
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.mermaid {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 10px 0 0;
+  overflow-x: auto;
+}
+
+/* The gate on solution-adjacent material: visible, so you know it exists,
+   but explicitly not reachable until every hint has been read. */
+.gatedNotice {
+  font-size: 14px;
+  color: var(--muted);
+  border: 1px dashed var(--hairline);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+}

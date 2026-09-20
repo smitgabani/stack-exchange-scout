@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { Block, ProgressiveHints, SPECIAL_BLOCKS, isGated, labelFor } from "./blocks";
 import styles from "./challenge.module.css";
 
 type Hint = { label: string; text: string };
@@ -23,6 +24,11 @@ type ChallengeDetail = {
   starting_direction: string;
   hints: Hint[];
   estimated_difficulty: number | null;
+  /** Everything the format produced. Null on challenges made before formats. */
+  content: Record<string, unknown> | null;
+  format_name: string | null;
+  /** Render order, resolved against the backend's block registry. */
+  blocks: string[];
 };
 
 async function fetchChallenge(id: string): Promise<ChallengeDetail> {
@@ -49,10 +55,11 @@ export default function ChallengePage() {
     queryFn: () => fetchChallenge(params.id),
   });
 
-  // Progressive reveal: one hint per click, no collapsing back. Purely
-  // client-side — all three hints are already loaded, the gate is a matter of
-  // self-discipline rather than secrecy.
-  const [revealed, setRevealed] = useState(0);
+  // Progressive reveal, and a further gate on solution-adjacent blocks. All
+  // client-side — everything is already loaded; the gate is self-discipline
+  // rather than secrecy.
+  const [allHintsShown, setAllHintsShown] = useState(false);
+  const [stuckOpen, setStuckOpen] = useState(false);
 
   if (isLoading) {
     return <main className={styles.page}><div className={styles.notice}>Loading…</div></main>;
@@ -66,7 +73,18 @@ export default function ChallengePage() {
   }
 
   const hints = challenge.hints ?? [];
-  const revealedHints = hints.slice(0, revealed);
+  // Challenges made before formats existed have no `content`, so the six
+  // original fields are assembled into the same shape and render identically.
+  const content: Record<string, unknown> = challenge.content ?? {
+    concepts: challenge.concepts,
+    starting_direction: challenge.starting_direction,
+  };
+  const order = challenge.blocks?.length
+    ? challenge.blocks
+    : ["concepts", "starting_direction"];
+  const renderable = order.filter((key) => !SPECIAL_BLOCKS.has(key));
+  const ungated = renderable.filter((key) => !isGated(key));
+  const gated = renderable.filter(isGated);
   const answerText =
     challenge.answer_count === 1 ? "1 answer" : `${challenge.answer_count ?? 0} answers`;
 
@@ -108,42 +126,34 @@ export default function ChallengePage() {
         <div className={styles.problemText}>{challenge.problem_summary}</div>
       </div>
 
-      <div className={styles.block}>
-        <div className={styles.blockLabel}>Concepts</div>
-        <div className={styles.chipRow}>
-          {challenge.concepts.map((concept) => (
-            <span key={concept} className={styles.conceptChip}>
-              {concept}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className={styles.block}>
-        <div className={styles.blockLabel}>Start here</div>
-        <div className={styles.blockBody}>{challenge.starting_direction}</div>
-      </div>
+      {/* Ungated blocks, in the order the format defines. Concepts, Start here
+          and anything the format added all come through here. */}
+      {ungated.map((key) => (
+        <Block key={key} blockKey={key} value={content[key]} />
+      ))}
 
       <div className={styles.block}>
         <div className={styles.blockLabel}>Hints</div>
-        <div className={styles.hints}>
-          {revealedHints.map((hint) => (
-            <div key={hint.label} className={styles.hintItem}>
-              <div className={styles.hintLabel}>{hint.label}</div>
-              <div className={styles.hintText}>{hint.text}</div>
+        <ProgressiveHints hints={hints} onAllRevealed={setAllHintsShown} />
+      </div>
+
+      {/* Solution-adjacent material sits behind one more click than the
+          strongest hint, so it is never revealed by accident. */}
+      {gated.length > 0 && (
+        <div className={styles.block}>
+          {!allHintsShown ? (
+            <div className={styles.gatedNotice}>
+              {gated.map(labelFor).join(" and ")} unlocks once you have read every hint.
             </div>
-          ))}
-          {revealed < hints.length && (
-            <button
-              type="button"
-              className={styles.revealBtn}
-              onClick={() => setRevealed((count) => Math.min(hints.length, count + 1))}
-            >
-              Show hint {revealed + 1}
+          ) : !stuckOpen ? (
+            <button type="button" className={styles.revealBtn} onClick={() => setStuckOpen(true)}>
+              I&apos;m stuck — show {gated.map(labelFor).join(" and ").toLowerCase()}
             </button>
+          ) : (
+            gated.map((key) => <Block key={key} blockKey={key} value={content[key]} />)
           )}
         </div>
-      </div>
+      )}
 
       {challenge.question_url && <hr className={styles.hr} />}
 

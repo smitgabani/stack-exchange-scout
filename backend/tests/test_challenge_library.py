@@ -44,7 +44,9 @@ class _StubProvider:
     name = "fake"
     model = "fake-1"
 
-    async def generate_json(self, *, system_instruction: str, prompt: str) -> dict:
+    async def generate_json(
+        self, *, system_instruction: str, prompt: str, schema: dict | None = None
+    ) -> dict:
         return _valid_payload()
 
 

@@ -202,3 +202,57 @@
     gap: 10px;
   }
 }
+
+/* The block picker: each card is a toggle, so the format is composed by
+   reading rather than by remembering key names. */
+.blockGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.blockCard {
+  font-family: inherit;
+  text-align: left;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: var(--canvas);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.blockCard:hover {
+  border-color: var(--border-strong);
+}
+
+.blockOn {
+  border-color: var(--ink);
+  background: var(--surface-soft);
+  box-shadow: inset 3px 0 0 var(--ink);
+}
+
+/* Core blocks are shown but not clickable — they describe the floor. */
+.blockCore {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.blockName {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.blockDesc {
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}

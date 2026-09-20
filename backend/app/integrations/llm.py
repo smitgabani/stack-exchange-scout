@@ -45,6 +45,12 @@ class LLMProvider(Protocol):
     name: str
     model: str
 
-    async def generate_json(self, *, system_instruction: str, prompt: str) -> dict[str, Any]:
-        """Return structured JSON conforming to CHALLENGE_SCHEMA."""
+    async def generate_json(
+        self, *, system_instruction: str, prompt: str, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return structured JSON conforming to `schema`, or CHALLENGE_SCHEMA.
+
+        The schema is passed in rather than fixed because a challenge format
+        selects which blocks to ask for, and the shape has to match.
+        """
         ...

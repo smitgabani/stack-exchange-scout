@@ -34,6 +34,7 @@ export type LlmConfig = {
     hint_labels: string[];
     max_prompt_chars: number;
   };
+  format: { name: string; blocks: string[] };
   schema: Record<string, unknown>;
   validation: { solution_tells: string[]; code_fence: string };
   withheld: string[];
@@ -62,22 +63,43 @@ export type Preview = {
   prompt_chars: number;
 };
 
+type TestMeta = {
+  provider: string;
+  model: string;
+  prompt_version: number;
+  format: { name: string; blocks: string[] };
+};
+
 export type TestResult =
-  | {
+  | (TestMeta & {
       ok: true;
-      provider: string;
-      model: string;
-      prompt_version: number;
-      challenge: {
-        problem_summary: string;
-        why_interesting: string;
-        concepts: string[];
-        starting_direction: string;
-        hints: { label: string; text: string }[];
-        estimated_difficulty: number | null;
-      };
-    }
-  | { ok: false; provider: string; model: string; prompt_version: number; error: string };
+      /** The whole block output, so a test shows exactly what a real run would
+       *  store — including optional blocks. */
+      content: Record<string, unknown>;
+      /** URLs dropped because they did not resolve. */
+      dropped_links: string[];
+    })
+  | (TestMeta & { ok: false; error: string });
+
+export type BlockMeta = {
+  key: string;
+  label: string;
+  description: string;
+  kind: string;
+  core: boolean;
+  gated: boolean;
+  has_urls: boolean;
+};
+
+export type ChallengeFormat = {
+  id: number;
+  name: string;
+  description: string | null;
+  blocks: string[];
+  optional_blocks: string[];
+  is_default: boolean;
+  created_at: string | null;
+};
 
 export type Generation = {
   id: string;
@@ -117,8 +139,48 @@ export const llmApi = {
   },
 
   /** Costs one real LLM call and saves nothing. */
-  test: (questionId: string) =>
-    json<TestResult>(`/api/llm/test?question_id=${questionId}`, { method: "POST" }),
+  test: (questionId: string, formatId?: number) =>
+    json<TestResult>(
+      `/api/llm/test?question_id=${questionId}${formatId ? `&format_id=${formatId}` : ""}`,
+      { method: "POST" },
+    ),
 
   generations: () => json<{ generations: Generation[] }>("/api/llm/generations"),
+
+  blocks: () => json<{ blocks: BlockMeta[]; kinds: string[] }>("/api/llm/blocks"),
+
+  formats: () =>
+    json<{ formats: ChallengeFormat[]; active: { name: string; blocks: string[] } }>(
+      "/api/llm/formats",
+    ),
+
+  createFormat: (body: {
+    name: string;
+    blocks: string[];
+    description?: string;
+    make_default?: boolean;
+  }) =>
+    json<ChallengeFormat>("/api/llm/formats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  updateFormat: (
+    id: number,
+    body: { name: string; blocks: string[]; description?: string | null },
+  ) =>
+    json<ChallengeFormat>(`/api/llm/formats/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  makeFormatDefault: (id: number) =>
+    json<ChallengeFormat>(`/api/llm/formats/${id}/default`, { method: "POST" }),
+
+  deleteFormat: async (id: number) => {
+    const response = await fetch(`/api/llm/formats/${id}`, { method: "DELETE" });
+    if (!response.ok) throw new Error(`delete failed: ${response.status}`);
+  },
 };

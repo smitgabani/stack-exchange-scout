@@ -23,7 +23,9 @@ class GeminiProvider:
         self.model = model
         self._timeout = timeout
 
-    async def generate_json(self, *, system_instruction: str, prompt: str) -> dict[str, Any]:
+    async def generate_json(
+        self, *, system_instruction: str, prompt: str, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         payload = {
             # The system instruction is sent separately from the untrusted
             # question content, so the model sees a clear boundary between its
@@ -32,7 +34,7 @@ class GeminiProvider:
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "response_mime_type": "application/json",
-                "response_json_schema": CHALLENGE_SCHEMA,
+                "response_json_schema": schema or CHALLENGE_SCHEMA,
                 "temperature": 0.7,
             },
         }

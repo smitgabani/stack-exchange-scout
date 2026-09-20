@@ -13,11 +13,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
-from app.integrations.llm import CHALLENGE_SCHEMA
 from app.models.challenge import Challenge
 from app.models.question import Question
 from app.schemas.profile import ProfileData
-from app.services import challenge_service, digest_service, prompt_service
+from app.services import (
+    challenge_blocks,
+    challenge_service,
+    digest_service,
+    format_service,
+    prompt_service,
+)
 from app.services.profile_service import get_or_create_profile
 
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -29,6 +34,7 @@ async def llm_config(db: AsyncSession = Depends(get_db)) -> dict:
     profile = await get_or_create_profile(db)
     profile_data = ProfileData.model_validate(profile.data)
     template = await prompt_service.get_active(db)
+    fmt = await format_service.get_default(db)
 
     return {
         "provider": profile_data.llm.provider,
@@ -39,7 +45,7 @@ async def llm_config(db: AsyncSession = Depends(get_db)) -> dict:
             "system_instruction": template.system_instruction,
             "safety_clause": challenge_service.SAFETY_CLAUSE,
             "composed_system_instruction": challenge_service.compose_system_instruction(
-                template.system_instruction
+                template.system_instruction, fmt.blocks
             ),
             "user_preamble": template.user_preamble,
             "default_system_instruction": challenge_service.DEFAULT_SYSTEM_GUIDANCE,
@@ -51,7 +57,8 @@ async def llm_config(db: AsyncSession = Depends(get_db)) -> dict:
             "hint_labels": list(challenge_service.HINT_LABELS),
             "max_prompt_chars": prompt_service.MAX_PROMPT_CHARS,
         },
-        "schema": CHALLENGE_SCHEMA,
+        "format": {"name": fmt.name, "blocks": fmt.keys},
+        "schema": challenge_blocks.build_schema(fmt.blocks),
         "validation": {
             # Surfaced as patterns rather than prose: the page should show the
             # rule that runs, not a description of it that can fall behind.
@@ -130,6 +137,7 @@ async def preview(
     question_id: uuid.UUID = Query(...),
     system_instruction: str | None = None,
     user_preamble: str | None = None,
+    format_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """The exact bytes that would be sent for this question. Costs nothing.
@@ -143,8 +151,12 @@ async def preview(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
 
     template = await prompt_service.get_active(db)
+    try:
+        fmt = await format_service.resolve_for_run(db, format_id)
+    except format_service.FormatError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     composed = challenge_service.compose_system_instruction(
-        system_instruction or template.system_instruction
+        system_instruction or template.system_instruction, fmt.blocks
     )
     prompt = challenge_service.build_prompt(
         question, question.interesting_reason, user_preamble or template.user_preamble
@@ -160,6 +172,8 @@ async def preview(
                 challenge_service.strip_html(question.body or "")[: challenge_service.MAX_BODY_CHARS]
             ),
         },
+        "format": {"name": fmt.name, "blocks": fmt.keys},
+        "schema": challenge_blocks.build_schema(fmt.blocks),
         "system_instruction": composed,
         "prompt": prompt,
         "prompt_chars": len(prompt),
@@ -169,6 +183,7 @@ async def preview(
 @router.post("/test")
 async def test_generate(
     question_id: uuid.UUID = Query(...),
+    format_id: int | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Run one real generation and throw the result away.
@@ -191,8 +206,17 @@ async def test_generate(
 
     template = await prompt_service.get_active(db)
     try:
+        fmt = await format_service.resolve_for_run(db, format_id)
+    except format_service.FormatError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+    try:
         challenge = await challenge_service.generate_challenge(
-            provider, question, selection_reason="a test run", template=template
+            provider,
+            question,
+            selection_reason="a test run",
+            template=template,
+            blocks=fmt.blocks,
         )
     except challenge_service.ChallengeValidationError as exc:
         # A rejection is a useful result here, not an error to hide: it is how
@@ -202,22 +226,22 @@ async def test_generate(
             "provider": provider.name,
             "model": provider.model,
             "prompt_version": template.version,
+            "format": {"name": fmt.name, "blocks": fmt.keys},
             "error": str(exc),
         }
+
+    # Links are checked here too, so a test shows the same resources a real
+    # generation would keep rather than a rosier list.
+    dropped = await format_service.verify_content_links(challenge.content, fmt.blocks)
 
     return {
         "ok": True,
         "provider": provider.name,
         "model": provider.model,
         "prompt_version": template.version,
-        "challenge": {
-            "problem_summary": challenge.problem_summary,
-            "why_interesting": challenge.why_interesting,
-            "concepts": challenge.concepts,
-            "starting_direction": challenge.starting_direction,
-            "hints": challenge.hints,
-            "estimated_difficulty": challenge.estimated_difficulty,
-        },
+        "format": {"name": fmt.name, "blocks": fmt.keys},
+        "dropped_links": dropped,
+        "content": challenge.content,
     }
 
 
@@ -252,3 +276,94 @@ async def generations(db: AsyncSession = Depends(get_db), limit: int = 100) -> d
             for challenge, question in rows
         ]
     }
+
+
+# --- challenge formats ---------------------------------------------------
+
+
+@router.get("/blocks")
+async def blocks() -> dict:
+    """The block library a format is built from.
+
+    Served from the registry rather than restated here, so a block added in
+    code appears in the editor without a second edit.
+    """
+    return {"blocks": challenge_blocks.catalogue(), "kinds": list(challenge_blocks.KINDS)}
+
+
+class FormatIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    blocks: list[str] = Field(default_factory=list)
+    description: str | None = None
+    make_default: bool = False
+
+
+def _format_out(row) -> dict:
+    resolved = challenge_blocks.resolve(row.blocks)
+    return {
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
+        "blocks": [b.key for b in resolved],
+        "optional_blocks": list(row.blocks or []),
+        "is_default": row.is_default,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@router.get("/formats")
+async def list_formats(db: AsyncSession = Depends(get_db)) -> dict:
+    rows = await format_service.list_formats(db)
+    active = await format_service.get_default(db)
+    return {
+        "formats": [_format_out(row) for row in rows],
+        # There is always an effective format, even with no rows stored.
+        "active": {"name": active.name, "blocks": active.keys},
+    }
+
+
+@router.post("/formats", status_code=status.HTTP_201_CREATED)
+async def create_format(body: FormatIn, db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        row = await format_service.create(
+            db,
+            name=body.name,
+            blocks=body.blocks,
+            description=body.description,
+            make_default=body.make_default,
+        )
+    except format_service.FormatError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return _format_out(row)
+
+
+@router.patch("/formats/{format_id}")
+async def update_format(format_id: int, body: FormatIn, db: AsyncSession = Depends(get_db)) -> dict:
+    try:
+        row = await format_service.update_format(
+            db,
+            format_id,
+            name=body.name,
+            blocks=body.blocks,
+            description=body.description,
+        )
+    except format_service.FormatError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such format")
+    return _format_out(row)
+
+
+@router.post("/formats/{format_id}/default")
+async def make_default(format_id: int, db: AsyncSession = Depends(get_db)) -> dict:
+    row = await format_service.set_default(db, format_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such format")
+    return _format_out(row)
+
+
+@router.delete("/formats/{format_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_format(format_id: int, db: AsyncSession = Depends(get_db)) -> None:
+    """Challenges made with this format are untouched — they carry its name."""
+    if not await format_service.delete(db, format_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such format")

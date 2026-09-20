@@ -13,7 +13,7 @@ from app.models.challenge import Challenge
 from app.models.digest import Digest
 from app.models.question import Question
 from app.schemas.profile import ProfileData
-from app.services import digest_service, email_service
+from app.services import challenge_blocks, digest_service, email_service
 from app.services.profile_service import get_or_create_profile
 
 router = APIRouter(tags=["digests"])
@@ -37,6 +37,11 @@ class ChallengeOut(BaseModel):
     starting_direction: str
     hints: list
     estimated_difficulty: int | None
+    # What the format produced. Null on challenges made before formats
+    # existed, which is why the frontend falls back to the fields above.
+    content: dict | None = None
+    format_name: str | None = None
+    blocks: list[str] = []
 
 
 class DigestOut(BaseModel):
@@ -67,6 +72,15 @@ def _challenge_out(challenge: Challenge, question=None) -> ChallengeOut:
         starting_direction=challenge.starting_direction,
         hints=challenge.hints or [],
         estimated_difficulty=challenge.estimated_difficulty,
+        content=challenge.content,
+        format_name=challenge.format_name,
+        # The order to render in, resolved against the registry so a block
+        # removed from the code stops rendering everywhere at once.
+        blocks=[
+            b.key
+            for b in challenge_blocks.resolve(list((challenge.content or {}).keys()))
+            if b.key in (challenge.content or {})
+        ],
     )
 
 

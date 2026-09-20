@@ -265,7 +265,6 @@ async def test_start_run_reports_whether_the_run_began_immediately(
 
 
 @pytest.mark.anyio
-@pytest.mark.anyio
 async def test_start_run_continues_when_mark_done_is_rejected(
     db_session, scout_row, profile_data, monkeypatch
 ):

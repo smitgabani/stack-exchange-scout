@@ -54,6 +54,14 @@ class Challenge(Base):
     model: Mapped[str | None] = mapped_column(String(64))
     prompt_version: Mapped[int | None] = mapped_column(SmallInteger)
 
+    # The whole structured result, including blocks that have no column of
+    # their own. Null on challenges generated before formats existed, which is
+    # why every reader falls back to the columns above.
+    content: Mapped[dict | None] = mapped_column(JSONB)
+    # Denormalised like scout_runs.account_label: what produced this has to
+    # survive the format being renamed or deleted.
+    format_name: Mapped[str | None] = mapped_column(String(80))
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     @property

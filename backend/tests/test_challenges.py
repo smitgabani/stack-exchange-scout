@@ -58,10 +58,14 @@ class _RecordingProvider:
         self.payload = payload or _valid_payload()
         self.system_instructions: list[str] = []
         self.prompts: list[str] = []
+        self.schemas: list[dict | None] = []
 
-    async def generate_json(self, *, system_instruction: str, prompt: str) -> dict:
+    async def generate_json(
+        self, *, system_instruction: str, prompt: str, schema: dict | None = None
+    ) -> dict:
         self.system_instructions.append(system_instruction)
         self.prompts.append(prompt)
+        self.schemas.append(schema)
         return self.payload
 
 
@@ -172,7 +176,9 @@ def test_html_is_stripped_from_question_content() -> None:
 @pytest.mark.anyio
 async def test_a_transient_bad_response_is_retried() -> None:
     class _FlakyProvider(_RecordingProvider):
-        async def generate_json(self, *, system_instruction: str, prompt: str) -> dict:
+        async def generate_json(
+            self, *, system_instruction: str, prompt: str, schema: dict | None = None
+        ) -> dict:
             self.prompts.append(prompt)
             if len(self.prompts) == 1:
                 return _valid_payload(problem_summary="")  # invalid first time
