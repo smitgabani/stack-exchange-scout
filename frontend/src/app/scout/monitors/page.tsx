@@ -1,9 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { RunScoutButton } from "../../run-scout-button";
 import { type ScoutStatus, useScout } from "../../use-scout";
+import { type Instance, scoutApi } from "@/lib/scout-api";
+import { ConfirmDialog } from "../../confirm-dialog";
+import ws from "../../workspace.module.css";
 import styles from "../scout.module.css";
 
 type PanelUpdate = {
@@ -185,6 +188,24 @@ export default function ScoutPage() {
   // The one page where someone is watching a run, so the only one that polls.
   const { scout, message, park, sync, pull, forget, isRunning } = useScout({ poll: true });
   const [showRaw, setShowRaw] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Instance | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: instances } = useQuery({
+    queryKey: ["instances"],
+    queryFn: scoutApi.listInstances,
+  });
+
+  // The only action in the app that stops something billing: a live Scout runs
+  // on its own interval until it is deleted.
+  const removeInstance = useMutation({
+    mutationFn: (id: string) => scoutApi.deleteInstance(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["instances"] });
+      await queryClient.invalidateQueries({ queryKey: ["scout"] });
+      await queryClient.invalidateQueries({ queryKey: ["scout-panel"] });
+    },
+  });
   const { data: panel, isLoading } = useQuery({
     queryKey: ["scout-panel", showRaw],
     queryFn: () => fetchPanel(showRaw),
@@ -262,6 +283,81 @@ export default function ScoutPage() {
       )}
 
       {message && <div className={styles.notice}>{message}</div>}
+      {removeInstance.isError && (
+        <div className={styles.alert}>{(removeInstance.error as Error).message}</div>
+      )}
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Remote objects</h2>
+        <div className={styles.pageSub}>
+          What this app has created at Yutori. A Scout keeps running on its interval until it is
+          deleted; a research task is already over and leaves nothing behind.
+        </div>
+        {!instances?.instances.length ? (
+          <div className={styles.empty}>Nothing exists at Yutori from this app.</div>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr><th>Kind</th><th>ID</th><th>From</th><th>State</th><th>Created</th><th></th></tr>
+              </thead>
+              <tbody>
+                {instances.instances.map((instance) => (
+                  <tr key={instance.id}>
+                    <td>{instance.kind === "scout" ? "Scout (monitor)" : "Research task"}</td>
+                    <td className={styles.mono}>{instance.external_id}</td>
+                    <td>{instance.definition_name ?? "—"}</td>
+                    <td>{instance.state ?? "—"}</td>
+                    <td>{instance.created_at ? new Date(instance.created_at).toLocaleString() : "—"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className={styles.textButton}
+                        onClick={() => setDeleteTarget(instance)}
+                        disabled={removeInstance.isPending}
+                      >
+                        {instance.kind === "scout" ? "Delete at Yutori" : "Forget"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={
+          deleteTarget?.kind === "scout" ? "Delete this Scout at Yutori?" : "Forget this record?"
+        }
+        body={
+          deleteTarget?.kind === "scout" ? (
+            <>
+              <p>
+                This permanently removes the Scout from Yutori, so it stops running and stops
+                billing. It cannot be undone — a new run would create a fresh Scout.
+              </p>
+              <p className={ws.hint} style={{ marginTop: "10px" }}>
+                Every question it already found stays in your pool.
+              </p>
+            </>
+          ) : (
+            <p>
+              A research task is already finished, so there is nothing at Yutori to delete. This
+              just removes our record of it.
+            </p>
+          )
+        }
+        confirmLabel={deleteTarget?.kind === "scout" ? "Delete at Yutori" : "Forget"}
+        busy={removeInstance.isPending}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) removeInstance.mutate(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+      />
 
       <div className={styles.blocks}>
         <StatusCard status={status} />

@@ -64,6 +64,17 @@ export type Account = {
   error: string | null;
 };
 
+export type Instance = {
+  id: string;
+  definition_id: string | null;
+  definition_name: string | null;
+  kind: "research_task" | "scout";
+  external_id: string;
+  state: string | null;
+  account_fingerprint: string | null;
+  created_at: string | null;
+};
+
 export type EffectivenessRow = {
   id: string;
   name: string;
@@ -122,6 +133,14 @@ export const scoutApi = {
     ),
 
   listRuns: () => json<{ runs: Run[] }>("/api/scout-runs"),
+
+  listInstances: () => json<{ instances: Instance[] }>("/api/scout-instances"),
+  /** Deletes the Scout at Yutori. The only call here that stops something billing. */
+  deleteInstance: (id: string) =>
+    json<{ deleted: boolean; external_id?: string; note?: string }>(
+      `/api/scout-instances/${id}`,
+      { method: "DELETE" },
+    ),
   effectiveness: () => json<{ rows: EffectivenessRow[] }>("/api/scout-effectiveness"),
 
   listAccounts: () => json<{ accounts: Account[] }>("/api/accounts"),

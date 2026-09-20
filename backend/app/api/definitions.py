@@ -221,6 +221,28 @@ async def run_definition(
     }
 
 
+@router.get("/scout-instances")
+async def list_instances(db: AsyncSession = Depends(get_db)) -> dict:
+    """Remote objects this app knows about — Scouts and research tasks."""
+    return {"instances": await definition_service.list_instances(db)}
+
+
+@router.delete("/scout-instances/{instance_id}")
+async def delete_instance(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Delete a Scout at Yutori. The only action here that stops something billing.
+
+    502 rather than a silent success when Yutori refuses — a Scout that is
+    still running must never be reported as deleted.
+    """
+    result = await definition_service.delete_instance(db, instance_id)
+    if not result.get("deleted"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result.get("error") or "Could not delete",
+        )
+    return result
+
+
 @router.get("/scout-runs")
 async def list_runs(db: AsyncSession = Depends(get_db)) -> dict:
     return {"runs": await definition_service.run_history(db)}

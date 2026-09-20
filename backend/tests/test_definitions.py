@@ -211,3 +211,100 @@ async def test_effectiveness_ranks_by_questions_per_dollar(db_session, definitio
     assert any(row["id"] == str(definition.id) for row in rows)
     ranked = [r["per_dollar"] for r in rows if r["per_dollar"] is not None]
     assert ranked == sorted(ranked, reverse=True)
+
+
+@pytest.mark.anyio
+async def test_deleting_a_research_instance_needs_no_api_call(db_session, definition, monkeypatch):
+    """A research task is already over — there is nothing at Yutori to delete,
+    so reaching for the API would only be a way to fail."""
+    from app.models.scout_definition import ScoutInstance
+    from app.services import definition_service as svc
+
+    instance = ScoutInstance(
+        definition_id=definition.id, kind="research_task", external_id="task-gone"
+    )
+    db_session.add(instance)
+    await db_session.commit()
+    await db_session.refresh(instance)
+
+    called = False
+
+    async def fail(db):
+        nonlocal called
+        called = True
+        raise AssertionError("must not reach Yutori")
+
+    monkeypatch.setattr(scout_service, "get_client", fail)
+
+    result = await svc.delete_instance(db_session, instance.id)
+
+    assert result["deleted"] is True
+    assert called is False
+    assert await db_session.get(ScoutInstance, instance.id) is None
+
+
+@pytest.mark.anyio
+async def test_a_scout_owned_by_another_account_is_not_reported_as_deleted(
+    db_session, definition, monkeypatch
+):
+    """It is still out there running. Saying otherwise would be a lie, and the
+    row must stay so the user can see what they cannot control."""
+    from app.integrations.yutori import YutoriForbidden
+    from app.models.scout_definition import ScoutInstance
+    from app.services import definition_service as svc
+
+    instance = ScoutInstance(definition_id=definition.id, kind="scout", external_id="not-ours")
+    db_session.add(instance)
+    await db_session.commit()
+    await db_session.refresh(instance)
+
+    class Refuses:
+        async def delete_scout(self, external_id):
+            raise YutoriForbidden("403")
+
+    async def client(db):
+        return Refuses()
+
+    monkeypatch.setattr(scout_service, "get_client", client)
+
+    result = await svc.delete_instance(db_session, instance.id)
+
+    assert result["deleted"] is False
+    assert "different API key" in result["error"]
+    # Kept on purpose: forgetting it here would hide a Scout that still bills.
+    assert await db_session.get(ScoutInstance, instance.id) is not None
+
+    await db_session.delete(instance)
+    await db_session.commit()
+
+
+@pytest.mark.anyio
+async def test_a_deleted_scout_is_gone_from_yutori_before_our_row(
+    db_session, definition, monkeypatch
+):
+    """Yutori first, our row second — a failure there must leave the reference
+    intact rather than orphaning a Scout nobody is tracking."""
+    from app.models.scout_definition import ScoutInstance
+    from app.services import definition_service as svc
+
+    instance = ScoutInstance(definition_id=definition.id, kind="scout", external_id="doomed")
+    db_session.add(instance)
+    await db_session.commit()
+    await db_session.refresh(instance)
+
+    order = []
+
+    class Client:
+        async def delete_scout(self, external_id):
+            order.append(external_id)
+
+    async def client(db):
+        return Client()
+
+    monkeypatch.setattr(scout_service, "get_client", client)
+
+    result = await svc.delete_instance(db_session, instance.id)
+
+    assert result["deleted"] is True
+    assert order == ["doomed"]
+    assert await db_session.get(ScoutInstance, instance.id) is None

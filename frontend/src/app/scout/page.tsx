@@ -18,6 +18,7 @@ export default function ScoutsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [runTarget, setRunTarget] = useState<Definition | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Definition | null>(null);
   const [mode, setMode] = useState<"research" | "scout">("research");
 
   const { data, isLoading } = useQuery({
@@ -40,6 +41,19 @@ export default function ScoutsPage() {
     mutationFn: (id: string) => scoutApi.cloneDefinition(id),
     onSuccess: async (made) => {
       setMessage(`Copied to “${made.name}” — the copy starts with no runs and no spend.`);
+      await refresh();
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => scoutApi.deleteDefinition(id),
+    onSuccess: async (result) => {
+      setMessage(
+        `Deleted. ${result.kept.questions} question${result.kept.questions === 1 ? "" : "s"} and ` +
+          `${result.kept.runs} run${result.kept.runs === 1 ? "" : "s"} were kept — deleting a saved ` +
+          `query never removes what it found.`,
+      );
       await refresh();
     },
     onError: (e: Error) => setMessage(e.message),
@@ -181,6 +195,13 @@ export default function ScoutsPage() {
                       Edit
                     </Link>
                     <button
+                      className={`${styles.danger} ${styles.tiny}`}
+                      onClick={() => setDeleteTarget(definition)}
+                      disabled={remove.isPending}
+                    >
+                      Delete
+                    </button>
+                    <button
                       className={`${styles.primary} ${styles.tiny}`}
                       onClick={() => { setMode("research"); setRunTarget(definition); }}
                       disabled={run.isPending || definition.status === "archived"}
@@ -194,6 +215,35 @@ export default function ScoutsPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={`Delete “${deleteTarget?.name ?? ""}”?`}
+        body={
+          <>
+            <p>The saved query is removed. Nothing it discovered is.</p>
+            <p className={styles.hint} style={{ marginTop: "10px" }}>
+              Its {deleteTarget?.stats?.runs ?? 0} run
+              {deleteTarget?.stats?.runs === 1 ? "" : "s"} stay in the ledger, so the{" "}
+              {money(deleteTarget?.stats?.spend_usd ?? 0)} already spent is still accounted for,
+              and every question it found stays in your pool — that history is what stops the app
+              rediscovering, and re-paying for, questions you have already seen.
+            </p>
+            {deleteTarget?.status !== "archived" && (
+              <p className={styles.hint} style={{ marginTop: "10px" }}>
+                If you only want it out of the way, archive it instead — that keeps the query.
+              </p>
+            )}
+          </>
+        }
+        confirmLabel="Delete scout"
+        busy={remove.isPending}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) remove.mutate(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+      />
 
       <ConfirmDialog
         open={runTarget !== null}

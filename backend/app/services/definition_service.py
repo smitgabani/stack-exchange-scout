@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.integrations.yutori import YutoriError
+from app.integrations.yutori import YutoriError, YutoriForbidden, YutoriNotFound
 from app.models.question import Question
 from app.models.scout_definition import ScoutDefinition, ScoutInstance, ScoutRun
 from app.models.webhook_event import WebhookEvent
@@ -244,6 +244,75 @@ async def run_definition(
         external_id=external_id,
         kind=kind,
     )
+
+
+async def delete_instance(db: AsyncSession, instance_id: uuid.UUID) -> dict[str, Any]:
+    """Delete a Scout at Yutori and drop our record of it.
+
+    The only destructive action in the workspace that reaches outside this app,
+    and the only one that stops something billing: a live Scout runs on its own
+    interval until it is deleted. Ordered deliberately — Yutori first, our row
+    second — so a failure there leaves the reference intact rather than
+    orphaning a Scout nobody is tracking any more.
+
+    A 404 counts as success: already gone is the desired end state. A 403 does
+    not, because the Scout is still out there running under another account and
+    saying otherwise would be a lie.
+    """
+    instance = await db.get(ScoutInstance, instance_id)
+    if instance is None:
+        return {"deleted": False, "error": "No such instance"}
+
+    if instance.kind == "research_task":
+        # One-shot and already over; there is nothing at Yutori to delete.
+        await db.delete(instance)
+        await db.commit()
+        return {"deleted": True, "note": "Research tasks leave nothing behind"}
+
+    client = await scout_service.get_client(db)
+    if client is None:
+        return {"deleted": False, "error": "No usable Yutori API key"}
+
+    try:
+        await client.delete_scout(instance.external_id)
+    except YutoriNotFound:
+        pass
+    except YutoriForbidden:
+        return {
+            "deleted": False,
+            "error": "This Scout was created with a different API key, so it cannot be "
+            "deleted from here. It keeps running until its own account deletes it.",
+        }
+    except YutoriError as exc:
+        return {"deleted": False, "error": str(exc)[:300]}
+
+    external_id = instance.external_id
+    await db.delete(instance)
+    await db.commit()
+    return {"deleted": True, "external_id": external_id}
+
+
+async def list_instances(db: AsyncSession) -> list[dict[str, Any]]:
+    """Every remote object we know about, and which definition it came from."""
+    rows = list(
+        await db.scalars(select(ScoutInstance).order_by(ScoutInstance.created_at.desc()))
+    )
+    names = {
+        d.id: d.name for d in await list_definitions(db, include_archived=True)
+    }
+    return [
+        {
+            "id": str(i.id),
+            "definition_id": str(i.definition_id) if i.definition_id else None,
+            "definition_name": names.get(i.definition_id),
+            "kind": i.kind,
+            "external_id": i.external_id,
+            "state": i.state,
+            "account_fingerprint": i.account_fingerprint,
+            "created_at": i.created_at.isoformat() if i.created_at else None,
+        }
+        for i in rows
+    ]
 
 
 async def run_history(
