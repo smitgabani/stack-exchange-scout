@@ -273,6 +273,22 @@ async def list_runs(db: AsyncSession = Depends(get_db)) -> dict:
     return {"runs": await definition_service.run_history(db)}
 
 
+@router.post("/scout-runs/{run_id}/sync")
+async def sync_run(run_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Ask Yutori what happened to this run and collect the result if ready.
+
+    Free, and safe to press repeatedly — ingestion is keyed on the update id,
+    so a result already stored is recognised rather than duplicated.
+    """
+    return await definition_service.sync_run(db, run_id)
+
+
+@router.post("/scout-runs/sync")
+async def sync_all_runs(db: AsyncSession = Depends(get_db)) -> dict:
+    """Advance every unfinished run."""
+    return {"synced": await definition_service.sync_in_flight(db)}
+
+
 @router.get("/scout-effectiveness")
 async def effectiveness(db: AsyncSession = Depends(get_db)) -> dict:
     """Definitions ranked by questions per dollar."""

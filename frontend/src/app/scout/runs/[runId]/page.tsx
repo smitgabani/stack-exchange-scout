@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { duration, money, scoutApi, when } from "@/lib/scout-api";
 import styles from "../../../workspace.module.css";
 
@@ -33,11 +34,42 @@ function Funnel({ found, candidates, aboveBar }: { found: number; candidates: nu
 
 export default function RunPage() {
   const params = useParams<{ runId: string }>();
+  const queryClient = useQueryClient();
+  const [note, setNote] = useState<string | null>(null);
   const { data, isLoading } = useQuery({ queryKey: ["runs"], queryFn: () => scoutApi.listRuns() });
+
+  const sync = useMutation({
+    mutationFn: () => scoutApi.syncRun(params.runId),
+    onSuccess: async (result) => {
+      setNote(
+        result.error
+          ? `Yutori: ${result.error}`
+          : result.status === "running"
+            ? `Still ${result.remote_status ?? "running"} at Yutori. Nothing to collect yet.`
+            : result.status === "succeeded"
+              ? `Collected ${result.questions_found ?? 0} question${
+                  result.questions_found === 1 ? "" : "s"
+                } via ${result.delivered_by ?? "poll"}.`
+              : `Yutori reported this run as ${result.status}.`,
+      );
+      await queryClient.invalidateQueries({ queryKey: ["runs"] });
+      await queryClient.invalidateQueries({ queryKey: ["definitions"] });
+    },
+    onError: (e: Error) => setNote(e.message),
+  });
+
+  // A run left unfinished has results sitting uncollected at Yutori, so the
+  // page fetches them on arrival rather than waiting to be asked.
+  const runRow = data?.runs.find((r) => r.id === params.runId);
+  const stillRunning = runRow?.status === "running";
+  useEffect(() => {
+    if (stillRunning && !sync.isPending && !sync.isSuccess) sync.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stillRunning]);
 
   if (isLoading || !data) return <main className={styles.page}>Loading…</main>;
 
-  const run = data.runs.find((r) => r.id === params.runId);
+  const run = runRow;
   if (!run) {
     return (
       <main className={styles.page}>
@@ -62,7 +94,26 @@ export default function RunPage() {
             {run.kind === "research_task" ? "research task" : "scout"} · {run.id}
           </div>
         </div>
+        <div className={styles.actions}>
+          <button
+            className={styles.primary}
+            onClick={() => sync.mutate()}
+            disabled={sync.isPending}
+          >
+            {sync.isPending ? "Asking Yutori…" : "Fetch from Yutori"}
+          </button>
+        </div>
       </div>
+
+      {note && <div className={styles.notice}>{note}</div>}
+
+      {run.status === "running" && (
+        <div className={styles.notice}>
+          Still open. If Yutori shows this as finished, press <strong>Fetch from Yutori</strong> —
+          the result is collected and the questions are ingested. It is free and can be pressed
+          as often as you like.
+        </div>
+      )}
 
       {run.status === "failed" && run.error && (
         <div className={styles.alert}><strong>This run failed.</strong> {run.error}</div>

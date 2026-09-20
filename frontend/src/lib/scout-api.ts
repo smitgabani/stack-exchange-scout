@@ -169,6 +169,22 @@ export const scoutApi = {
 
   listRuns: () => json<{ runs: Run[] }>("/api/scout-runs"),
 
+  /** Ask Yutori what happened to a run and collect the result if it is ready. */
+  syncRun: (id: string) =>
+    json<{
+      status: string;
+      remote_status?: string;
+      delivered_by?: string;
+      questions_found?: number | null;
+      error?: string;
+      note?: string;
+    }>(`/api/scout-runs/${id}/sync`, { method: "POST" }),
+
+  syncAllRuns: () => json<{ synced: { run_id: string; status: string }[] }>(
+    "/api/scout-runs/sync",
+    { method: "POST" },
+  ),
+
   listInstances: () => json<{ instances: Instance[] }>("/api/scout-instances"),
 
   /** What actually exists at Yutori, as opposed to what this app recorded. */

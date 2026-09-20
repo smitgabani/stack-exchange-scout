@@ -36,7 +36,13 @@ export default function ScoutsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["definitions", showArchived],
-    queryFn: () => scoutApi.listDefinitions(showArchived),
+    queryFn: async () => {
+      // Advance anything left unfinished before listing. A run that Yutori has
+      // completed should not sit here as "running" with its questions
+      // uncollected just because nobody opened its page.
+      await scoutApi.syncAllRuns().catch(() => undefined);
+      return scoutApi.listDefinitions(showArchived);
+    },
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["definitions"] });

@@ -464,6 +464,130 @@ async def run_history(
     ]
 
 
+async def sync_run(db: AsyncSession, run_id: uuid.UUID) -> dict[str, Any]:
+    """Ask Yutori what happened to a run, and collect the result if it is ready.
+
+    Runs started through a definition were recorded but never finalised —
+    nothing polled them — so a task that succeeded at Yutori sat here as
+    "running" forever with its questions uncollected. This is that missing
+    half, and it is safe to call repeatedly: ingestion is keyed on the
+    update id, so a result already stored is recognised rather than duplicated.
+    """
+    run = await db.get(ScoutRun, run_id)
+    if run is None:
+        return {"status": "not_found"}
+    if run.status != "running":
+        return {"status": run.status, "note": "Already finished"}
+
+    instance = await db.get(ScoutInstance, run.instance_id) if run.instance_id else None
+    if instance is None:
+        return {"status": "running", "error": "This run has no remote object recorded"}
+
+    client = await scout_service.get_client(db)
+    if client is None:
+        return {"status": "running", "error": "No usable Yutori API key"}
+
+    if instance.kind == "research_task":
+        return await _sync_research_run(db, run, instance, client)
+    return await _sync_scout_run(db, run, instance, client)
+
+
+async def _sync_research_run(db, run, instance, client) -> dict[str, Any]:
+    try:
+        task = await client.get_research_task(instance.external_id)
+    except YutoriError as exc:
+        return {"status": "running", "error": str(exc)[:300]}
+
+    state = str(task.get("status") or "")
+    instance.state = state
+    await db.commit()
+
+    if state in ("queued", "running"):
+        return {"status": "running", "remote_status": state}
+
+    if state != "succeeded":
+        await finish_run(
+            db,
+            run,
+            status="failed",
+            error=task.get("rejection_reason") or f"Yutori reported {state}",
+        )
+        return {"status": "failed", "remote_status": state}
+
+    from app.services import ingest_service
+
+    envelope = scout_service.update_to_webhook_envelope(
+        {
+            "id": task.get("task_id") or instance.external_id,
+            "timestamp": task.get("created_at"),
+            "structured_result": task.get("structured_result"),
+            "content": task.get("result"),
+            "structured_output_status": task.get("structured_output_status"),
+        }
+    )
+    event = await ingest_service.claim_event(db, envelope)
+
+    # claim_event returns None when the webhook already delivered this, which
+    # is not a failure — it tells us how the result arrived.
+    delivered_by = "poll" if event is not None else "webhook"
+    if event is None:
+        event = await db.scalar(
+            select(WebhookEvent).where(
+                WebhookEvent.event_id == str(task.get("task_id") or instance.external_id)
+            )
+        )
+
+    found = len((task.get("structured_result") or {}).get("questions") or []) or None
+    await finish_run(
+        db,
+        run,
+        status="succeeded",
+        delivered_by=delivered_by,
+        event=event,
+        questions_found=found,
+    )
+    return {
+        "status": "succeeded",
+        "delivered_by": delivered_by,
+        "questions_found": found,
+        "ingested": event is not None,
+    }
+
+
+async def _sync_scout_run(db, run, instance, client) -> dict[str, Any]:
+    """A monitor's run finishes when Yutori's update count moves, or it times out."""
+    try:
+        detail = await client.get_scout(instance.external_id)
+    except YutoriError as exc:
+        return {"status": "running", "error": str(exc)[:300]}
+
+    instance.state = detail.get("status")
+    await db.commit()
+
+    received = await db.scalar(
+        select(WebhookEvent)
+        .where(WebhookEvent.received_at > run.started_at)
+        .order_by(WebhookEvent.received_at.desc())
+    )
+    if received is not None:
+        await finish_run(db, run, status="succeeded", delivered_by="webhook", event=received)
+        return {"status": "succeeded", "delivered_by": "webhook"}
+
+    age = (datetime.now(UTC) - run.started_at).total_seconds()
+    if age > settings.scout_run_timeout_seconds:
+        await finish_run(
+            db, run, status="timed_out", error="No update arrived before the timeout"
+        )
+        return {"status": "timed_out"}
+    return {"status": "running", "remote_status": detail.get("status")}
+
+
+async def sync_in_flight(db: AsyncSession) -> list[dict[str, Any]]:
+    """Advance every unfinished run. Cheap, and safe to call on page load."""
+    runs = list(await db.scalars(select(ScoutRun).where(ScoutRun.status == "running")))
+    return [{"run_id": str(r.id), **(await sync_run(db, r.id))} for r in runs]
+
+
 async def finish_run(
     db: AsyncSession,
     run: ScoutRun,

@@ -29,6 +29,7 @@ from app.core.db import async_session
 from app.main import app
 from app.models.credential import Credential
 from app.models.profile import Profile
+from app.models.scout_definition import ScoutDefinition, ScoutInstance, ScoutRun
 
 
 @pytest.fixture
@@ -81,10 +82,26 @@ def protect_real_data() -> AsyncGenerator[None, None]:
     async def capture() -> None:
         saved["profile"] = await _snapshot(Profile)
         saved["credentials"] = await _snapshot(Credential)
+        saved["definitions"] = await _snapshot(ScoutDefinition)
+        saved["instances"] = await _snapshot(ScoutInstance)
+        saved["runs"] = await _snapshot(ScoutRun)
 
     async def put_back() -> None:
         await _restore(Profile, saved["profile"])
         await _restore(Credential, saved["credentials"])
+        # Foreign keys point runs → instances → definitions, so rows come back
+        # parents first and are cleared children first.
+        async with async_session() as session:
+            await session.execute(delete(ScoutRun))
+            await session.execute(delete(ScoutInstance))
+            await session.execute(delete(ScoutDefinition))
+            for values in saved["definitions"]:
+                await session.execute(ScoutDefinition.__table__.insert().values(**values))
+            for values in saved["instances"]:
+                await session.execute(ScoutInstance.__table__.insert().values(**values))
+            for values in saved["runs"]:
+                await session.execute(ScoutRun.__table__.insert().values(**values))
+            await session.commit()
 
     anyio.run(capture)
     try:

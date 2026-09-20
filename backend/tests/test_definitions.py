@@ -144,6 +144,14 @@ async def test_running_a_definition_records_the_instance_and_the_ledger(
     client = FakeClient()
     _patch(monkeypatch, client)
 
+    # The in-flight guard is global — one paid run at a time across the whole
+    # app — so a real unfinished run in the shared database would refuse this.
+    # Safe to clear: conftest restores these tables after the session.
+    await db_session.execute(
+        ScoutRun.__table__.update().where(ScoutRun.status == "running").values(status="succeeded")
+    )
+    await db_session.commit()
+
     outcome = await definition_service.run_definition(db_session, definition, profile_data)
 
     assert outcome.started is True
