@@ -4,7 +4,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { ConfirmDialog } from "../confirm-dialog";
-import { type Definition, money, scoutApi, when } from "@/lib/scout-api";
+import {
+  type Definition,
+  MODE_LABEL,
+  type RunMode,
+  defaultMode,
+  money,
+  scoutApi,
+  when,
+} from "@/lib/scout-api";
 import styles from "../workspace.module.css";
 
 function statusPill(status: Definition["status"]) {
@@ -19,6 +27,11 @@ export default function ScoutsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [runTarget, setRunTarget] = useState<Definition | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Definition | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newMode, setNewMode] = useState<RunMode>("research");
+  const [renameTarget, setRenameTarget] = useState<Definition | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [mode, setMode] = useState<"research" | "scout">("research");
 
   const { data, isLoading } = useQuery({
@@ -29,9 +42,27 @@ export default function ScoutsPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["definitions"] });
 
   const create = useMutation({
-    mutationFn: () => scoutApi.createDefinition({ name: "New scout", query_source: "topics" }),
+    mutationFn: () =>
+      scoutApi.createDefinition({
+        name: newName.trim() || "Untitled scout",
+        query_source: "topics",
+        config: { default_mode: newMode },
+      }),
     onSuccess: async (made) => {
       setMessage(`Created “${made.name}”. It has not run, so it has cost nothing.`);
+      setCreating(false);
+      setNewName("");
+      await refresh();
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  const rename = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      scoutApi.patchDefinition(id, { name }),
+    onSuccess: async (updated) => {
+      setMessage(`Renamed to “${updated.name}”.`);
+      setRenameTarget(null);
       await refresh();
     },
     onError: (e: Error) => setMessage(e.message),
@@ -96,7 +127,7 @@ export default function ScoutsPage() {
         </div>
         <div className={styles.actions}>
           <Link className={styles.secondary} href="/scout/monitors">Monitors</Link>
-          <button className={styles.primary} onClick={() => create.mutate()} disabled={create.isPending}>
+          <button className={styles.primary} onClick={() => setCreating(true)}>
             New scout
           </button>
         </div>
@@ -162,13 +193,26 @@ export default function ScoutsPage() {
                     <span className={styles.pill}>
                       {definition.query_source === "topics" ? "Topics" : "Freeform"}
                     </span>
+                    {/* Which mechanism this scout runs as. They cost the same
+                        but behave very differently: a monitor keeps billing. */}
+                    <span
+                      className={`${styles.pill} ${
+                        defaultMode(definition.config) === "scout" ? styles.pillLive : ""
+                      }`}
+                    >
+                      {MODE_LABEL[defaultMode(definition.config)]}
+                    </span>
                     {/* Worth saying before a run, not after: the query on file
                         is not what the current topics would send. */}
                     {drifted && <span className={`${styles.pill} ${styles.pillBad}`}>Topics changed</span>}
                   </div>
                   <div className={styles.itemMeta}>
                     {stats?.runs
-                      ? `Last run ${when(stats.last_run)} · ${stats.runs} run${stats.runs === 1 ? "" : "s"} · ${money(stats.spend_usd)} · ${stats.questions} questions`
+                      ? `Last run ${when(stats.last_run)} as a ${
+                          stats.last_kind === "scout" ? "Scout monitor" : "research task"
+                        } · ${stats.runs} run${stats.runs === 1 ? "" : "s"} · ${money(
+                          stats.spend_usd,
+                        )} · ${stats.questions} questions`
                       : "Never run · costs nothing so far"}
                   </div>
                   <div className={styles.itemQuery}>
@@ -184,6 +228,12 @@ export default function ScoutsPage() {
                     )}
                   </div>
                   <div className={styles.actions}>
+                    <button
+                      className={`${styles.secondary} ${styles.tiny}`}
+                      onClick={() => { setRenameValue(definition.name); setRenameTarget(definition); }}
+                    >
+                      Rename
+                    </button>
                     <button
                       className={`${styles.secondary} ${styles.tiny}`}
                       onClick={() => clone.mutate(definition.id)}
@@ -203,7 +253,7 @@ export default function ScoutsPage() {
                     </button>
                     <button
                       className={`${styles.primary} ${styles.tiny}`}
-                      onClick={() => { setMode("research"); setRunTarget(definition); }}
+                      onClick={() => { setMode(defaultMode(definition.config)); setRunTarget(definition); }}
                       disabled={run.isPending || definition.status === "archived"}
                     >
                       Run · {money(cost)}
@@ -217,11 +267,89 @@ export default function ScoutsPage() {
       )}
 
       <ConfirmDialog
+        open={creating}
+        title="New scout"
+        body={
+          <>
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="new-name">Name</label>
+              <input
+                id="new-name"
+                className={styles.input}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Rust concurrency bugs"
+              />
+            </div>
+            <div className={styles.field} style={{ marginTop: "14px" }}>
+              <span className={styles.label}>How it runs</span>
+              <div className={styles.seg}>
+                <button
+                  type="button"
+                  className={`${styles.segItem} ${newMode === "research" ? styles.on : ""}`}
+                  onClick={() => setNewMode("research")}
+                >
+                  Research task
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.segItem} ${newMode === "scout" ? styles.on : ""}`}
+                  onClick={() => setNewMode("scout")}
+                >
+                  Scout monitor
+                </button>
+              </div>
+            </div>
+            <p className={styles.hint} style={{ marginTop: "10px" }}>
+              {newMode === "research"
+                ? "One-shot. Runs when you ask, leaves nothing behind at Yutori."
+                : "Keeps running on its own interval until you delete it — the only kind that bills without you pressing anything."}
+            </p>
+            <p className={styles.hint} style={{ marginTop: "10px" }}>
+              Creating costs nothing. You can change all of this later.
+            </p>
+          </>
+        }
+        confirmLabel="Create"
+        busy={create.isPending}
+        onCancel={() => setCreating(false)}
+        onConfirm={() => create.mutate()}
+      />
+
+      <ConfirmDialog
+        open={renameTarget !== null}
+        title="Rename scout"
+        body={
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="rename-name">Name</label>
+            <input
+              id="rename-name"
+              className={styles.input}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+            />
+          </div>
+        }
+        confirmLabel="Rename"
+        busy={rename.isPending}
+        onCancel={() => setRenameTarget(null)}
+        onConfirm={() => {
+          if (renameTarget && renameValue.trim()) {
+            rename.mutate({ id: renameTarget.id, name: renameValue.trim() });
+          }
+        }}
+      />
+
+      <ConfirmDialog
         open={deleteTarget !== null}
         title={`Delete “${deleteTarget?.name ?? ""}”?`}
         body={
           <>
-            <p>The saved query is removed. Nothing it discovered is.</p>
+            <p>
+              This removes the saved query from this app only. <strong>It does not delete
+              anything at Yutori</strong> — any Scout monitor created from it keeps running, and
+              keeps billing, until it is deleted on the Monitors page.
+            </p>
             <p className={styles.hint} style={{ marginTop: "10px" }}>
               Its {deleteTarget?.stats?.runs ?? 0} run
               {deleteTarget?.stats?.runs === 1 ? "" : "s"} stay in the ledger, so the{" "}

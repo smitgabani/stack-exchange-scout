@@ -75,12 +75,24 @@ async def list_definitions(
     for run in history:
         key = run["definition_id"] or ""
         entry = stats.setdefault(
-            key, {"runs": 0, "spend_usd": 0.0, "questions": 0, "last_run": None}
+            key,
+            {
+                "runs": 0,
+                "spend_usd": 0.0,
+                "questions": 0,
+                "last_run": None,
+                "last_kind": None,
+                "last_status": None,
+            },
         )
         entry["runs"] += 1
         entry["spend_usd"] = round(entry["spend_usd"] + (run["cost_usd"] or 0), 2)
         entry["questions"] += run.get("questions") or 0
-        entry["last_run"] = entry["last_run"] or run["started_at"]
+        # History is newest-first, so the first one seen is the latest.
+        if entry["last_run"] is None:
+            entry["last_run"] = run["started_at"]
+            entry["last_kind"] = run["kind"]
+            entry["last_status"] = run["status"]
 
     return {
         "definitions": [
@@ -228,7 +240,9 @@ async def list_instances(db: AsyncSession = Depends(get_db)) -> dict:
 
 
 @router.delete("/scout-instances/{instance_id}")
-async def delete_instance(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+async def delete_instance(
+    instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
     """Delete a Scout at Yutori. The only action here that stops something billing.
 
     502 rather than a silent success when Yutori refuses — a Scout that is

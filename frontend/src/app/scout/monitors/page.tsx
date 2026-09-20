@@ -296,34 +296,98 @@ export default function ScoutPage() {
         {!instances?.instances.length ? (
           <div className={styles.empty}>Nothing exists at Yutori from this app.</div>
         ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr><th>Kind</th><th>ID</th><th>From</th><th>State</th><th>Created</th><th></th></tr>
-              </thead>
-              <tbody>
-                {instances.instances.map((instance) => (
-                  <tr key={instance.id}>
-                    <td>{instance.kind === "scout" ? "Scout (monitor)" : "Research task"}</td>
-                    <td className={styles.mono}>{instance.external_id}</td>
-                    <td>{instance.definition_name ?? "—"}</td>
-                    <td>{instance.state ?? "—"}</td>
-                    <td>{instance.created_at ? new Date(instance.created_at).toLocaleString() : "—"}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className={styles.textButton}
-                        onClick={() => setDeleteTarget(instance)}
-                        disabled={removeInstance.isPending}
-                      >
-                        {instance.kind === "scout" ? "Delete at Yutori" : "Forget"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          (() => {
+            // Grouped by owning account, the active one first. Which account
+            // owns a Scout decides whether anything on this page can touch it,
+            // so it is the grouping rather than a column to squint at.
+            const groups = new Map<string, typeof instances.instances>();
+            for (const instance of instances.instances) {
+              const key = instance.account_label ?? (instance.account_fingerprint ?? "unknown");
+              groups.set(key, [...(groups.get(key) ?? []), instance]);
+            }
+            const ordered = [...groups.entries()].sort((a, b) => {
+              const aMine = a[1].some((i) => i.usable === true) ? 0 : 1;
+              const bMine = b[1].some((i) => i.usable === true) ? 0 : 1;
+              return aMine - bMine;
+            });
+
+            return ordered.map(([account, rows]) => {
+              const mine = rows.some((i) => i.usable === true);
+              const unknown = rows.every((i) => i.usable === null);
+              return (
+                <div key={account} className={ws.section} style={{ marginTop: "18px" }}>
+                  <div className={ws.sectionHead}>
+                    <h3 className={ws.sectionTitle} style={{ fontSize: "16px" }}>
+                      {account === "unknown" ? "Owner not recorded" : account}{" "}
+                      {mine ? (
+                        <span className={`${ws.pill} ${ws.pillOn}`}>Active key — you can manage these</span>
+                      ) : unknown ? (
+                        <span className={`${ws.pill} ${ws.pillDraft}`}>Unknown owner</span>
+                      ) : (
+                        <span className={`${ws.pill} ${ws.pillBad}`}>Another account — read only</span>
+                      )}
+                    </h3>
+                  </div>
+                  {!mine && !unknown && (
+                    <p className={ws.hint}>
+                      Created with a key you are not using now. Yutori refuses any change to these,
+                      so they cannot be stopped or deleted from here — only the account that made
+                      them can.
+                    </p>
+                  )}
+                  <div
+                    className={styles.tableWrap}
+                    style={
+                      mine
+                        ? {
+                            borderLeft: "3px solid var(--forest)",
+                            paddingLeft: "14px",
+                            background: "var(--surface-soft)",
+                            borderRadius: "0 10px 10px 0",
+                          }
+                        : { opacity: 0.72, paddingLeft: "17px" }
+                    }
+                  >
+                    <table className={styles.table}>
+                      <thead>
+                        <tr><th>Kind</th><th>ID</th><th>From</th><th>State</th><th>Created</th><th></th></tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((instance) => (
+                          <tr key={instance.id}>
+                            <td>{instance.kind === "scout" ? "Scout (monitor)" : "Research task"}</td>
+                            <td className={styles.mono}>{instance.external_id}</td>
+                            <td>{instance.definition_name ?? "—"}</td>
+                            <td>{instance.state ?? "—"}</td>
+                            <td>
+                              {instance.created_at
+                                ? new Date(instance.created_at).toLocaleString()
+                                : "—"}
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className={styles.textButton}
+                                onClick={() => setDeleteTarget(instance)}
+                                disabled={removeInstance.isPending || instance.usable === false}
+                                title={
+                                  instance.usable === false
+                                    ? "Created with a different API key"
+                                    : undefined
+                                }
+                              >
+                                {instance.kind === "scout" ? "Delete at Yutori" : "Forget"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            });
+          })()
         )}
       </section>
 

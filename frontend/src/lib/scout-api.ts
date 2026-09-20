@@ -9,11 +9,25 @@
  * nothing else here can spend anything.
  */
 
+export type RunMode = "research" | "scout";
+
 export type DefinitionStats = {
   runs: number;
   spend_usd: number;
   questions: number;
   last_run: string | null;
+  last_kind: "research_task" | "scout" | null;
+  last_status: string | null;
+};
+
+/** A definition's preferred mechanism, kept in its free-form config. */
+export function defaultMode(config: Record<string, unknown> | null | undefined): RunMode {
+  return config?.default_mode === "scout" ? "scout" : "research";
+}
+
+export const MODE_LABEL: Record<RunMode, string> = {
+  research: "Research task",
+  scout: "Scout monitor",
 };
 
 export type Definition = {
@@ -72,6 +86,10 @@ export type Instance = {
   external_id: string;
   state: string | null;
   account_fingerprint: string | null;
+  /** The name you gave the key that created this, when we know it. */
+  account_label: string | null;
+  /** true = the active key owns it, false = another account, null = unknown. */
+  usable: boolean | null;
   created_at: string | null;
 };
 

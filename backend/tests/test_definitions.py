@@ -308,3 +308,50 @@ async def test_a_deleted_scout_is_gone_from_yutori_before_our_row(
     assert result["deleted"] is True
     assert order == ["doomed"]
     assert await db_session.get(ScoutInstance, instance.id) is None
+
+
+@pytest.mark.anyio
+async def test_instances_report_which_account_owns_them(db_session, definition, monkeypatch):
+    """Ownership decides whether anything on the page can act on a Scout, so it
+    has to be reported per row rather than inferred."""
+    from app.models.scout_definition import ScoutInstance
+    from app.repositories import credential_repository
+    from app.services import definition_service as svc
+
+    mine = ScoutInstance(
+        definition_id=definition.id, kind="scout", external_id="mine", account_fingerprint="aaaa"
+    )
+    theirs = ScoutInstance(
+        definition_id=definition.id, kind="scout", external_id="theirs", account_fingerprint="bbbb"
+    )
+    unknown = ScoutInstance(definition_id=definition.id, kind="scout", external_id="old")
+    db_session.add_all([mine, theirs, unknown])
+    await db_session.commit()
+
+    class Cred:
+        account_fingerprint = "aaaa"
+        label = "My key"
+        key_name = "yutori_api_key"
+
+    async def active(db, key_name):
+        return Cred()
+
+    async def listing(db, key_name):
+        return [Cred()]
+
+    monkeypatch.setattr(credential_repository, "get", active)
+    monkeypatch.setattr(credential_repository, "list_for", listing)
+
+    try:
+        rows = {i["external_id"]: i for i in await svc.list_instances(db_session)}
+
+        assert rows["mine"]["usable"] is True
+        assert rows["mine"]["account_label"] == "My key"
+        assert rows["theirs"]["usable"] is False
+        # Unknown is not the same as foreign — locking it would strand every
+        # row created before fingerprinting existed.
+        assert rows["old"]["usable"] is None
+    finally:
+        for row in (mine, theirs, unknown):
+            await db_session.delete(row)
+        await db_session.commit()

@@ -293,13 +293,29 @@ async def delete_instance(db: AsyncSession, instance_id: uuid.UUID) -> dict[str,
 
 
 async def list_instances(db: AsyncSession) -> list[dict[str, Any]]:
-    """Every remote object we know about, and which definition it came from."""
+    """Every remote object we know about, and who owns it.
+
+    Ownership is the important column. A Scout created under a different key
+    cannot be read, edited or deleted from here — Yutori answers 403 — so
+    saying which account each one belongs to, and which of those is the active
+    key, is the difference between a list you can act on and a list you cannot.
+    """
     rows = list(
         await db.scalars(select(ScoutInstance).order_by(ScoutInstance.created_at.desc()))
     )
-    names = {
-        d.id: d.name for d in await list_definitions(db, include_archived=True)
-    }
+    names = {d.id: d.name for d in await list_definitions(db, include_archived=True)}
+
+    # Fingerprint → the label the user gave that key. Covers inactive keys too,
+    # so an object belonging to a stored-but-not-active account still reads as
+    # "Friend's key" rather than an anonymous hash.
+    labels: dict[str, str] = {}
+    for credential in await credential_repository.list_for(db, "yutori_api_key"):
+        if credential.account_fingerprint:
+            labels[credential.account_fingerprint] = credential.label or credential.key_name
+
+    active = await credential_repository.get(db, "yutori_api_key")
+    active_print = active.account_fingerprint if active else None
+
     return [
         {
             "id": str(i.id),
@@ -309,6 +325,15 @@ async def list_instances(db: AsyncSession) -> list[dict[str, Any]]:
             "external_id": i.external_id,
             "state": i.state,
             "account_fingerprint": i.account_fingerprint,
+            "account_label": labels.get(i.account_fingerprint or "")
+            if i.account_fingerprint
+            else None,
+            # Unknown ownership (a row predating fingerprints) is not the same
+            # as foreign ownership, so it is reported as null rather than false
+            # and the page says "unknown" instead of locking the row.
+            "usable": None
+            if not i.account_fingerprint or not active_print
+            else i.account_fingerprint == active_print,
             "created_at": i.created_at.isoformat() if i.created_at else None,
         }
         for i in rows

@@ -5,7 +5,16 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ConfirmDialog } from "../../confirm-dialog";
-import { type Definition, duration, money, scoutApi, when } from "@/lib/scout-api";
+import {
+  type Definition,
+  MODE_LABEL,
+  type RunMode,
+  defaultMode,
+  duration,
+  money,
+  scoutApi,
+  when,
+} from "@/lib/scout-api";
 import styles from "../../workspace.module.css";
 
 type Tab = "query" | "runs" | "settings";
@@ -17,7 +26,7 @@ export default function DefinitionPage() {
   const [tab, setTab] = useState<Tab>("query");
   const [message, setMessage] = useState<string | null>(null);
   const [asking, setAsking] = useState<"run" | "delete" | null>(null);
-  const [mode, setMode] = useState<"research" | "scout">("research");
+  const [mode, setMode] = useState<RunMode | null>(null);
   const [draft, setDraft] = useState<Partial<Definition> | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -41,7 +50,7 @@ export default function DefinitionPage() {
   });
 
   const run = useMutation({
-    mutationFn: () => scoutApi.runDefinition(params.id, mode),
+    mutationFn: () => scoutApi.runDefinition(params.id, runMode),
     onSuccess: async (r) => {
       setMessage(`Started ${r.kind === "research_task" ? "research task" : "scout"} ${r.external_id}.`);
       await refresh();
@@ -67,6 +76,11 @@ export default function DefinitionPage() {
   const runs = data.runs ?? [];
   const spend = runs.reduce((s, r) => s + (r.cost_usd ?? 0), 0);
   const questions = runs.reduce((s, r) => s + (r.questions ?? 0), 0);
+  // The definition's own setting, unless the run dialog has overridden it.
+  const currentMode: RunMode = defaultMode(
+    (draft?.config ?? data.config) as Record<string, unknown> | null,
+  );
+  const runMode: RunMode = mode ?? currentMode;
   const drifted =
     data.query_source === "topics" && data.query_text && data.rendered_query !== data.query_text;
 
@@ -140,6 +154,28 @@ export default function DefinitionPage() {
                 value={value("name") ?? ""}
                 onChange={(e) => edit({ name: e.target.value })}
               />
+            </div>
+            <div className={styles.field}>
+              <span className={styles.label}>How it runs</span>
+              <div className={styles.seg}>
+                {(["research", "scout"] as RunMode[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`${styles.segItem} ${currentMode === m ? styles.on : ""}`}
+                    onClick={() =>
+                      edit({ config: { ...(value("config") ?? {}), default_mode: m } })
+                    }
+                  >
+                    {MODE_LABEL[m]}
+                  </button>
+                ))}
+              </div>
+              <p className={styles.hint}>
+                {currentMode === "research"
+                  ? "One-shot. Runs when you ask and leaves nothing behind at Yutori."
+                  : "Creates a monitor that keeps running on its own interval — the only kind that bills without you pressing anything."}
+              </p>
             </div>
             {value("query_source") === "freeform" ? (
               <div className={styles.field}>
@@ -248,9 +284,15 @@ export default function DefinitionPage() {
           <div className={styles.dangerZone}>
             <h2>Delete this scout</h2>
             <p>
-              Removes the saved query. Its runs stay in the ledger and every question it found
-              stays in your pool — that history is what stops the app rediscovering, and
-              re-paying for, questions you have already seen.
+              Removes the saved query <strong>from this app only</strong>. It does not delete
+              anything at Yutori — a Scout monitor created from it keeps running, and keeps
+              billing, until it is deleted on the{" "}
+              <Link className={styles.textButton} href="/scout/monitors">Monitors page</Link>.
+            </p>
+            <p>
+              Its runs stay in the ledger and every question it found stays in your pool — that
+              history is what stops the app rediscovering, and re-paying for, questions you have
+              already seen.
             </p>
             <div className={styles.actions} style={{ marginTop: "14px" }}>
               <button className={styles.danger} onClick={() => setAsking("delete")}>Delete scout</button>
@@ -268,14 +310,14 @@ export default function DefinitionPage() {
             <div className={styles.seg} style={{ marginTop: "14px" }}>
               <button
                 type="button"
-                className={`${styles.segItem} ${mode === "research" ? styles.on : ""}`}
+                className={`${styles.segItem} ${runMode === "research" ? styles.on : ""}`}
                 onClick={() => setMode("research")}
               >
                 Research task — one-shot
               </button>
               <button
                 type="button"
-                className={`${styles.segItem} ${mode === "scout" ? styles.on : ""}`}
+                className={`${styles.segItem} ${runMode === "scout" ? styles.on : ""}`}
                 onClick={() => setMode("scout")}
               >
                 Scout — keeps monitoring
@@ -293,10 +335,15 @@ export default function DefinitionPage() {
         open={asking === "delete"}
         title={`Delete “${data.name}”?`}
         body={
-          <p>
-            The saved query goes. Its {runs.length} run{runs.length === 1 ? "" : "s"} and every
-            question it found stay.
-          </p>
+          <>
+            <p>
+              The saved query goes. Its {runs.length} run{runs.length === 1 ? "" : "s"} and every
+              question it found stay.
+            </p>
+            <p className={styles.hint} style={{ marginTop: "10px" }}>
+              Nothing is deleted at Yutori.
+            </p>
+          </>
         }
         confirmLabel="Delete"
         busy={remove.isPending}
