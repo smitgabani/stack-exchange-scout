@@ -75,7 +75,12 @@ export type Account = {
   is_active: boolean;
   account_fingerprint: string | null;
   created_at: string | null;
+  /** What to display: the correction when set, the computed total otherwise. */
   spend_usd: number;
+  /** What the run history adds up to — only as complete as what was recorded. */
+  computed_spend_usd: number;
+  /** What the user says it really cost. null = trust the calculation. */
+  spend_override_usd: number | null;
   run_count: number;
   instance_count: number;
   reachable: boolean | null;
@@ -220,6 +225,13 @@ export const scoutApi = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label }),
+    }),
+  /** null restores the computed total. */
+  setAccountSpend: (id: number, spend_usd: number | null) =>
+    json<Account>(`/api/accounts/${id}/spend`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spend_usd }),
     }),
   activateAccount: (id: number) => json<Account>(`/api/accounts/${id}/activate`, { method: "POST" }),
   removeAccount: (id: number) =>

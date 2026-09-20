@@ -39,7 +39,14 @@ class AccountSummary:
     is_active: bool
     account_fingerprint: str | None
     created_at: str | None
+    # What to show: the user's correction when there is one, the calculation
+    # otherwise.
     spend_usd: float = 0.0
+    # The two kept apart so a disagreement stays visible instead of being
+    # silently overwritten — seeing "you said $0.70, we counted $0.35" is the
+    # point, since the gap is missing run history.
+    computed_spend_usd: float = 0.0
+    spend_override_usd: float | None = None
     run_count: int = 0
     instance_count: int = 0
     # None when we have not checked, True/False once we have. Checking costs a
@@ -92,6 +99,11 @@ async def list_accounts(
     for credential in credentials:
         printed = credential.account_fingerprint
         total, runs = spend.get(printed, (0.0, 0))
+        override = (
+            float(credential.spend_override_usd)
+            if credential.spend_override_usd is not None
+            else None
+        )
         summaries.append(
             AccountSummary(
                 id=credential.id,
@@ -102,7 +114,9 @@ async def list_accounts(
                 created_at=credential.created_at.isoformat()
                 if credential.created_at
                 else None,
-                spend_usd=round(total, 2),
+                spend_usd=round(override if override is not None else total, 2),
+                computed_spend_usd=round(total, 2),
+                spend_override_usd=override,
                 run_count=runs,
                 instance_count=instances.get(printed, 0),
             )
@@ -263,6 +277,28 @@ async def rename_account(
     if credential is None:
         return None
     credential.label = label
+    await db.commit()
+    accounts = await list_accounts(db, credential.key_name)
+    return next((a for a in accounts if a.id == credential_id), None)
+
+
+async def set_spend_override(
+    db: AsyncSession, credential_id: int, amount: float | None
+) -> AccountSummary | None:
+    """Record what this account really cost, or clear the correction.
+
+    Reported spend can only count runs this database recorded, and `scout_runs`
+    did not exist before M12 — so money spent earlier is invisible and
+    unrecoverable. The user can see the real figure on their Yutori bill; this
+    is how they tell us.
+
+    `None` clears the override and returns to trusting the calculation, so a
+    correction is never a one-way door.
+    """
+    credential = await credential_repository.get_by_id(db, credential_id)
+    if credential is None:
+        return None
+    credential.spend_override_usd = amount
     await db.commit()
     accounts = await list_accounts(db, credential.key_name)
     return next((a for a in accounts if a.id == credential_id), None)

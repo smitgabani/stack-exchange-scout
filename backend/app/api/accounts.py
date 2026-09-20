@@ -60,6 +60,29 @@ async def rename_account(
     return summary.__dict__
 
 
+class SpendPatch(BaseModel):
+    # None clears the correction and goes back to the computed total. Capped to
+    # keep a typo like 35 instead of 0.35 from silently becoming the record.
+    spend_usd: float | None = Field(default=None, ge=0, le=100_000)
+
+
+@router.put("/accounts/{credential_id}/spend")
+async def set_account_spend(
+    credential_id: int, body: SpendPatch, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Correct what this account actually cost.
+
+    The computed total only counts runs recorded in `scout_runs`, which did not
+    exist before M12 — earlier spend is invisible to it and cannot be
+    recovered. The Yutori bill is the source of truth, and this is how it gets
+    in. Sending null restores the computed figure.
+    """
+    summary = await account_service.set_spend_override(db, credential_id, body.spend_usd)
+    if summary is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such account")
+    return summary.__dict__
+
+
 @router.post("/accounts/{credential_id}/activate")
 async def activate_account(
     credential_id: int, db: AsyncSession = Depends(get_db)

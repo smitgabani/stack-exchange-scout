@@ -17,6 +17,10 @@ export default function AccountsPage() {
   const [renaming, setRenaming] = useState<Account | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
+  // Which account's spend is being edited, and the raw text while typing —
+  // kept as a string so a half-typed "0." is not coerced to a number mid-edit.
+  const [editingSpend, setEditingSpend] = useState<number | null>(null);
+  const [spendValue, setSpendValue] = useState("");
 
   const { data, isLoading } = useQuery({ queryKey: ["accounts"], queryFn: scoutApi.listAccounts });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["accounts"] });
@@ -50,6 +54,37 @@ export default function AccountsPage() {
     },
     onError: (e: Error) => setMessage(e.message),
   });
+
+  const setSpend = useMutation({
+    mutationFn: ({ id, amount }: { id: number; amount: number | null }) =>
+      scoutApi.setAccountSpend(id, amount),
+    onSuccess: async (a) => {
+      setMessage(
+        a.spend_override_usd === null
+          ? `“${a.label}” is back to the calculated total.`
+          : `“${a.label}” spend set to ${money(a.spend_override_usd)}.`,
+      );
+      setEditingSpend(null);
+      await refresh();
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  function saveSpend(account: Account) {
+    const trimmed = spendValue.trim();
+    // Empty means "stop correcting", which is different from zero — an
+    // account really can have cost nothing.
+    if (trimmed === "") {
+      setSpend.mutate({ id: account.id, amount: null });
+      return;
+    }
+    const amount = Number(trimmed.replace(/^\$/, ""));
+    if (!Number.isFinite(amount) || amount < 0) {
+      setMessage("Enter a dollar amount like 0.70, or leave it empty to use the calculated total.");
+      return;
+    }
+    setSpend.mutate({ id: account.id, amount });
+  }
 
   const activate = useMutation({
     mutationFn: (id: number) => scoutApi.activateAccount(id),
@@ -111,16 +146,100 @@ export default function AccountsPage() {
                   )}
                 </div>
                 <div className={styles.itemMeta}>
-                  Added {when(account.created_at)} · {money(account.spend_usd)} spent over{" "}
-                  {account.run_count} run{account.run_count === 1 ? "" : "s"} ·{" "}
-                  {account.instance_count} object{account.instance_count === 1 ? "" : "s"} at Yutori
+                  Added {when(account.created_at)} · {money(account.spend_usd)} spent
+                  {/* "$0.70 spent over 1 run" reads as a contradiction when the
+                      figure was corrected precisely because runs are missing
+                      from the history. Only tie the two together when the
+                      number actually came from those runs. */}
+                  {account.spend_override_usd === null ? (
+                    <>
+                      {" "}
+                      over {account.run_count} run{account.run_count === 1 ? "" : "s"}
+                    </>
+                  ) : (
+                    <>
+                      {" "}
+                      ({account.run_count} run{account.run_count === 1 ? "" : "s"} recorded)
+                    </>
+                  )}{" "}
+                  · {account.instance_count} object
+                  {account.instance_count === 1 ? "" : "s"} at Yutori
                 </div>
                 <div className={`${styles.itemQuery} ${styles.mono}`}>
                   fingerprint {account.account_fingerprint ?? "not recorded — set on first use"}
                 </div>
               </div>
               <div className={styles.itemSide}>
-                <div className={styles.yield}><b>{money(account.spend_usd)}</b><br /><span className={styles.hint}>charged here</span></div>
+                {editingSpend === account.id ? (
+                  <div className={styles.yield}>
+                    <input
+                      className={styles.input}
+                      style={{ width: "96px", textAlign: "right" }}
+                      value={spendValue}
+                      onChange={(e) => setSpendValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveSpend(account);
+                        if (e.key === "Escape") setEditingSpend(null);
+                      }}
+                      placeholder={account.computed_spend_usd.toFixed(2)}
+                      inputMode="decimal"
+                      autoFocus
+                      aria-label={`Amount charged to ${account.label}`}
+                    />
+                    <div className={styles.actions} style={{ marginTop: "6px" }}>
+                      <button
+                        className={`${styles.primary} ${styles.tiny}`}
+                        onClick={() => saveSpend(account)}
+                        disabled={setSpend.isPending}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className={`${styles.secondary} ${styles.tiny}`}
+                        onClick={() => setEditingSpend(null)}
+                        disabled={setSpend.isPending}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <span className={styles.hint}>
+                      Empty = use the calculated {money(account.computed_spend_usd)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className={styles.yield}>
+                    <b>{money(account.spend_usd)}</b>
+                    <br />
+                    <span className={styles.hint}>
+                      charged here
+                      {/* When the two disagree, say so. The gap is unrecorded
+                          run history, and hiding it would make the corrected
+                          figure look like something the app worked out. */}
+                      {account.spend_override_usd !== null && (
+                        <>
+                          {" "}
+                          · you set this
+                          <br />
+                          calculated {money(account.computed_spend_usd)}
+                        </>
+                      )}
+                    </span>
+                    <br />
+                    <button
+                      className={`${styles.textButton} ${styles.tiny}`}
+                      onClick={() => {
+                        setSpendValue(
+                          account.spend_override_usd !== null
+                            ? String(account.spend_override_usd)
+                            : "",
+                        );
+                        setEditingSpend(account.id);
+                      }}
+                    >
+                      Edit amount
+                    </button>
+                  </div>
+                )}
                 <div className={styles.actions}>
                   {!account.is_active && (
                     <button
