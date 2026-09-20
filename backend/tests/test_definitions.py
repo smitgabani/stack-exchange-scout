@@ -452,3 +452,42 @@ async def test_an_account_with_no_scouts_is_not_guessed_at(db_session, monkeypat
     monkeypatch.setattr(account_service, "YutoriClient", Client)
 
     assert await account_service.find_duplicate(db_session, "brand_new_key") is None
+
+
+@pytest.mark.anyio
+async def test_switching_the_active_key_does_not_trip_the_unique_index(db_session):
+    """Two active rows for one provider are rejected by a partial unique index.
+    Assigning the flags as ORM attributes let SQLAlchemy order the UPDATEs
+    freely, and it switched the new key on before the old one off — a 500 on
+    every attempt to change account."""
+    from app.models.credential import Credential
+    from app.repositories import credential_repository
+
+    first = Credential(key_name="test_provider_key", encrypted_value="a", label="A", is_active=True)
+    second = Credential(
+        key_name="test_provider_key", encrypted_value="b", label="B", is_active=False
+    )
+    db_session.add_all([first, second])
+    await db_session.commit()
+    await db_session.refresh(first)
+    await db_session.refresh(second)
+
+    try:
+        await credential_repository.activate(db_session, second)
+
+        await db_session.refresh(first)
+        await db_session.refresh(second)
+        assert second.is_active is True
+        assert first.is_active is False
+
+        # And back again, which is where the ordering bug actually bit.
+        await credential_repository.activate(db_session, first)
+        await db_session.refresh(first)
+        await db_session.refresh(second)
+        assert first.is_active is True
+        assert second.is_active is False
+    finally:
+        await db_session.execute(
+            delete(Credential).where(Credential.key_name == "test_provider_key")
+        )
+        await db_session.commit()

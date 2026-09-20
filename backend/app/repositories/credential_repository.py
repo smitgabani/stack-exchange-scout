@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.credential import Credential
@@ -75,8 +75,11 @@ async def add(
     active row, so any incumbent is stood down first, in the same transaction.
     """
     if make_active:
-        for other in await list_for(db, key_name):
-            other.is_active = False
+        # Same ordering rule as `activate`: clear the incumbent in its own
+        # statement before the new active row is inserted.
+        await db.execute(
+            update(Credential).where(Credential.key_name == key_name).values(is_active=False)
+        )
         await db.flush()
 
     credential = Credential(
@@ -93,9 +96,23 @@ async def add(
 
 
 async def activate(db: AsyncSession, credential: Credential) -> Credential:
-    for other in await list_for(db, credential.key_name):
-        other.is_active = other.id == credential.id
+    """Make this the active key for its provider.
+
+    Two statements in a fixed order, not ORM attribute assignments. Setting the
+    flags as attributes lets SQLAlchemy batch the UPDATEs in whatever order it
+    likes, and it chose to switch the new key on before switching the old one
+    off — which is momentarily two active rows, and the partial unique index
+    rejects exactly that. Deactivate first, flush, then activate.
+    """
+    await db.execute(
+        update(Credential)
+        .where(Credential.key_name == credential.key_name, Credential.id != credential.id)
+        .values(is_active=False)
+    )
     await db.flush()
+    await db.execute(
+        update(Credential).where(Credential.id == credential.id).values(is_active=True)
+    )
     await db.commit()
     await db.refresh(credential)
     return credential
