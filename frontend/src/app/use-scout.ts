@@ -10,6 +10,7 @@ export type ScoutStatus = {
   last_synced_at: string | null;
   last_sync_error: string | null;
   run_state: "idle" | "running";
+  run_kind?: "research_task" | "scout" | null;
   run_started_at: string | null;
   run_finished_at: string | null;
   external_status: string | null;
@@ -70,28 +71,36 @@ export function useScout({ poll = false }: { poll?: boolean } = {}) {
   };
 
   const run = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/scout/run", { method: "POST" });
+    mutationFn: async (mode: "research" | "scout" = "research") => {
+      const response = await fetch(`/api/scout/run?mode=${mode}`, { method: "POST" });
       const body = await response.json();
       if (!response.ok) {
         throw new Error(typeof body.detail === "string" ? body.detail : "Could not start a run");
       }
       return body as {
         mechanism: string | null;
+        scout_id: string | null;
         next_run_at: string | null;
         started_immediately: boolean | null;
       };
     },
     onSuccess: async (body) => {
-      // Surfaced because Yutori documents neither behaviour: this is how we
-      // find out whether restart fires a run or only resumes the schedule.
-      setMessage(
-        body.started_immediately === false
-          ? `Started via ${body.mechanism}, but Yutori's next run is ${
-              body.next_run_at ? new Date(body.next_run_at).toLocaleString() : "not scheduled"
-            } — restart resumed the schedule rather than running now.`
-          : `Run started via ${body.mechanism ?? "restart"}.`,
-      );
+      if (body.mechanism === "research_task") {
+        setMessage(
+          `Research task ${body.scout_id ?? ""} started. Results are polled, so this page will pick them up even if the webhook is missed.`,
+        );
+      } else {
+        // Kept because Yutori documents none of this: restart returns the
+        // Scout to active without scheduling anything, which reads as success
+        // unless the next run time is checked.
+        setMessage(
+          body.started_immediately === false
+            ? `Started via ${body.mechanism}, but Yutori's next run is ${
+                body.next_run_at ? new Date(body.next_run_at).toLocaleString() : "not scheduled"
+              } — restart resumed the schedule rather than running now.`
+            : `Run started via ${body.mechanism ?? "restart"}.`,
+        );
+      }
       await invalidate();
     },
     onError: (error: Error) => setMessage(error.message),

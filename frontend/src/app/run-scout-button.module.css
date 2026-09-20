@@ -1,0 +1,35 @@
+.modes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--body-text);
+}
+
+.mode.on {
+  border-color: var(--ink);
+  background: var(--surface-soft);
+}
+
+.mode input {
+  margin-top: 2px;
+  accent-color: var(--ink);
+  flex-shrink: 0;
+}
+
+.mode strong {
+  color: var(--ink);
+  font-weight: 500;
+}

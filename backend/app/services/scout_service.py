@@ -303,23 +303,32 @@ async def refresh_detail(db: AsyncSession, *, force: bool = False) -> Scout | No
     return await scout_repository.save(db, scout)
 
 
-async def start_run(db: AsyncSession, profile_data: ProfileData) -> RunResult:
-    """Start a Scout run now. **This spends money** (~$0.35 per run).
+async def start_run(
+    db: AsyncSession, profile_data: ProfileData, *, mode: str = "research"
+) -> RunResult:
+    """Start a discovery run now. **This spends money** (~$0.35 per run).
 
-    The single seam between "the app wants a run" and however Yutori is
-    persuaded to produce one. Yutori has no run endpoint, so the mechanism is
-    either restart (default: keeps the Scout's id, query and change-baseline) or
-    delete-and-recreate, chosen by `settings.scout_run_mechanism`.
+    `mode` picks the primitive (ADR 0004):
 
-    Because Yutori documents neither behaviour, the result reports what was
-    observed — `next_run_at` read back afterwards tells us whether a run
-    actually started or the schedule merely resumed.
+    * ``research`` — a one-shot research task. The default, because it actually
+      runs when asked, leaves nothing behind at Yutori, and its result can be
+      polled back if the webhook is missed.
+    * ``scout`` — drive the long-lived Scout instead. Kept for monitors, and
+      known not to start a run on its own via restart, so it relies on
+      `settings.scout_run_mechanism` (restart, or delete-and-recreate).
+
+    Either way this is the single seam between "the app wants a run" and
+    whatever produces one, so the rest of the app never has to know which
+    primitive was used.
     """
     scout = await scout_repository.get(db)
     if scout is not None and scout.run_state == "running":
         # The guard that stops a double-click buying two runs. Checked before
         # any outbound call, so a refused attempt costs nothing.
         return RunResult(action="busy", scout_id=scout.external_scout_id)
+
+    if mode == "research":
+        return await _start_research_run(db, profile_data, scout)
 
     # Re-sync first so the run searches for current topics rather than whatever
     # the query was when the Scout was last touched.
@@ -355,6 +364,8 @@ async def start_run(db: AsyncSession, profile_data: ProfileData) -> RunResult:
 
     started_at = datetime.now(UTC)
     scout.run_state = "running"
+    scout.run_kind = "scout"
+    scout.run_external_id = scout.external_scout_id
     scout.run_started_at = started_at
     scout.run_finished_at = None
     scout.run_baseline_update_count = baseline
@@ -399,6 +410,184 @@ async def start_run(db: AsyncSession, profile_data: ProfileData) -> RunResult:
         next_run_at=next_run_at,
         started_immediately=started_immediately,
     )
+
+
+async def _start_research_run(
+    db: AsyncSession, profile_data: ProfileData, scout: Scout | None
+) -> RunResult:
+    """Launch a one-shot research task (ADR 0004).
+
+    Simpler than the Scout path in every respect: there is no lifecycle to
+    manipulate, no interval to neutralise, and nothing to park afterwards. The
+    task id is kept so the result can be polled back — which is what makes this
+    safe on a scale-to-zero host against a 10-second webhook deadline.
+    """
+    client = await get_client(db)
+    if client is None:
+        return RunResult(
+            action="skipped",
+            error="No usable Yutori API key — it is missing, or was encrypted under a "
+            "previous APP_SECRET_KEY and must be re-entered in Settings.",
+        )
+
+    query = query_generator.generate(profile_data)
+    query_hash = _hash(query)
+
+    if scout is None:
+        scout = await scout_repository.create(
+            db,
+            provider="yutori",
+            query_text=query,
+            query_hash=query_hash,
+            sync_status="pending",
+        )
+
+    try:
+        # The webhook is registered when we have a public URL, but it is an
+        # optimisation here rather than the only way to collect the result.
+        response = await client.create_research_task(
+            query=query,
+            webhook_url=settings.yutori_webhook_url
+            if settings.public_base_url
+            else None,
+        )
+    except YutoriError as exc:
+        logger.warning("Research task failed to start: %s", exc)
+        scout.last_sync_error = str(exc)[:1000]
+        await scout_repository.save(db, scout)
+        await record_event(
+            db,
+            "error",
+            scout=scout,
+            detail={"stage": "research_run", "error": str(exc)},
+        )
+        return RunResult(action="failed", error=str(exc))
+
+    task_id = str(response.get("task_id") or response.get("id") or "")
+    started_at = datetime.now(UTC)
+    scout.run_state = "running"
+    scout.run_kind = "research_task"
+    scout.run_external_id = task_id or None
+    scout.run_started_at = started_at
+    scout.run_finished_at = None
+    scout.run_baseline_update_count = scout.update_count
+    scout.query_text = query
+    scout.query_hash = query_hash
+    scout.last_sync_error = None
+    await scout_repository.save(db, scout)
+
+    await record_event(
+        db,
+        "run_started",
+        scout=scout,
+        query_text=query,
+        query_hash=query_hash,
+        cost_usd=settings.yutori_run_cost_usd,
+        detail={
+            "mechanism": "research_task",
+            "task_id": task_id,
+            "status": response.get("status"),
+            "view_url": response.get("view_url"),
+        },
+    )
+    return RunResult(
+        action="started",
+        scout_id=task_id or None,
+        mechanism="research_task",
+        # A research task genuinely starts on creation, which is the whole
+        # reason for preferring it — unlike restart, this needs no hedging.
+        started_immediately=True,
+    )
+
+
+async def poll_research_run(db: AsyncSession) -> dict[str, Any]:
+    """Check an in-flight research task and ingest it once it succeeds.
+
+    This is the research equivalent of `finish_run_if_complete`, and it is the
+    reason a research run cannot be lost: the result is fetched rather than
+    waited for, so a webhook that never arrives costs nothing.
+    """
+    scout = await scout_repository.get(db)
+    if (
+        scout is None
+        or scout.run_kind != "research_task"
+        or scout.run_state != "running"
+        or not scout.run_external_id
+    ):
+        return {"status": "not_running", "ingested": 0}
+
+    client = await get_client(db)
+    if client is None:
+        return {"status": "no_key", "ingested": 0}
+
+    try:
+        task = await client.get_research_task(scout.run_external_id)
+    except YutoriError as exc:
+        logger.warning("Polling research task failed: %s", exc)
+        return {"status": "error", "error": str(exc), "ingested": 0}
+
+    status = str(task.get("status") or "")
+    if status in ("queued", "running"):
+        return {"status": status, "ingested": 0}
+
+    ingested = 0
+    if status == "succeeded":
+        ingested = await _ingest_research_result(db, scout, task)
+    else:
+        await record_event(
+            db,
+            "error",
+            scout=scout,
+            detail={
+                "stage": "research_run",
+                "status": status,
+                # Billing failures surface here rather than as an empty result.
+                "rejection_reason": task.get("rejection_reason"),
+            },
+        )
+
+    scout.run_state = "idle"
+    scout.run_finished_at = datetime.now(UTC)
+    await scout_repository.save(db, scout)
+    return {"status": status, "ingested": ingested}
+
+
+async def _ingest_research_result(
+    db: AsyncSession, scout: Scout, task: dict[str, Any]
+) -> int:
+    """Feed a finished research task into the existing candidate pipeline.
+
+    Reshaped into the webhook envelope so it lands in `webhook_events` exactly
+    as a Scout update would — which means the same idempotency index dedupes a
+    polled result against the webhook copy of the same task, and the ingest,
+    enrich, rank and digest stages need no knowledge of research tasks at all.
+    """
+    from app.services import ingest_service  # local import: avoids a cycle
+
+    envelope = update_to_webhook_envelope(
+        {
+            "id": task.get("task_id") or scout.run_external_id,
+            "timestamp": task.get("created_at"),
+            "structured_result": task.get("structured_result"),
+            "content": task.get("result"),
+            "structured_output_status": task.get("structured_output_status"),
+        }
+    )
+    envelope["source"] = "research_task"
+
+    event = await ingest_service.claim_event(db, envelope)
+    if event is None:
+        # Already stored — the webhook beat the poll to it.
+        return 0
+
+    await record_event(
+        db,
+        "update_received",
+        scout=scout,
+        external_update_id=str(task.get("task_id") or ""),
+        detail={"source": "research_task_poll"},
+    )
+    return 1
 
 
 async def _begin_run(
@@ -527,6 +716,11 @@ async def finish_run_if_complete(db: AsyncSession) -> bool:
     """
     scout = await scout_repository.get(db)
     if scout is None or scout.run_state != "running" or scout.run_started_at is None:
+        return False
+    if scout.run_kind == "research_task":
+        # Research runs are finished by `poll_research_run`, which fetches the
+        # result. Letting this function also close them out would park a Scout
+        # that was never started and record a misleading reason.
         return False
 
     received = await db.scalar(

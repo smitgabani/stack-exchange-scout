@@ -101,6 +101,9 @@ async def get_scout(db: AsyncSession = Depends(get_db)) -> ScoutStatus:
     flight, which makes it the most reliable place for the Scout to get parked
     without waiting for someone to press Ingest.
     """
+    # A research run finishes by being polled, not by waiting for a webhook —
+    # so the same request that renders the status is what collects the result.
+    await scout_service.poll_research_run(db)
     await scout_service.refresh_detail(db)
     await scout_service.finish_run_if_complete(db)
     return _status_from(await scout_service.get_status(db))
@@ -125,14 +128,26 @@ async def sync_scout(db: AsyncSession = Depends(get_db)) -> SyncResponse:
 @router.post(
     "/scout/run", response_model=RunResponse, dependencies=[Depends(require_yutori_key)]
 )
-async def run_scout(db: AsyncSession = Depends(get_db)) -> RunResponse:
-    """Start a Scout run now. **Billable** — roughly $0.35 per run.
+async def run_scout(
+    mode: str = "research", db: AsyncSession = Depends(get_db)
+) -> RunResponse:
+    """Start a discovery run now. **Billable** — roughly $0.35 per run.
+
+    `mode` is `research` (default: a one-shot research task, which actually
+    runs when asked) or `scout` (drive the long-lived monitor). See ADR 0004.
 
     409 when a run is already in flight, which is what stops an impatient double
     press from buying two runs. The guard is checked before any outbound call.
     """
+    if mode not in ("research", "scout"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="mode must be 'research' or 'scout'",
+        )
     profile = await get_or_create_profile(db)
-    result = await scout_service.start_run(db, ProfileData.model_validate(profile.data))
+    result = await scout_service.start_run(
+        db, ProfileData.model_validate(profile.data), mode=mode
+    )
 
     if result.action == "busy":
         raise HTTPException(
@@ -168,13 +183,14 @@ async def pull_scout_updates(db: AsyncSession = Depends(get_db)) -> dict:
 
 
 @router.get("/scout/panel")
-async def scout_panel(db: AsyncSession = Depends(get_db)) -> dict:
+async def scout_panel(include_raw: bool = False, db: AsyncSession = Depends(get_db)) -> dict:
     """Everything the Scout page shows, in one call.
 
     Deliberately one endpoint rather than six: the page is a single view of one
     thing, and six round trips through the Vercel proxy to a scale-to-zero
     backend would each pay the same wake-up cost.
     """
+    await scout_service.poll_research_run(db)
     await scout_service.refresh_detail(db)
     await scout_service.finish_run_if_complete(db)
     scout = await scout_service.get_status(db)
@@ -265,11 +281,17 @@ async def scout_panel(db: AsyncSession = Depends(get_db)) -> dict:
         # what restart does, whether next_run_timestamp is meaningful, or why
         # /v1/usage disagrees with scout detail — so the raw payloads are the
         # only way to reason about it.
+        #
+        # Off by default: this is the largest part of the response, and every
+        # byte crosses a Vercel function on the way to the browser. Loaded
+        # only when someone opens the debugging section.
         "raw": {
             "scout_detail": _redact(detail),
             "usage": usage_raw,
             "latest_update": _redact(updates[0]) if updates else None,
-        },
+        }
+        if include_raw
+        else None,
     }
 
 
@@ -320,6 +342,8 @@ async def _run_diagnostics(db: AsyncSession, scout: Any) -> dict[str, Any]:
         "webhooks_since_run_started": webhooks_since or 0,
         "run_mechanism": settings.scout_run_mechanism,
         "run_interval_seconds": settings.scout_run_interval_seconds,
+        "run_kind": scout.run_kind,
+        "run_external_id": scout.run_external_id,
     }
 
 

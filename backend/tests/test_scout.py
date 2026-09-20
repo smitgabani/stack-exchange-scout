@@ -28,6 +28,7 @@ class FakeClient:
         self.detail = detail or {}
         self.updates = updates or []
         self.raise_not_found_on: set[str] = set()
+        self.research_task: dict = {"status": "running"}
 
     def _record(self, name: str, *args):
         self.calls.append((name, args))
@@ -65,6 +66,14 @@ class FakeClient:
     async def get_usage(self, period="30d"):
         self._record("get_usage", period)
         return {"scout_runs": 6, "num_active_scouts": 1, "active_scout_ids": ["scout-1"]}
+
+    async def create_research_task(self, **kwargs):
+        self._record("create_research_task", kwargs)
+        return {"task_id": "task-1", "status": "queued", "view_url": "https://y/t/1"}
+
+    async def get_research_task(self, task_id):
+        self._record("get_research_task", task_id)
+        return self.research_task
 
     def names(self) -> list[str]:
         return [name for name, _ in self.calls]
@@ -154,7 +163,7 @@ async def test_start_run_refuses_while_a_run_is_in_flight(
     scout_row.run_started_at = datetime.now(UTC)
     await db_session.commit()
 
-    result = await scout_service.start_run(db_session, profile_data)
+    result = await scout_service.start_run(db_session, profile_data, mode="scout")
 
     assert result.action == "busy"
     assert client.calls == []
@@ -167,7 +176,7 @@ async def test_start_run_restarts_an_existing_scout(
     client = FakeClient(detail={"status": "active", "update_count": 3})
     _patch_client(monkeypatch, client)
 
-    result = await scout_service.start_run(db_session, profile_data)
+    result = await scout_service.start_run(db_session, profile_data, mode="scout")
 
     assert result.action == "started"
     assert result.mechanism == "restart"
@@ -193,7 +202,7 @@ async def test_start_run_creates_when_no_scout_exists(db_session, profile_data, 
     client = FakeClient(detail={"status": "active"})
     _patch_client(monkeypatch, client)
     try:
-        result = await scout_service.start_run(db_session, profile_data)
+        result = await scout_service.start_run(db_session, profile_data, mode="scout")
 
         assert result.action == "started"
         assert result.mechanism == "create"
@@ -212,7 +221,7 @@ async def test_start_run_recreate_mechanism_deletes_then_creates(
     _patch_client(monkeypatch, client)
     monkeypatch.setattr(settings, "scout_run_mechanism", "recreate")
 
-    result = await scout_service.start_run(db_session, profile_data)
+    result = await scout_service.start_run(db_session, profile_data, mode="scout")
 
     assert result.mechanism == "recreate"
     assert client.names().index("delete_scout") < client.names().index("create_scout")
@@ -225,7 +234,7 @@ async def test_start_run_records_cost_and_mechanism(
     client = FakeClient(detail={"status": "active"})
     _patch_client(monkeypatch, client)
 
-    await scout_service.start_run(db_session, profile_data)
+    await scout_service.start_run(db_session, profile_data, mode="scout")
 
     event = await db_session.scalar(
         select(ScoutEvent).where(ScoutEvent.type == "run_started").order_by(ScoutEvent.created_at.desc())
@@ -245,7 +254,7 @@ async def test_start_run_reports_whether_the_run_began_immediately(
     client = FakeClient(detail={"status": "active", "next_run_timestamp": later.isoformat()})
     _patch_client(monkeypatch, client)
 
-    result = await scout_service.start_run(db_session, profile_data)
+    result = await scout_service.start_run(db_session, profile_data, mode="scout")
 
     assert result.started_immediately is False
 
@@ -266,7 +275,7 @@ async def test_start_run_continues_when_mark_done_is_rejected(
     client = RefusesDone(detail={"status": "done"})
     _patch_client(monkeypatch, client)
 
-    result = await scout_service.start_run(db_session, profile_data)
+    result = await scout_service.start_run(db_session, profile_data, mode="scout")
 
     assert result.action == "started"
     assert "restart" in client.names()
@@ -437,3 +446,146 @@ def test_webhook_url_is_masked_before_leaving_the_backend():
 def test_mask_handles_missing_and_malformed_urls():
     assert mask_webhook_url(None) is None
     assert mask_webhook_url("not-a-url?token=secret") == "(configured)"
+
+
+@pytest.mark.anyio
+async def test_research_run_creates_a_task_and_never_touches_the_scout(
+    db_session, scout_row, profile_data, monkeypatch
+):
+    """The default mode. A research task needs no Scout lifecycle at all, which
+    is the whole reason ADR 0004 prefers it."""
+    client = FakeClient()
+    _patch_client(monkeypatch, client)
+
+    result = await scout_service.start_run(db_session, profile_data)
+
+    assert result.action == "started"
+    assert result.mechanism == "research_task"
+    # Unlike restart, creating a research task genuinely starts it.
+    assert result.started_immediately is True
+    assert "create_research_task" in client.names()
+    for scout_call in ("restart", "mark_done", "delete_scout", "create_scout"):
+        assert scout_call not in client.names()
+
+    await db_session.refresh(scout_row)
+    assert scout_row.run_state == "running"
+    assert scout_row.run_kind == "research_task"
+    assert scout_row.run_external_id == "task-1"
+
+
+@pytest.mark.anyio
+async def test_research_run_is_left_alone_by_the_scout_finisher(
+    db_session, scout_row, profile_data, monkeypatch
+):
+    """finish_run_if_complete parks Scouts. A research run has no Scout to park,
+    so it must not be closed out from there."""
+    client = FakeClient(detail={"status": "active", "update_count": 99})
+    _patch_client(monkeypatch, client)
+
+    scout_row.run_state = "running"
+    scout_row.run_kind = "research_task"
+    scout_row.run_external_id = "task-1"
+    scout_row.run_started_at = datetime.now(UTC) - timedelta(days=1)
+    scout_row.run_baseline_update_count = 1
+    await db_session.commit()
+
+    assert await scout_service.finish_run_if_complete(db_session) is False
+    await db_session.refresh(scout_row)
+    assert scout_row.run_state == "running"
+    assert "mark_done" not in client.names()
+
+
+@pytest.mark.anyio
+async def test_polling_a_succeeded_research_task_ingests_its_result_once(
+    db_session, scout_row, monkeypatch
+):
+    """The reason a research run cannot be lost: the result is fetched, not
+    waited for. And the poll must not double-ingest what the webhook delivered."""
+    task_id = f"task-{datetime.now(UTC).timestamp()}"
+    client = FakeClient()
+    client.research_task = {
+        "task_id": task_id,
+        "status": "succeeded",
+        "structured_result": {
+            "questions": [{"url": "https://stackoverflow.com/questions/777001"}]
+        },
+        "structured_output_status": "succeeded",
+    }
+    _patch_client(monkeypatch, client)
+
+    scout_row.run_state = "running"
+    scout_row.run_kind = "research_task"
+    scout_row.run_external_id = task_id
+    scout_row.run_started_at = datetime.now(UTC)
+    await db_session.commit()
+
+    try:
+        first = await scout_service.poll_research_run(db_session)
+        assert first["status"] == "succeeded"
+        assert first["ingested"] == 1
+
+        await db_session.refresh(scout_row)
+        assert scout_row.run_state == "idle"
+
+        # A second poll after the run closed does nothing at all.
+        second = await scout_service.poll_research_run(db_session)
+        assert second["status"] == "not_running"
+    finally:
+        await db_session.execute(
+            delete(WebhookEvent).where(WebhookEvent.event_id == task_id)
+        )
+        await db_session.commit()
+
+
+@pytest.mark.anyio
+async def test_polling_leaves_an_unfinished_research_task_running(
+    db_session, scout_row, monkeypatch
+):
+    client = FakeClient()
+    client.research_task = {"task_id": "task-1", "status": "running"}
+    _patch_client(monkeypatch, client)
+
+    scout_row.run_state = "running"
+    scout_row.run_kind = "research_task"
+    scout_row.run_external_id = "task-1"
+    scout_row.run_started_at = datetime.now(UTC)
+    await db_session.commit()
+
+    result = await scout_service.poll_research_run(db_session)
+
+    assert result["status"] == "running"
+    await db_session.refresh(scout_row)
+    assert scout_row.run_state == "running"
+
+
+@pytest.mark.anyio
+async def test_a_failed_research_task_closes_the_run_and_records_why(
+    db_session, scout_row, monkeypatch
+):
+    """A billing failure must not look like a run that found nothing."""
+    client = FakeClient()
+    client.research_task = {
+        "task_id": "task-1",
+        "status": "failed",
+        "rejection_reason": "insufficient_prepaid_balance",
+    }
+    _patch_client(monkeypatch, client)
+
+    scout_row.run_state = "running"
+    scout_row.run_kind = "research_task"
+    scout_row.run_external_id = "task-1"
+    scout_row.run_started_at = datetime.now(UTC)
+    await db_session.commit()
+
+    result = await scout_service.poll_research_run(db_session)
+
+    assert result["status"] == "failed"
+    await db_session.refresh(scout_row)
+    assert scout_row.run_state == "idle"
+
+    event = await db_session.scalar(
+        select(ScoutEvent)
+        .where(ScoutEvent.type == "error")
+        .order_by(ScoutEvent.created_at.desc())
+    )
+    assert event.detail["rejection_reason"] == "insufficient_prepaid_balance"

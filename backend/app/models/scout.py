@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
 RUN_STATES = ("idle", "running")
+RUN_KINDS = ("research_task", "scout")
 
 SCOUT_EVENT_TYPES = (
     "query_synced",
@@ -53,6 +54,12 @@ class Scout(Base):
     # something when Yutori's count moves past this, which is how a run that
     # never reaches our webhook is still detected.
     run_baseline_update_count: Mapped[int | None] = mapped_column(Integer)
+    # Which primitive the in-flight run used: a one-shot research task, or the
+    # Scout itself (ADR 0004). They finish differently — a research task is
+    # polled at its own endpoint and leaves nothing to park.
+    run_kind: Mapped[str | None] = mapped_column(String(16))
+    # The research task id, when run_kind is research_task.
+    run_external_id: Mapped[str | None] = mapped_column(String(128))
 
     # --- mirrored from Yutori's scout detail, for display --------------------
     external_status: Mapped[str | None] = mapped_column(String(16))

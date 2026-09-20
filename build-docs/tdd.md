@@ -1154,7 +1154,13 @@ created_at
 updated_at
 ```
 
-One active Scout for the whole app (`prd.md` §9: "one active Stack Overflow Scout") — no per-user scoping needed.
+> **Superseded by [ADR 0004](decisions/0004-discovery-primitives-and-multi-account.md).**
+> This single row splits into two tables: `scout_definitions` (local, durable,
+> many — name, query, config, notes) and `scout_instances` (disposable remote
+> objects, each carrying `account_fingerprint` = `sha256(api_key)[:16]` and a
+> `kind` of `research_task` or `scout`). Run history moves to `scout_runs`,
+> which attributes cost to a definition and a key. See the milestone tickets
+> for the migration.
 
 ---
 
@@ -1197,6 +1203,15 @@ An unanswered row by the time the next cycle's gate check runs is treated as `'n
 ## 5.10 Credentials
 
 Stores every user-supplied API key: Yutori, Gemini, and OpenAI (`prd.md` §7.2, §7.3, §27) — kept out of the `profile` document entirely so it's never returned by `GET /profile`.
+
+> **Extended by [ADR 0004](decisions/0004-discovery-primitives-and-multi-account.md).**
+> `key_name` is no longer unique per provider: the app holds any number of
+> named Yutori keys, which may belong to different accounts, with one marked
+> active. Rows gain a display `label`, an `is_active` flag and a derived
+> `account_fingerprint`. Deleting a key is a **tombstone** — discovered
+> questions, digests and challenges are never cascade-deleted, because that
+> history is what prevents rediscovering and re-paying for questions the user
+> has already seen.
 
 ```text
 credentials
@@ -1879,6 +1894,15 @@ This also means you can replace Yutori later without rebuilding the application.
 ---
 
 ## Decision 2 — Keep one persistent Scout
+
+> **Reversed by [ADR 0004](decisions/0004-discovery-primitives-and-multi-account.md)
+> (2026-09-19).** A Scout is account-owned state, and the app now holds several
+> API keys that may belong to different accounts — so a stored
+> `external_scout_id` cannot be assumed to resolve. The durable unit is a local
+> **scout definition**; remote objects are disposable and carry an account
+> fingerprint. On-demand runs use one-shot **research tasks** rather than any
+> Scout lifecycle, because `restart` was measured not to trigger a run.
+> The reasoning below is kept for the record.
 
 **Decision:**
 

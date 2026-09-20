@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { RunScoutButton } from "../run-scout-button";
 import { type ScoutStatus, useScout } from "../use-scout";
 import styles from "./scout.module.css";
@@ -73,6 +74,8 @@ type Panel = {
     webhooks_since_run_started?: number;
     run_mechanism?: string;
     run_interval_seconds?: number;
+    run_kind?: "research_task" | "scout" | null;
+    run_external_id?: string | null;
   };
   raw: {
     scout_detail: Record<string, unknown> | null;
@@ -89,8 +92,11 @@ function duration(seconds: number | undefined): string {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
-async function fetchPanel(): Promise<Panel> {
-  const response = await fetch("/api/scout/panel");
+async function fetchPanel(includeRaw: boolean): Promise<Panel> {
+  // The raw payloads are the biggest part of this response and every byte
+  // crosses a Vercel function, so they are fetched only when the debugging
+  // section is actually open.
+  const response = await fetch(`/api/scout/panel?include_raw=${includeRaw}`);
   if (!response.ok) {
     throw new Error(`scout panel failed: ${response.status}`);
   }
@@ -178,9 +184,10 @@ function StatusCard({ status }: { status: ScoutStatus }) {
 export default function ScoutPage() {
   // The one page where someone is watching a run, so the only one that polls.
   const { scout, message, park, sync, pull, isRunning } = useScout({ poll: true });
+  const [showRaw, setShowRaw] = useState(false);
   const { data: panel, isLoading } = useQuery({
-    queryKey: ["scout-panel"],
-    queryFn: fetchPanel,
+    queryKey: ["scout-panel", showRaw],
+    queryFn: () => fetchPanel(showRaw),
     refetchInterval: isRunning ? 30_000 : false,
     staleTime: 15_000,
   });
@@ -368,6 +375,17 @@ export default function ScoutPage() {
           <>
             <dl className={styles.config}>
               <div><dt>Run state</dt><dd>{diag.run_state}</dd></div>
+              <div>
+                <dt>Kind</dt>
+                <dd>
+                  {diag.run_kind === "research_task"
+                    ? "Research task (one-shot)"
+                    : diag.run_kind === "scout"
+                      ? "Scout (monitor)"
+                      : "—"}
+                  {diag.run_external_id ? ` · ${diag.run_external_id}` : ""}
+                </dd>
+              </div>
               <div><dt>Started</dt><dd>{when(diag.run_started_at ?? null)}</dd></div>
               <div>
                 <dt>Elapsed</dt>
@@ -402,7 +420,8 @@ export default function ScoutPage() {
                 </dd>
               </div>
             </dl>
-            {diag.run_mechanism === "restart" &&
+            {diag.run_kind === "scout" &&
+              diag.run_mechanism === "restart" &&
               diag.update_count_moved === false &&
               (diag.elapsed_seconds ?? 0) > 1800 && (
                 <div className={styles.alert}>
@@ -418,23 +437,37 @@ export default function ScoutPage() {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Raw Yutori responses</h2>
+        <div className={styles.sectionHead}>
+          <h2 className={styles.sectionTitle}>Raw Yutori responses</h2>
+          <button
+            type="button"
+            className={styles.textButton}
+            onClick={() => setShowRaw((on) => !on)}
+          >
+            {showRaw ? "Hide" : "Load"}
+          </button>
+        </div>
         <div className={styles.pageSub}>
           Exactly what their API returned, webhook secret removed. Their docs
           don&apos;t describe most of this behaviour, so the payloads are the evidence.
+          Loaded on demand — they are large, and every byte crosses the proxy.
         </div>
-        <details className={styles.details}>
-          <summary className={styles.summary}>Scout detail</summary>
-          <pre className={styles.query}>{JSON.stringify(raw.scout_detail, null, 2)}</pre>
-        </details>
-        <details className={styles.details}>
-          <summary className={styles.summary}>Usage (/v1/usage)</summary>
-          <pre className={styles.query}>{JSON.stringify(raw.usage, null, 2)}</pre>
-        </details>
-        <details className={styles.details}>
-          <summary className={styles.summary}>Latest update</summary>
-          <pre className={styles.query}>{JSON.stringify(raw.latest_update, null, 2)}</pre>
-        </details>
+        {showRaw && (
+          <>
+            <details className={styles.details}>
+              <summary className={styles.summary}>Scout detail</summary>
+              <pre className={styles.query}>{JSON.stringify(raw.scout_detail, null, 2)}</pre>
+            </details>
+            <details className={styles.details}>
+              <summary className={styles.summary}>Usage (/v1/usage)</summary>
+              <pre className={styles.query}>{JSON.stringify(raw.usage, null, 2)}</pre>
+            </details>
+            <details className={styles.details}>
+              <summary className={styles.summary}>Latest update</summary>
+              <pre className={styles.query}>{JSON.stringify(raw.latest_update, null, 2)}</pre>
+            </details>
+          </>
+        )}
       </section>
 
       <section className={styles.section}>

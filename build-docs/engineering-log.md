@@ -241,3 +241,63 @@ Note `DIGEST_RECIPIENT_EMAIL` is `dmodee111@gmail.com`, not the requested `gaban
 **Then, in order:** set real topics → `POST /scout/sync` (billable) → wait for the first webhook → `POST /candidates/ingest` → `/candidates/enrich` → `/candidates/rank` → `/digest/generate` → `/digest/send` → check the inbox → the four click-throughs (M4/M5/M6/M7-TEST) → record actual Yutori spend.
 
 **Next up:** the user is taking a deliberate detour before finishing this. The strongly recommended detour is giving dev/test its own database — the shared one has now caused three separate problems, escalating from junk rows, to unreadable credentials, to nearly spending money on the wrong topics.
+
+---
+
+## 2026-09-19 — On-demand runs, and what the Yutori API actually does
+
+Built the Scout control panel and the "Run now" button, then spent the session
+discovering that the mechanism underneath it does not work — and that a better
+one existed the whole time.
+
+**What shipped:** `/scout` page (status, spend, the rendered query, per-update
+yield, timeline, health), Run now on three surfaces behind a cost dialog, a
+`scout_events` timeline/ledger table, run-state columns on `scouts`, and a
+missed-update recovery path via `GET /updates`. Commits `799ccc4` → `6b9d5fe`.
+
+**What we learned by calling the live API**, none of it documented:
+
+- `POST /{id}/restart` rejects a live Scout (`400 "Scout is not completed"`) —
+  it is the counterpart of `/done`, not a general start.
+- Once parked and restarted, it **does not trigger a run.** Two attempts, two
+  hours, `update_count` unmoved, no webhook.
+- `next_run_timestamp` is epoch `0`, not null, when nothing is scheduled. That
+  broke a "did the run start?" heuristic: 1970 minus now is a large negative
+  number, which passed a "less than five minutes" test as `true`.
+- Update timestamps are epoch **milliseconds**; scout detail uses ISO strings.
+- `/v1/usage` nests `scout_runs` under `activity`, so reading the top level
+  silently reported zero runs and zero spend.
+- `num_active_scouts` counts runs *executing*, not scouts whose status is
+  active.
+- Scouts are created **public** by default; `GET /updates` returned data with
+  an invalid API key. Now forced to `is_public: false` on create and re-asserted
+  on every sync.
+- The webhook deadline is **10 seconds** per attempt, three attempts — tighter
+  than the ~30s previously recorded, and awkward against a cold Fly machine.
+
+**Two self-inflicted problems worth remembering:**
+
+- The stored Yutori key was 18 characters and 401'd everywhere. It decrypted
+  cleanly, so this was a bad key, not a bad `APP_SECRET_KEY` — worth checking
+  before blaming encryption.
+- **Vercel paused the account**: Fluid Active CPU 4h25m against a 4h limit. Every
+  `/api/*` call is a function proxying to Fly, and three defaults compounded —
+  TanStack's `staleTime: 0`, refetch-on-focus and three retries, plus a 15s poll
+  that ran on every page whenever a run was stuck `running`, which happened
+  twice for over two hours. Fixed by `staleTime: 60s`, no refetch on focus, one
+  retry, opt-in polling at 30s on the Scout page only, and a 45-minute run
+  timeout instead of two hours.
+
+**Where it landed:** a session of API archaeology produced
+[ADR 0004](decisions/0004-discovery-primitives-and-multi-account.md). The
+Research API (`POST /v1/research/tasks`) is one-shot, costs the same $0.35,
+takes the same `output_schema` and webhook, and leaves nothing behind — so it,
+not a Scout, is what an on-demand run should use. Combined with the need to
+support API keys from more than one account, that reshapes the model: scout
+*definitions* are local and durable, remote objects are disposable and
+fingerprinted, and deleting a key never deletes what it found. Tickets are
+M12.
+
+**Resume here:** M12-B1. Before building, run one real research task as an
+experiment — nobody has called that endpoint yet, and its result shape, latency
+and webhook behaviour are assumptions until they aren't.

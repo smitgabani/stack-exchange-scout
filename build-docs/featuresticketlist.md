@@ -320,3 +320,50 @@ Not new tickets — the combined pass:
 - 🧩 Jobs fire unattended over a real multi-day observation window; no double-run if the trigger fires mid-run (idempotency/locking).
 - ⚡ The chosen trigger mechanism reliably wakes a stopped Fly.io machine within an acceptable delay.
 - Manual verification: wait for a real scheduled cycle, confirm a digest arrives with nobody pressing a button.
+
+---
+
+## M12 — Scout Definitions, Research Runs, and Multi-Account Keys
+
+**Goal:** the Scout stops being one hidden remote object and becomes a managed
+workspace — many saved queries, runs you choose the shape of, spend you can
+attribute, and API keys you can add and remove without losing what they found.
+
+Design: [ADR 0004](decisions/0004-discovery-primitives-and-multi-account.md).
+Supersedes `tdd.md` Decision 2 and reshapes `prd.md` §9, §9.1, §12, §24.
+
+**Backend — data**
+- `M12-B1` Migration: `scout_definitions` (name, query_text, query_source `topics|freeform`, config, notes, status `draft|ready|archived`), `scout_instances` (kind `research_task|scout`, external id, `account_fingerprint`, state), `scout_runs` (definition, instance, key, cost, started/finished, outcome). Migrate today's single `scouts` row into one definition plus one instance.
+- `M12-B2` `credentials` gains `label`, `is_active`, `account_fingerprint`; drop the one-row-per-provider assumption. Existing rows migrate to labelled, active keys.
+- `M12-B3` Deletion is a tombstone: removing a key or definition leaves `questions`, `digests` and `challenges` untouched, and run history renders the removed link. Test asserts a deleted key loses no discovered questions.
+
+**Backend — discovery**
+- `M12-B4` Research client: `create_research_task`, `get_research_task`, `list_research_tasks` against `/v1/research/tasks`, with `output_schema` and `webhook_url`.
+- `M12-B5` `run_definition(definition, mode)` — one seam, `mode` of `research` (default) or `scout`. Records a `scout_runs` row with cost and fingerprint.
+- `M12-B6` Ingest accepts research results from both paths: the `scout_update` webhook (already shared) and polling `GET /v1/research/tasks/{id}`, deduped by the existing `(provider, event_id)` index.
+- `M12-B7` Live monitor lifecycle for `kind='scout'`: activate, show schedule, pause, retire — using `mark_done` / `restart` / `delete_scout`, which remain correct for monitors even though they are not a run mechanism.
+- `M12-B8` Fingerprint mismatch is surfaced, not swallowed: an instance created under a different key reads as unreachable with an explanation.
+
+**Backend — API**
+- `M12-B9` `GET/POST/PATCH/DELETE /scout-definitions[/{id}]`, plus `POST /scout-definitions/{id}/clone` and `/run`.
+- `M12-B10` `GET/POST/DELETE /accounts[/{id}]` and `POST /accounts/{id}/activate`.
+- `M12-B11` `GET /scout-definitions/{id}/runs` — history, yield and cost per run.
+
+**Frontend**
+- `M12-F1` Definitions list: create, clone, archive, delete; draft vs ready; per-definition spend and last run.
+- `M12-F2` Definition detail: query builder (topics-derived or freeform) with a preview of exactly what gets sent, config, notes.
+- `M12-F3` Run dialog: choose research (one-shot) or scout (monitor), with the cost named before confirming.
+- `M12-F4` Run history per definition — cost, questions produced, candidates, how many cleared the digest bar.
+- `M12-F5` Cost effectiveness view: definitions ranked by yield per dollar.
+- `M12-F6` Accounts page: add, label, activate, delete keys; per-key spend; unreachable-instance warnings.
+
+**M12-TEST**
+- 🔒 Deleting a key removes the credential and nothing else — questions, digests and challenges survive, and no question is rediscovered.
+- 🔒 No API key or webhook secret appears in any response; `account_fingerprint` is one-way.
+- 💸 A run against a definition records exactly one `scout_runs` row with the right cost; a refused concurrent run records none.
+- 🧩 An instance created under key A reads as unreachable once key B is active, rather than 404ing.
+- 🧩 A research result arriving by webhook and by polling ingests once, not twice.
+- Manual: create two definitions, run one as research and one as a monitor, confirm the history, yield and per-key spend read correctly; delete the key and confirm the candidate pool is intact.
+
+**Open question for M12**
+- Research tasks have never been run against the live API. The first one should be treated as an experiment like the restart test was: confirm the result shape, how long it takes, and that the `scout_update` webhook arrives as the docs claim.

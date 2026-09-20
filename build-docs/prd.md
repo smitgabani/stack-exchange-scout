@@ -363,6 +363,16 @@ Questions already in the database retain their historical profile version.
 
 # 9. Yutori Scout
 
+> **Superseded in part by [ADR 0004](decisions/0004-discovery-primitives-and-multi-account.md) (2026-09-19).**
+> This section's "one persistent Scout, PATCHed when topics change" model no
+> longer holds. A *scout* in the product is now a **local definition** the user
+> saves, edits and clones for free; a run is either a one-shot **research task**
+> (`POST /v1/research/tasks`, $0.35 — the default for anything the user
+> triggers) or a **live Scout** created only when continuous monitoring is
+> wanted. The app holds several named API keys, which may belong to different
+> Yutori accounts. Everything below about *what discovery is for* still stands;
+> the mechanics do not.
+
 Yutori is responsible for **web discovery**, not preference management.
 
 The Scout runs on the cadence configured in `scout.interval_days` (§7.1) regardless of mode — every 3 days by default; setting `interval_days = 1` produces daily runs. Mode does not change the cadence, only whether a run requires confirmation: in **Automatic Mode** (§9.1) each cycle's run fires without confirmation, while during **Setup Mode** it still requires a user Yes/No before firing.
@@ -422,6 +432,10 @@ Yutori supports updating an existing Scout's query through its Scout PATCH API. 
 ## 9.1 Setup Mode — Usage-Gated Scout Runs
 
 ### Why
+
+> **Scope widened by [ADR 0004](decisions/0004-discovery-primitives-and-multi-account.md):**
+> Setup Mode gates *any* paid run — a research task as much as a Scout run —
+> since both cost $0.35 against the same one-time credit.
 
 Yutori's Scouting API is billed per run and starts from a **one-time** signup credit (not a recurring monthly one — see `docs/yutori-api.md` §7). At the start of use, the user's topics and preferences are still being tuned, so unconfirmed automatic Scout runs — even at the default 3-day cadence — would burn through that one-time credit while the profile is still changing, before the system has proven it's finding useful questions.
 
