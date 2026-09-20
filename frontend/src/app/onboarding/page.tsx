@@ -7,11 +7,17 @@ import styles from "./onboarding.module.css";
 
 type Step = "yutori" | "gemini" | "done";
 
-async function saveKey(provider: "yutori" | "gemini", apiKey: string): Promise<void> {
+async function saveKey(
+  provider: "yutori" | "gemini",
+  apiKey: string,
+  label?: string,
+): Promise<void> {
   const response = await fetch(`/api/settings/${provider}-key`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ api_key: apiKey }),
+    // The label names the Yutori account. Without it the key lists as
+    // "yutori_api_key", which is useless once a second account exists.
+    body: JSON.stringify({ api_key: apiKey, label }),
   });
   if (!response.ok) {
     throw new Error(`failed to save ${provider} key: ${response.status}`);
@@ -21,6 +27,7 @@ async function saveKey(provider: "yutori" | "gemini", apiKey: string): Promise<v
 export default function OnboardingPage() {
   const [step, setStep] = useState<Step>("yutori");
   const [yutoriKey, setYutoriKey] = useState("");
+  const [yutoriLabel, setYutoriLabel] = useState("");
   const [geminiKey, setGeminiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const router = useRouter();
@@ -30,7 +37,7 @@ export default function OnboardingPage() {
     if (!yutoriKey || saving) return;
     setSaving(true);
     try {
-      await saveKey("yutori", yutoriKey);
+      await saveKey("yutori", yutoriKey, yutoriLabel.trim() || "My Yutori account");
       await queryClient.invalidateQueries({ queryKey: ["settings", "yutori-key", "status"] });
       setStep("gemini");
     } finally {
@@ -84,6 +91,20 @@ export default function OnboardingPage() {
               onChange={(event) => setYutoriKey(event.target.value)}
               autoFocus
             />
+            <div className={styles.row} style={{ marginTop: "14px" }}>
+              <label htmlFor="yutori-label">Name this account</label>
+            </div>
+            <input
+              id="yutori-label"
+              type="text"
+              placeholder="My Yutori account"
+              value={yutoriLabel}
+              onChange={(event) => setYutoriLabel(event.target.value)}
+            />
+            <div className={styles.hint}>
+              You can add keys from other Yutori accounts later, and this name is how you will
+              tell them apart — including which Scouts belong to which account.
+            </div>
             <div className={styles.hint}>
               Yutori bills per Scout run from a one-time signup credit — the app tracks estimated spend for you
               once this is set (see Settings).

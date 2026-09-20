@@ -10,6 +10,9 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 class ApiKeyRequest(BaseModel):
     api_key: str
+    # Only meaningful for Yutori, where several accounts can be stored and the
+    # list has to say whose is whose.
+    label: str | None = None
 
 
 class ApiKeyStatus(BaseModel):
@@ -18,7 +21,7 @@ class ApiKeyStatus(BaseModel):
 
 @router.post("/yutori-key", response_model=ApiKeyStatus)
 async def set_yutori_key(body: ApiKeyRequest, db: AsyncSession = Depends(get_db)) -> ApiKeyStatus:
-    await set_api_key(db, "yutori_api_key", body.api_key)
+    await set_api_key(db, "yutori_api_key", body.api_key, label=body.label)
     return ApiKeyStatus(connected=True)
 
 

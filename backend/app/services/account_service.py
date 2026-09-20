@@ -176,6 +176,19 @@ async def verify_key(api_key: str) -> tuple[bool, str | None]:
     return True, None
 
 
+async def rename_account(
+    db: AsyncSession, credential_id: int, label: str
+) -> AccountSummary | None:
+    """Rename a stored account. Local only — Yutori has no concept of this."""
+    credential = await credential_repository.get_by_id(db, credential_id)
+    if credential is None:
+        return None
+    credential.label = label
+    await db.commit()
+    accounts = await list_accounts(db, credential.key_name)
+    return next((a for a in accounts if a.id == credential_id), None)
+
+
 async def activate_account(
     db: AsyncSession, credential_id: int
 ) -> AccountSummary | None:

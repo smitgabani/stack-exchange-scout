@@ -38,6 +38,22 @@ async def add_account(body: AccountIn, db: AsyncSession = Depends(get_db)) -> di
     return summary.__dict__
 
 
+class AccountPatch(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+
+
+@router.patch("/accounts/{credential_id}")
+async def rename_account(
+    credential_id: int, body: AccountPatch, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Rename an account. The name is how Scouts from different accounts are
+    told apart, so it should never be stuck at whatever was typed first."""
+    summary = await account_service.rename_account(db, credential_id, body.label)
+    if summary is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such account")
+    return summary.__dict__
+
+
 @router.post("/accounts/{credential_id}/activate")
 async def activate_account(
     credential_id: int, db: AsyncSession = Depends(get_db)

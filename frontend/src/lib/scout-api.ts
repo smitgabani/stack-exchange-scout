@@ -168,6 +168,12 @@ export const scoutApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+  renameAccount: (id: number, label: string) =>
+    json<Account>(`/api/accounts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+    }),
   activateAccount: (id: number) => json<Account>(`/api/accounts/${id}/activate`, { method: "POST" }),
   removeAccount: (id: number) =>
     json<{ removed: boolean; label: string; kept: Record<string, number> }>(`/api/accounts/${id}`, {

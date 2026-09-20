@@ -9,8 +9,19 @@ from app.repositories import credential_repository
 logger = logging.getLogger(__name__)
 
 
-async def set_api_key(db: AsyncSession, key_name: str, plaintext_value: str) -> None:
-    await credential_repository.upsert(db, key_name, encrypt_value(plaintext_value))
+async def set_api_key(
+    db: AsyncSession, key_name: str, plaintext_value: str, *, label: str | None = None
+) -> None:
+    """Store a provider key, optionally naming the account it belongs to.
+
+    The label matters for Yutori specifically: the app can hold keys from
+    several accounts, and a row with no label reads as "yutori_api_key"
+    everywhere it is listed — which is no help at all when the question is
+    whose account a Scout belongs to.
+    """
+    await credential_repository.upsert(
+        db, key_name, encrypt_value(plaintext_value), label=label
+    )
 
 
 async def has_api_key(db: AsyncSession, key_name: str) -> bool:

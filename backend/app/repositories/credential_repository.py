@@ -31,7 +31,9 @@ async def get_by_id(db: AsyncSession, credential_id: int) -> Credential | None:
     return await db.get(Credential, credential_id)
 
 
-async def upsert(db: AsyncSession, key_name: str, encrypted_value: str) -> None:
+async def upsert(
+    db: AsyncSession, key_name: str, encrypted_value: str, *, label: str | None = None
+) -> None:
     """Replace the active key for a provider, or create it.
 
     Deliberately still an upsert: rotating a key in Settings should replace the
@@ -41,8 +43,20 @@ async def upsert(db: AsyncSession, key_name: str, encrypted_value: str) -> None:
     existing = await get(db, key_name)
     if existing is not None:
         existing.encrypted_value = encrypted_value
+        if label:
+            existing.label = label
+        # The fingerprint belonged to the old key, so it must not survive a
+        # replacement — a stale one would claim the wrong account owns things.
+        existing.account_fingerprint = None
     else:
-        db.add(Credential(key_name=key_name, encrypted_value=encrypted_value, is_active=True))
+        db.add(
+            Credential(
+                key_name=key_name,
+                encrypted_value=encrypted_value,
+                label=label,
+                is_active=True,
+            )
+        )
     await db.commit()
 
 

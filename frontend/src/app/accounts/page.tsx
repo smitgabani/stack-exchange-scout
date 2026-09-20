@@ -14,6 +14,8 @@ export default function AccountsPage() {
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [removing, setRemoving] = useState<Account | null>(null);
+  const [renaming, setRenaming] = useState<Account | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const { data, isLoading } = useQuery({ queryKey: ["accounts"], queryFn: scoutApi.listAccounts });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["accounts"] });
@@ -29,6 +31,17 @@ export default function AccountsPage() {
       setAdding(false);
       setLabel("");
       setApiKey("");
+      await refresh();
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  const rename = useMutation({
+    mutationFn: ({ id, label }: { id: number; label: string }) =>
+      scoutApi.renameAccount(id, label),
+    onSuccess: async (a) => {
+      setMessage(`Renamed to “${a.label}”.`);
+      setRenaming(null);
       await refresh();
     },
     onError: (e: Error) => setMessage(e.message),
@@ -114,6 +127,12 @@ export default function AccountsPage() {
                       Make active
                     </button>
                   )}
+                  <button
+                    className={`${styles.secondary} ${styles.tiny}`}
+                    onClick={() => { setRenameValue(account.label); setRenaming(account); }}
+                  >
+                    Rename
+                  </button>
                   <Link className={`${styles.secondary} ${styles.tiny}`} href={`/accounts/${account.id}`}>
                     Inspect
                   </Link>
@@ -152,6 +171,33 @@ export default function AccountsPage() {
           </p>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={renaming !== null}
+        title="Rename account"
+        body={
+          <>
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="acct-rename">Name</label>
+              <input
+                id="acct-rename"
+                className={styles.input}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+              />
+            </div>
+            <p className={styles.hint} style={{ marginTop: "10px" }}>
+              This is how Scouts from different accounts are labelled on the Monitors page.
+            </p>
+          </>
+        }
+        confirmLabel="Rename"
+        busy={rename.isPending}
+        onCancel={() => setRenaming(null)}
+        onConfirm={() => {
+          if (renaming && renameValue.trim()) rename.mutate({ id: renaming.id, label: renameValue.trim() });
+        }}
+      />
 
       <ConfirmDialog
         open={adding}
