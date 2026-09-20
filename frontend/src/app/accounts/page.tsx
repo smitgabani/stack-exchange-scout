@@ -16,6 +16,7 @@ export default function AccountsPage() {
   const [removing, setRemoving] = useState<Account | null>(null);
   const [renaming, setRenaming] = useState<Account | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["accounts"], queryFn: scoutApi.listAccounts });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["accounts"] });
@@ -29,11 +30,14 @@ export default function AccountsPage() {
           : `Added “${account.label}” and made it active.`,
       );
       setAdding(false);
+      setAddError(null);
       setLabel("");
       setApiKey("");
       await refresh();
     },
-    onError: (e: Error) => setMessage(e.message),
+    // Shown inside the dialog rather than behind it: a rejected key means the
+    // form still has work to do, and closing it would throw away what was typed.
+    onError: (e: Error) => setAddError(e.message),
   });
 
   const rename = useMutation({
@@ -225,16 +229,22 @@ export default function AccountsPage() {
                 placeholder="yut_…"
               />
             </div>
+            {addError && (
+              <div className={styles.alert} style={{ marginTop: "14px" }}>
+                <strong>Not added.</strong> {addError}
+              </div>
+            )}
             <p className={styles.hint} style={{ marginTop: "12px" }}>
               The key is checked against Yutori before it is trusted — a broken key otherwise
-              looks fine until the moment it costs you a run.
+              looks fine until the moment it costs you a run. A key from an account you have
+              already added is refused, so one account&apos;s spend is never split in two.
             </p>
           </>
         }
         confirmLabel="Add key"
         busy={add.isPending}
-        onCancel={() => setAdding(false)}
-        onConfirm={() => add.mutate()}
+        onCancel={() => { setAdding(false); setAddError(null); }}
+        onConfirm={() => { setAddError(null); add.mutate(); }}
       />
 
       <ConfirmDialog

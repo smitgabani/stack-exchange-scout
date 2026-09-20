@@ -355,3 +355,100 @@ async def test_instances_report_which_account_owns_them(db_session, definition, 
         for row in (mine, theirs, unknown):
             await db_session.delete(row)
         await db_session.commit()
+
+
+@pytest.mark.anyio
+async def test_the_same_key_twice_is_refused(db_session, monkeypatch):
+    """Cheap and certain: the fingerprint is a hash of the key itself."""
+    from app.repositories import credential_repository
+    from app.services import account_service
+
+    key = "yut_same_key_value"
+
+    class Existing:
+        account_fingerprint = account_service.fingerprint(key)
+        label = "My key"
+        key_name = "yutori_api_key"
+
+    async def listing(db, key_name):
+        return [Existing()]
+
+    monkeypatch.setattr(credential_repository, "list_for", listing)
+
+    found = await account_service.find_duplicate(db_session, key)
+
+    assert found == ("same_key", "My key")
+
+
+@pytest.mark.anyio
+async def test_a_different_key_from_the_same_account_is_caught_by_its_scouts(
+    db_session, definition, monkeypatch
+):
+    """The fingerprint cannot see this — a different key hashes differently, and
+    Yutori exposes no account id. Two keys on one account do see the same
+    Scouts, which is the only available proof."""
+    from app.models.scout_definition import ScoutInstance
+    from app.repositories import credential_repository
+    from app.services import account_service
+
+    instance = ScoutInstance(
+        definition_id=definition.id,
+        kind="scout",
+        external_id="shared-scout",
+        account_fingerprint="fingerprint-of-first-key",
+    )
+    db_session.add(instance)
+    await db_session.commit()
+
+    class Existing:
+        account_fingerprint = "fingerprint-of-first-key"
+        label = "First key"
+        key_name = "yutori_api_key"
+
+    async def listing(db, key_name):
+        return [Existing()]
+
+    class Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def list_scouts(self, status=None):
+            return {"scouts": [{"id": "shared-scout"}]}
+
+    monkeypatch.setattr(credential_repository, "list_for", listing)
+    monkeypatch.setattr(account_service, "YutoriClient", Client)
+
+    try:
+        found = await account_service.find_duplicate(db_session, "a_completely_different_key")
+        assert found == ("same_account", "First key")
+    finally:
+        await db_session.delete(instance)
+        await db_session.commit()
+
+
+@pytest.mark.anyio
+async def test_an_account_with_no_scouts_is_not_guessed_at(db_session, monkeypatch):
+    """Undetectable stays undetectable. A fresh account has no Scouts to
+    compare, and refusing it on a hunch would block a legitimate key."""
+    from app.repositories import credential_repository
+    from app.services import account_service
+
+    class Existing:
+        account_fingerprint = "something-else"
+        label = "First key"
+        key_name = "yutori_api_key"
+
+    async def listing(db, key_name):
+        return [Existing()]
+
+    class Client:
+        def __init__(self, *a, **k):
+            pass
+
+        async def list_scouts(self, status=None):
+            return {"scouts": []}
+
+    monkeypatch.setattr(credential_repository, "list_for", listing)
+    monkeypatch.setattr(account_service, "YutoriClient", Client)
+
+    assert await account_service.find_duplicate(db_session, "brand_new_key") is None

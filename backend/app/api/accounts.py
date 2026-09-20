@@ -32,9 +32,15 @@ async def add_account(body: AccountIn, db: AsyncSession = Depends(get_db)) -> di
     unusable key is otherwise indistinguishable from a working one until
     someone spends money with it.
     """
-    summary = await account_service.add_account(
-        db, api_key=body.api_key, label=body.label, make_active=body.make_active
-    )
+    try:
+        summary = await account_service.add_account(
+            db, api_key=body.api_key, label=body.label, make_active=body.make_active
+        )
+    except account_service.DuplicateAccount as exc:
+        # 409, not 422: the request is well formed, the account is simply
+        # already here. The message names the existing entry so the user can
+        # find it rather than wondering which one clashed.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     return summary.__dict__
 
 

@@ -129,6 +129,69 @@ async def backfill_active_fingerprint(db: AsyncSession, key_name: str = YUTORI) 
     await db.commit()
 
 
+class DuplicateAccount(Exception):
+    """This key, or its account, is already stored."""
+
+    def __init__(self, message: str, existing_label: str | None = None) -> None:
+        super().__init__(message)
+        self.existing_label = existing_label
+
+
+async def find_duplicate(
+    db: AsyncSession, api_key: str, key_name: str = YUTORI
+) -> tuple[str, str] | None:
+    """Is this key, or its account, already here?
+
+    Two separate checks, because they answer different questions:
+
+    * **Same key.** The fingerprint is sha256 of the key itself, so a match
+      means this exact key is already stored. Cheap and certain.
+    * **Same account.** A different key from the same account has a different
+      fingerprint, so the fingerprint cannot see it — Yutori exposes no account
+      identifier at all. What it does expose is the account's Scouts, and two
+      keys on one account see the same ones. Overlapping Scout ids is therefore
+      proof of a shared account, and the only proof available.
+
+    Returns (reason, existing label) or None. Undetectable cases stay
+    undetectable: an account with no Scouts yet looks like a new one, and
+    saying otherwise would be a guess.
+    """
+    printed = fingerprint(api_key)
+    existing = await credential_repository.list_for(db, key_name)
+
+    for credential in existing:
+        if credential.account_fingerprint == printed:
+            return "same_key", credential.label or credential.key_name
+
+    try:
+        listing = await YutoriClient(api_key).list_scouts()
+    except YutoriError:
+        # Cannot check, so do not claim there is no duplicate.
+        return None
+
+    incoming = {
+        str(item.get("id"))
+        for item in (listing.get("scouts") or listing.get("items") or [])
+    }
+    if not incoming:
+        return None
+
+    known = (
+        await db.execute(
+            select(ScoutInstance.external_id, ScoutInstance.account_fingerprint).where(
+                ScoutInstance.kind == "scout"
+            )
+        )
+    ).all()
+    by_print = {
+        c.account_fingerprint: (c.label or c.key_name) for c in existing if c.account_fingerprint
+    }
+    for external_id, owner in known:
+        if external_id in incoming and owner and owner != printed:
+            return "same_account", by_print.get(owner, "another stored key")
+    return None
+
+
 async def add_account(
     db: AsyncSession,
     *,
@@ -143,7 +206,23 @@ async def add_account(
     indistinguishable from a working one until the moment someone spends money
     with it — which is exactly how an 18-character key sat in this app for two
     days answering 401 to everything.
+
+    Refuses a duplicate: storing the same account twice would split its spend
+    across two rows and make the Monitors page claim two different owners for
+    the same Scout.
     """
+    duplicate = await find_duplicate(db, api_key, key_name)
+    if duplicate is not None:
+        reason, existing_label = duplicate
+        raise DuplicateAccount(
+            f"This key is already stored as “{existing_label}”."
+            if reason == "same_key"
+            else f"This key belongs to the same Yutori account as “{existing_label}” — "
+            "they can see the same Scouts. Adding it again would split that account's "
+            "spend across two entries.",
+            existing_label,
+        )
+
     printed = fingerprint(api_key)
     reachable, error = await verify_key(api_key)
 
