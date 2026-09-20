@@ -16,6 +16,9 @@ const NAV_LINKS = [
   // `match` keeps the entry lit across the whole section while the link itself
   // goes straight to a real page rather than relying on /yutori's redirect.
   { href: "/yutori/scouts", label: "Yutori", match: "/yutori" },
+  // The other half of the pipeline: discovery finds questions, this turns them
+  // into challenges. Same shape of section, same reason for existing.
+  { href: "/llm/pipeline", label: "LLM", match: "/llm" },
   { href: "/settings", label: "Settings" },
 ];
 

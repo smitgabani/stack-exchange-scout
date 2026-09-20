@@ -8,6 +8,7 @@ from app.api import (
     auth,
     definitions,
     digests,
+    llm,
     profile,
     questions,
     scout,
@@ -39,6 +40,7 @@ app.include_router(accounts.router)
 app.include_router(webhooks.router)
 app.include_router(questions.router)
 app.include_router(digests.router)
+app.include_router(llm.router)
 
 
 @app.get("/")

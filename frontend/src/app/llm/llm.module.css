@@ -1,0 +1,204 @@
+/* The LLM section shell: a title and a tab strip shared by every page
+   underneath. Page-level styling stays in workspace.module.css, which the
+   pages already use — this file only owns the frame around them. */
+
+.section {
+  max-width: var(--content-wide);
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--page-padding);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  font-size: 32px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.sectionSub {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.tab {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 12px 16px;
+  /* The active tab is marked by a bar sitting on the strip's own border, so
+     the row does not shift by a pixel when the selection moves. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tabActive {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+/* The pages moved in here already carry their own outer padding and max-width
+   from workspace.module.css. Nested inside the section shell that doubles up,
+   so the inner wrapper is flattened.
+
+   Matched by element, not by class: those pages set `className={styles.page}`
+   from a CSS module, so the real class name is hashed at build time and a
+   `:global(.page)` selector would silently never match. Every one of them
+   renders a <main>, which is stable. */
+.tabPanel > main {
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .tabs {
+    gap: 0;
+  }
+
+  .tab {
+    padding: 12px 12px;
+  }
+}
+
+/* Prompt text is shown verbatim, so it needs to wrap rather than scroll and
+   must not be re-flowed into prose. */
+.promptBlock {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface-soft);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 16px 18px;
+  color: var(--ink);
+  overflow-x: auto;
+}
+
+/* The clause the app always appends. Marked apart from the editable half so
+   it is visibly not something the textarea controls. */
+.lockedBlock {
+  border-color: var(--border-strong);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--surface-soft),
+    var(--surface-soft) 10px,
+    #f2f4f7 10px,
+    #f2f4f7 20px
+  );
+}
+
+.lockedLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14px;
+  text-transform: uppercase;
+  color: var(--coral);
+  margin-bottom: 8px;
+}
+
+.editor {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  width: 100%;
+  min-height: 260px;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  resize: vertical;
+  color: var(--ink);
+  background: var(--canvas);
+}
+
+.editor:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: -1px;
+}
+
+.stepRow {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 18px;
+  align-items: start;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.stepNum {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: var(--ink);
+  color: var(--on-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.stepTitle {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.stepBody {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--body-text);
+  max-width: 76ch;
+}
+
+.withheld {
+  background: var(--cream);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.withheldItem {
+  font-size: 14px;
+  color: var(--ink);
+  padding: 3px 0;
+}
+
+@media (max-width: 760px) {
+  .stepRow {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}

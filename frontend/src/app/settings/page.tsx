@@ -140,24 +140,23 @@ function ActiveProviderCard() {
     }
   }
 
+  // Kept here as a read-only summary with a pointer: LLM keys and the provider
+  // toggle now live in the LLM section, the way Yutori keys live at
+  // /yutori/accounts. Two editors over one piece of state drift, and one of
+  // them ends up wrong.
+  void handleSwitch;
+  void openaiConnected;
+
   return (
     <div className={styles.card}>
       <div className={styles.cardTitle}>Active LLM provider</div>
-      <div className={styles.toggleRow}>
-        <button
-          className={`${styles.toggleOpt} ${activeProvider === "gemini" ? styles.on : ""}`}
-          onClick={() => handleSwitch("gemini")}
-        >
-          Gemini
-        </button>
-        <button
-          className={`${styles.toggleOpt} ${activeProvider === "openai" ? styles.on : ""} ${!openaiConnected ? styles.disabled : ""}`}
-          onClick={() => handleSwitch("openai")}
-          disabled={!openaiConnected}
-        >
-          {openaiConnected ? "OpenAI" : "OpenAI — add a key to enable"}
-        </button>
-      </div>
+      <p className={styles.cardBody}>
+        Currently <strong>{activeProvider}</strong>. Keys, the provider toggle, the curator prompt
+        and what each challenge was generated from now live in one place.
+      </p>
+      <Link className={styles.btnText} href="/llm/providers">
+        Open LLM settings →
+      </Link>
     </div>
   );
 }
