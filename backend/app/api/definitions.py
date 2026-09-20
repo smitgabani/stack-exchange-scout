@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_yutori_key
 from app.core.config import settings
 from app.core.db import get_db
+from app.repositories import credential_repository
 from app.schemas.profile import ProfileData
 from app.services import definition_service
 from app.services.profile_service import get_or_create_profile
@@ -83,6 +84,8 @@ async def list_definitions(
                 "last_run": None,
                 "last_kind": None,
                 "last_status": None,
+                "last_account": None,
+                "accounts": [],
             },
         )
         entry["runs"] += 1
@@ -93,8 +96,19 @@ async def list_definitions(
             entry["last_run"] = run["started_at"]
             entry["last_kind"] = run["kind"]
             entry["last_status"] = run["status"]
+            entry["last_account"] = run["account_label"]
+        # A definition is local and belongs to no account, but its runs were
+        # each paid for by one — and comparing yield across definitions only
+        # means something when you know which account footed the bill.
+        if run["account_label"] and run["account_label"] not in entry["accounts"]:
+            entry["accounts"].append(run["account_label"])
+
+    # So the list can say which of these ran on the account currently in use.
+    active = await credential_repository.get(db, "yutori_api_key")
+    active_account = (active.label or active.key_name) if active else None
 
     return {
+        "active_account": active_account,
         "definitions": [
             {
                 **_out(d, rendered=definition_service.render_query(d, profile_data)),

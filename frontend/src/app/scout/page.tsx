@@ -112,6 +112,11 @@ export default function ScoutsPage() {
 
   const definitions = data?.definitions ?? [];
   const cost = data?.run_cost_usd ?? 0.35;
+  const activeAccount = data?.active_account ?? null;
+  // Worth calling out only when there is actually more than one account in
+  // play — otherwise every card would carry a label that says nothing.
+  const manyAccounts =
+    new Set(definitions.flatMap((d) => d.stats?.accounts ?? [])).size > 1;
   const totalSpend = definitions.reduce((sum, d) => sum + (d.stats?.spend_usd ?? 0), 0);
   const totalRuns = definitions.reduce((sum, d) => sum + (d.stats?.runs ?? 0), 0);
   const totalQuestions = definitions.reduce((sum, d) => sum + (d.stats?.questions ?? 0), 0);
@@ -140,6 +145,14 @@ export default function ScoutsPage() {
       </div>
 
       {message && <div className={styles.notice}>{message}</div>}
+
+      {manyAccounts && (
+        <div className={styles.notice}>
+          These scouts have been run on more than one Yutori account. Each card shows which one
+          paid for its last run — <strong>{activeAccount ?? "no account"}</strong> is active now,
+          so that is who the next run is charged to.
+        </div>
+      )}
 
       <div className={styles.stats}>
         <div className={styles.stat}>
@@ -208,6 +221,24 @@ export default function ScoutsPage() {
                     >
                       {MODE_LABEL[defaultMode(definition.config)]}
                     </span>
+                    {/* Which account paid for its runs. A definition is local
+                        and belongs to none, but comparing two of them only
+                        means something if you know who was billed. */}
+                    {stats?.last_account && (
+                      <span
+                        className={`${styles.pill} ${
+                          stats.last_account === activeAccount ? styles.pillReady : styles.pillBad
+                        }`}
+                        title={
+                          stats.last_account === activeAccount
+                            ? "Ran on the account you are using now"
+                            : `Ran on “${stats.last_account}”, which is not the active account`
+                        }
+                      >
+                        {stats.last_account}
+                        {stats.accounts.length > 1 ? ` +${stats.accounts.length - 1}` : ""}
+                      </span>
+                    )}
                     {/* Worth saying before a run, not after: the query on file
                         is not what the current topics would send. */}
                     {drifted && <span className={`${styles.pill} ${styles.pillBad}`}>Topics changed</span>}
@@ -221,6 +252,12 @@ export default function ScoutsPage() {
                         )} · ${stats.questions} questions`
                       : "Never run · costs nothing so far"}
                   </div>
+                  {manyAccounts && stats?.last_account && stats.last_account !== activeAccount && (
+                    <div className={styles.itemMeta} style={{ color: "var(--coral)" }}>
+                      Charged to “{stats.last_account}”, not the active account — its spend and
+                      yield are not comparable with scouts run on “{activeAccount}”.
+                    </div>
+                  )}
                   <div className={styles.itemQuery}>
                     {definition.rendered_query || definition.query_text || "No query yet"}
                   </div>

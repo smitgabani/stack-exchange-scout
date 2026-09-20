@@ -18,6 +18,10 @@ export type DefinitionStats = {
   last_run: string | null;
   last_kind: "research_task" | "scout" | null;
   last_status: string | null;
+  /** The account that paid for the most recent run. */
+  last_account: string | null;
+  /** Every account that has paid for a run of this scout. */
+  accounts: string[];
 };
 
 /** A definition's preferred mechanism, kept in its free-form config. */
@@ -132,7 +136,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const scoutApi = {
   listDefinitions: (includeArchived = false) =>
-    json<{ definitions: Definition[]; run_cost_usd: number }>(
+    json<{ definitions: Definition[]; run_cost_usd: number; active_account: string | null }>(
       `/api/scout-definitions?include_archived=${includeArchived}`,
     ),
 
