@@ -200,7 +200,7 @@ function ScoutCard() {
         </div>
         <div className={styles.scoutActions}>
           <RunScoutButton className={styles.btnText} label="Run now" />
-          <Link className={styles.btnText} href="/scout">
+          <Link className={styles.btnText} href="/yutori/scouts">
             Manage Scout \u2192
           </Link>
         </div>

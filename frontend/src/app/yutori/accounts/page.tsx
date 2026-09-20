@@ -3,9 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
-import { ConfirmDialog } from "../confirm-dialog";
+import { ConfirmDialog } from "../../confirm-dialog";
 import { type Account, money, scoutApi, when } from "@/lib/scout-api";
-import styles from "../workspace.module.css";
+import styles from "../../workspace.module.css";
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
@@ -100,7 +100,7 @@ export default function AccountsPage() {
             <div key={account.id} className={styles.item}>
               <div>
                 <div className={styles.itemName}>
-                  <Link href={`/accounts/${account.id}`}>{account.label}</Link>
+                  <Link href={`/yutori/accounts/${account.id}`}>{account.label}</Link>
                   {account.is_active ? (
                     <span className={`${styles.pill} ${styles.pillOn}`}>Active</span>
                   ) : (
@@ -137,7 +137,7 @@ export default function AccountsPage() {
                   >
                     Rename
                   </button>
-                  <Link className={`${styles.secondary} ${styles.tiny}`} href={`/accounts/${account.id}`}>
+                  <Link className={`${styles.secondary} ${styles.tiny}`} href={`/yutori/accounts/${account.id}`}>
                     Inspect
                   </Link>
                   <button

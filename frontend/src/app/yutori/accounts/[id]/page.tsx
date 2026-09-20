@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { money, scoutApi, when } from "@/lib/scout-api";
-import styles from "../../workspace.module.css";
+import styles from "../../../workspace.module.css";
 
 export default function AccountPage() {
   const params = useParams<{ id: string }>();
@@ -24,7 +24,7 @@ export default function AccountPage() {
 
   return (
     <main className={styles.page}>
-      <Link className={styles.back} href="/accounts">← All accounts</Link>
+      <Link className={styles.back} href="/yutori/accounts">← All accounts</Link>
 
       <div className={styles.head}>
         <div>

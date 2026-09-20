@@ -11,8 +11,11 @@ const NAV_LINKS = [
   { href: "/topics", label: "Topics" },
   { href: "/questions", label: "Questions" },
   { href: "/challenges", label: "Challenges" },
-  { href: "/scout", label: "Scout" },
-  { href: "/accounts", label: "Accounts" },
+  // Scouts, monitors, runs and accounts are one subject — how questions get
+  // discovered — so they share a nav entry and split into tabs inside it.
+  // `match` keeps the entry lit across the whole section while the link itself
+  // goes straight to a real page rather than relying on /yutori's redirect.
+  { href: "/yutori/scouts", label: "Yutori", match: "/yutori" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -67,19 +70,19 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
             Stack Exchange Scout
           </Link>
           <nav className={styles.nav}>
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`${styles.navLink} ${
-                  pathname === link.href || pathname.startsWith(`${link.href}/`)
-                    ? styles.active
-                    : ""
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) => {
+              const prefix = "match" in link ? link.match : link.href;
+              const active = pathname === prefix || pathname.startsWith(`${prefix}/`);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`${styles.navLink} ${active ? styles.active : ""}`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
             <button className={styles.logout} onClick={handleLogout}>
               Log out
             </button>

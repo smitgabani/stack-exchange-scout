@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
-import { ConfirmDialog } from "../../confirm-dialog";
+import { ConfirmDialog } from "../../../confirm-dialog";
 import {
   type Definition,
   MODE_LABEL,
@@ -15,7 +15,7 @@ import {
   scoutApi,
   when,
 } from "@/lib/scout-api";
-import styles from "../../workspace.module.css";
+import styles from "../../../workspace.module.css";
 
 type Tab = "query" | "runs" | "settings";
 
@@ -62,7 +62,7 @@ export default function DefinitionPage() {
     mutationFn: () => scoutApi.deleteDefinition(params.id),
     onSuccess: (r) => {
       setMessage(`Deleted. ${r.kept.questions} questions and ${r.kept.runs} runs were kept.`);
-      router.push("/scout");
+      router.push("/yutori/scouts");
     },
     onError: (e: Error) => setMessage(e.message),
   });
@@ -86,7 +86,7 @@ export default function DefinitionPage() {
 
   return (
     <main className={styles.page}>
-      <Link className={styles.back} href="/scout">← All scouts</Link>
+      <Link className={styles.back} href="/yutori/scouts">← All scouts</Link>
 
       <div className={styles.head}>
         <div>
@@ -255,7 +255,7 @@ export default function DefinitionPage() {
                       <td className={styles.num}>{r.candidates ?? 0}</td>
                       <td className={styles.num}>{r.above_bar ?? 0}</td>
                       <td>{r.delivered_by ?? "—"}</td>
-                      <td><Link className={styles.textButton} href={`/scout/runs/${r.id}`}>Open</Link></td>
+                      <td><Link className={styles.textButton} href={`/yutori/runs/${r.id}`}>Open</Link></td>
                     </tr>
                   ))}
                 </tbody>
@@ -287,7 +287,7 @@ export default function DefinitionPage() {
               Removes the saved query <strong>from this app only</strong>. It does not delete
               anything at Yutori — a Scout monitor created from it keeps running, and keeps
               billing, until it is deleted on the{" "}
-              <Link className={styles.textButton} href="/scout/monitors">Monitors page</Link>.
+              <Link className={styles.textButton} href="/yutori/monitors">Monitors page</Link>.
             </p>
             <p>
               Its runs stay in the ledger and every question it found stays in your pool — that

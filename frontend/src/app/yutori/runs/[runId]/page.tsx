@@ -73,7 +73,7 @@ export default function RunPage() {
   if (!run) {
     return (
       <main className={styles.page}>
-        <Link className={styles.back} href="/scout">← All scouts</Link>
+        <Link className={styles.back} href="/yutori/scouts">← All scouts</Link>
         <div className={styles.empty}>That run could not be found.</div>
       </main>
     );
@@ -83,7 +83,7 @@ export default function RunPage() {
 
   return (
     <main className={styles.page}>
-      <Link className={styles.back} href={run.definition_id ? `/scout/${run.definition_id}` : "/scout"}>
+      <Link className={styles.back} href={run.definition_id ? `/yutori/scouts/${run.definition_id}` : "/yutori/scouts"}>
         ← Back
       </Link>
 

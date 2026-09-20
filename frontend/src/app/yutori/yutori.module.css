@@ -1,0 +1,89 @@
+/* The Yutori section shell: a title and a tab strip shared by every page
+   underneath. Page-level styling stays in workspace.module.css, which the
+   pages already use — this file only owns the frame around them. */
+
+.section {
+  max-width: var(--content-wide);
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--page-padding);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  font-size: 32px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.sectionSub {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.tab {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 12px 16px;
+  /* The active tab is marked by a bar sitting on the strip's own border, so
+     the row does not shift by a pixel when the selection moves. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tabActive {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--page-gap);
+}
+
+/* The pages moved in here already carry their own outer padding and max-width
+   from workspace.module.css. Nested inside the section shell that doubles up,
+   so the inner wrapper is flattened.
+
+   Matched by element, not by class: those pages set `className={styles.page}`
+   from a CSS module, so the real class name is hashed at build time and a
+   `:global(.page)` selector would silently never match. Every one of them
+   renders a <main>, which is stable. */
+.tabPanel > main {
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .tabs {
+    gap: 0;
+  }
+
+  .tab {
+    padding: 12px 12px;
+  }
+}

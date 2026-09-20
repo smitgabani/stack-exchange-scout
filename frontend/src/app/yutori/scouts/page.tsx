@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
-import { ConfirmDialog } from "../confirm-dialog";
+import { ConfirmDialog } from "../../confirm-dialog";
 import {
   type Definition,
   MODE_LABEL,
@@ -13,7 +13,7 @@ import {
   scoutApi,
   when,
 } from "@/lib/scout-api";
-import styles from "../workspace.module.css";
+import styles from "../../workspace.module.css";
 
 function statusPill(status: Definition["status"]) {
   if (status === "ready") return <span className={`${styles.pill} ${styles.pillReady}`}>Ready</span>;
@@ -137,7 +137,7 @@ export default function ScoutsPage() {
           </div>
         </div>
         <div className={styles.actions}>
-          <Link className={styles.secondary} href="/scout/monitors">Monitors</Link>
+          <Link className={styles.secondary} href="/yutori/monitors">Monitors</Link>
           <button className={styles.primary} onClick={() => setCreating(true)}>
             New scout
           </button>
@@ -207,7 +207,7 @@ export default function ScoutsPage() {
               >
                 <div>
                   <div className={styles.itemName}>
-                    <Link href={`/scout/${definition.id}`}>{definition.name}</Link>
+                    <Link href={`/yutori/scouts/${definition.id}`}>{definition.name}</Link>
                     {statusPill(definition.status)}
                     <span className={styles.pill}>
                       {definition.query_source === "topics" ? "Topics" : "Freeform"}
@@ -284,7 +284,7 @@ export default function ScoutsPage() {
                     >
                       Clone
                     </button>
-                    <Link className={`${styles.secondary} ${styles.tiny}`} href={`/scout/${definition.id}`}>
+                    <Link className={`${styles.secondary} ${styles.tiny}`} href={`/yutori/scouts/${definition.id}`}>
                       Edit
                     </Link>
                     <button
