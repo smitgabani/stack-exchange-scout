@@ -456,3 +456,57 @@
   background: var(--canvas);
   color: var(--ink);
 }
+
+/* The rendered diagram. Centred and allowed to scroll sideways rather than
+   being squashed — Mermaid sizes to its content, which can be wide. */
+.diagram {
+  margin-top: 12px;
+  padding: 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--canvas);
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.diagramLoading {
+  margin-top: 12px;
+  padding: 32px;
+  border: 1px dashed var(--hairline);
+  border-radius: 12px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* A parse failure is stated plainly rather than silently showing source that
+   looks like it was meant to be read as text. */
+.diagramFailed {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--coral);
+}
+
+.diagramToggle {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.diagramToggle:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MermaidDiagram } from "./mermaid-diagram";
 import styles from "./challenge.module.css";
 
 /**
@@ -141,29 +142,12 @@ function Stat({ value }: { value: unknown }) {
   );
 }
 
-/**
- * Mermaid source, shown as text rather than rendered.
- *
- * Deliberate: rendering model-authored diagram source means either pulling in
- * Mermaid and handling its parse failures, or injecting SVG the model wrote —
- * which is an XSS surface. The caption carries the meaning, and the source is
- * copyable for anyone who wants the picture.
- */
 function Diagram({ value }: { value: unknown }) {
-  const [open, setOpen] = useState(false);
   if (!value || typeof value !== "object") return null;
   const diagram = value as { caption?: string; mermaid?: string };
   if (!diagram.mermaid) return null;
 
-  return (
-    <div>
-      {diagram.caption && <div className={styles.blockBody}>{diagram.caption}</div>}
-      <button type="button" className={styles.revealBtn} onClick={() => setOpen((v) => !v)}>
-        {open ? "Hide diagram source" : "Show diagram source (Mermaid)"}
-      </button>
-      {open && <pre className={styles.mermaid}>{diagram.mermaid}</pre>}
-    </div>
-  );
+  return <MermaidDiagram source={diagram.mermaid} caption={diagram.caption} />;
 }
 
 export function ProgressiveHints({
