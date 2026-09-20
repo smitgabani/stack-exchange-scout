@@ -233,6 +233,17 @@ async def run_definition(
     }
 
 
+@router.get("/scout-remote")
+async def remote_inventory(db: AsyncSession = Depends(get_db)) -> dict:
+    """Every Scout and research task that exists at Yutori under the active key.
+
+    Free — these are reads. Deliberately not merged into the instances list:
+    one answers "what did this app create", the other "what is actually out
+    there", and the gap between them is the interesting part.
+    """
+    return await definition_service.remote_inventory(db)
+
+
 @router.get("/scout-instances")
 async def list_instances(db: AsyncSession = Depends(get_db)) -> dict:
     """Remote objects this app knows about — Scouts and research tasks."""

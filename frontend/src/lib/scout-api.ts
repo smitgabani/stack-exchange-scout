@@ -93,6 +93,23 @@ export type Instance = {
   created_at: string | null;
 };
 
+export type RemoteScout = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+  update_count: number | null;
+  next_run: string | number | null;
+  /** Whether this app has a record of it. Untracked + alive = billing unseen. */
+  tracked: boolean;
+};
+
+export type RemoteTask = {
+  id: string;
+  status: string | null;
+  created_at: string | null;
+  tracked: boolean;
+};
+
 export type EffectivenessRow = {
   id: string;
   name: string;
@@ -153,6 +170,16 @@ export const scoutApi = {
   listRuns: () => json<{ runs: Run[] }>("/api/scout-runs"),
 
   listInstances: () => json<{ instances: Instance[] }>("/api/scout-instances"),
+
+  /** What actually exists at Yutori, as opposed to what this app recorded. */
+  remoteInventory: () =>
+    json<{
+      scouts: RemoteScout[];
+      research_tasks: RemoteTask[];
+      untracked_scouts: string[];
+      error: string | null;
+      research_error?: string;
+    }>("/api/scout-remote"),
   /** Deletes the Scout at Yutori. The only call here that stops something billing. */
   deleteInstance: (id: string) =>
     json<{ deleted: boolean; external_id?: string; note?: string }>(

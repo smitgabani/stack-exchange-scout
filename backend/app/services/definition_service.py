@@ -340,6 +340,71 @@ async def list_instances(db: AsyncSession) -> list[dict[str, Any]]:
     ]
 
 
+async def remote_inventory(db: AsyncSession) -> dict[str, Any]:
+    """Everything that exists at Yutori under the active key.
+
+    Read from Yutori, not from our tables — that is the whole point. An object
+    this app never created, or created and then lost track of, is invisible in
+    `scout_instances` and is exactly the one that can keep billing unnoticed.
+
+    Scouts and research tasks are listed separately because they mean different
+    things: a Scout can still run, a research task is finished and merely
+    history.
+    """
+    client = await scout_service.get_client(db)
+    if client is None:
+        return {
+            "scouts": [],
+            "research_tasks": [],
+            "error": "No usable Yutori API key — add or re-enter one in Settings.",
+        }
+
+    tracked = {
+        row[0] for row in (await db.execute(select(ScoutInstance.external_id))).all()
+    }
+
+    result: dict[str, Any] = {"scouts": [], "research_tasks": [], "error": None}
+
+    try:
+        listing = await client.list_scouts()
+        for item in listing.get("scouts") or listing.get("items") or []:
+            result["scouts"].append(
+                {
+                    "id": str(item.get("id")),
+                    "status": item.get("status"),
+                    "created_at": item.get("created_at"),
+                    "update_count": item.get("update_count"),
+                    "next_run": item.get("next_run_timestamp"),
+                    "tracked": str(item.get("id")) in tracked,
+                }
+            )
+    except YutoriError as exc:
+        result["error"] = str(exc)[:300]
+
+    try:
+        listing = await client.list_research_tasks()
+        # Their list endpoints have used two different envelope keys, so accept
+        # either rather than silently returning nothing.
+        items = listing.get("tasks") or listing.get("research_tasks") or listing.get("items") or []
+        for item in items:
+            task_id = str(item.get("task_id") or item.get("id") or "")
+            result["research_tasks"].append(
+                {
+                    "id": task_id,
+                    "status": item.get("status"),
+                    "created_at": item.get("created_at"),
+                    "tracked": task_id in tracked,
+                }
+            )
+    except YutoriError as exc:
+        result["research_error"] = str(exc)[:300]
+
+    result["untracked_scouts"] = [
+        s["id"] for s in result["scouts"] if not s["tracked"] and s["status"] in ("active", "paused")
+    ]
+    return result
+
+
 async def run_history(
     db: AsyncSession, definition_id: uuid.UUID | None = None
 ) -> list[dict]:

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { RunScoutButton } from "../../run-scout-button";
 import { type ScoutStatus, useScout } from "../../use-scout";
-import { type Instance, scoutApi } from "@/lib/scout-api";
+import { type Instance, scoutApi, when as fmt } from "@/lib/scout-api";
 import { ConfirmDialog } from "../../confirm-dialog";
 import ws from "../../workspace.module.css";
 import styles from "../scout.module.css";
@@ -189,11 +189,20 @@ export default function ScoutPage() {
   const { scout, message, park, sync, pull, forget, isRunning } = useScout({ poll: true });
   const [showRaw, setShowRaw] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Instance | null>(null);
+  const [showRemote, setShowRemote] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: instances } = useQuery({
     queryKey: ["instances"],
     queryFn: scoutApi.listInstances,
+  });
+
+  // Only fetched when asked for: two calls out to Yutori, and the page has to
+  // render fine without them.
+  const { data: remote, isFetching: remoteLoading } = useQuery({
+    queryKey: ["remote-inventory"],
+    queryFn: scoutApi.remoteInventory,
+    enabled: showRemote,
   });
 
   // The only action in the app that stops something billing: a live Scout runs
@@ -642,6 +651,112 @@ export default function ScoutPage() {
               )}
           </>
         )}
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <h2 className={styles.sectionTitle}>Everything at Yutori</h2>
+          <button
+            type="button"
+            className={styles.textButton}
+            onClick={() => setShowRemote((on) => !on)}
+          >
+            {showRemote ? "Hide" : "List scouts and research tasks"}
+          </button>
+        </div>
+        <div className={styles.pageSub}>
+          Read from Yutori rather than from this app&apos;s records. Anything alive here that the
+          app does not track is billing on its own schedule with nobody watching it.
+        </div>
+
+        {showRemote &&
+          (remoteLoading ? (
+            <div className={styles.empty}>Asking Yutori…</div>
+          ) : remote?.error ? (
+            <div className={styles.alert}>
+              <strong>Could not read the account.</strong> {remote.error}
+            </div>
+          ) : (
+            <>
+              {remote && remote.untracked_scouts.length > 0 && (
+                <div className={styles.alert}>
+                  <strong>
+                    {remote.untracked_scouts.length} Scout
+                    {remote.untracked_scouts.length === 1 ? "" : "s"} here{" "}
+                    {remote.untracked_scouts.length === 1 ? "is" : "are"} not tracked by this app.
+                  </strong>{" "}
+                  They keep running on their own interval. Nothing in this app is watching them.
+                </div>
+              )}
+
+              <h3 className={ws.sectionTitle} style={{ fontSize: "16px" }}>
+                Scouts ({remote?.scouts.length ?? 0})
+              </h3>
+              {!remote?.scouts.length ? (
+                <div className={styles.empty}>No Scouts exist under this key.</div>
+              ) : (
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>ID</th><th>Status</th><th>Created</th><th>Updates</th>
+                        <th>Next run</th><th>Tracked</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {remote.scouts.map((scout) => (
+                        <tr key={scout.id}>
+                          <td className={styles.mono}>{scout.id}</td>
+                          <td>{scout.status ?? "—"}</td>
+                          <td>{fmt(scout.created_at)}</td>
+                          <td className={styles.num}>{scout.update_count ?? "—"}</td>
+                          <td>{scout.next_run ? fmt(scout.next_run) : "not scheduled"}</td>
+                          <td className={scout.tracked ? styles.ok : styles.missed}>
+                            {scout.tracked ? "yes" : "untracked"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <h3 className={ws.sectionTitle} style={{ fontSize: "16px", marginTop: "10px" }}>
+                Research tasks ({remote?.research_tasks.length ?? 0})
+              </h3>
+              {remote?.research_error ? (
+                <div className={styles.notice}>{remote.research_error}</div>
+              ) : !remote?.research_tasks.length ? (
+                <div className={styles.empty}>No research tasks under this key.</div>
+              ) : (
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr><th>ID</th><th>Status</th><th>Created</th><th>Tracked</th></tr>
+                    </thead>
+                    <tbody>
+                      {remote.research_tasks.map((task) => (
+                        <tr key={task.id}>
+                          <td className={styles.mono}>{task.id}</td>
+                          <td className={task.status === "succeeded" ? styles.ok : ""}>
+                            {task.status ?? "—"}
+                          </td>
+                          <td>{fmt(task.created_at)}</td>
+                          <td className={task.tracked ? styles.ok : ""}>
+                            {task.tracked ? "yes" : "not ours"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <p className={ws.hint}>
+                An untracked research task is harmless — it is already finished. An untracked
+                Scout is not.
+              </p>
+            </>
+          ))}
       </section>
 
       <section className={styles.section}>
