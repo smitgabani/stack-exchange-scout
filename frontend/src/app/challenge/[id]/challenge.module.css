@@ -1,5 +1,7 @@
 .page {
-  max-width: var(--content-narrow);
+  /* Was --content-narrow, which made this the only page in the app not
+     matching the dashboard, questions, challenges and the Yutori section. */
+  max-width: var(--content-wide);
   /* body is a flex column, and auto side margins there suppress the
      default stretch — without width:100% the page shrinks to fit its
      content and no two pages end up the same width. */
@@ -151,6 +153,9 @@
   font-size: 22px;
   font-weight: 400;
   line-height: 1.5;
+  /* The container is wide now, but a line of prose is not improved by being
+     150 characters long. Capped in `ch` like workspace.module.css does. */
+  max-width: 62ch;
 }
 
 .block {
@@ -171,12 +176,16 @@
   font-size: 16px;
   line-height: 1.5;
   color: var(--body-text);
+  max-width: 72ch;
 }
 
 .hints {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* Caps the hint boxes and the dashed reveal button with them — a
+     full-width 1180px dashed button reads as a dropzone, not a control. */
+  max-width: 78ch;
 }
 
 .hintItem {
