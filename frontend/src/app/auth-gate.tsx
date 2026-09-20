@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: "/topics", label: "Topics" },
   { href: "/questions", label: "Questions" },
   { href: "/scout", label: "Scout" },
+  { href: "/accounts", label: "Accounts" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -69,7 +70,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`${styles.navLink} ${pathname === link.href ? styles.active : ""}`}
+                className={`${styles.navLink} ${
+                  pathname === link.href || pathname.startsWith(`${link.href}/`)
+                    ? styles.active
+                    : ""
+                }`}
               >
                 {link.label}
               </Link>
