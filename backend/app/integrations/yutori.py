@@ -98,6 +98,17 @@ class YutoriError(RuntimeError):
     """Any non-success response or transport failure from Yutori."""
 
 
+class YutoriForbidden(YutoriError):
+    """The key is valid but does not own this object.
+
+    Yutori answers `403 "Only the creator of a scout can edit it"` when a Scout
+    was created under a different account. Distinct from YutoriError because it
+    is not a failure to retry or report as an outage — it means the stored
+    reference belongs to somebody else's account and never will resolve under
+    this key.
+    """
+
+
 class YutoriNotFound(YutoriError):
     """The Scout is gone. For teardown that counts as success, not failure.
 
@@ -153,6 +164,8 @@ class YutoriClient:
 
         if response.status_code == 404:
             raise YutoriNotFound(f"Yutori returned 404 for {path}")
+        if response.status_code == 403:
+            raise YutoriForbidden(f"Yutori returned 403: {response.text[:300]}")
         if response.status_code >= 400:
             # Truncated, and never including headers — they carry the API key.
             # The body is kept because Yutori puts the useful part there: it is

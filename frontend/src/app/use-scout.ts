@@ -18,6 +18,7 @@ export type ScoutStatus = {
   update_count: number | null;
   last_update_at: string | null;
   rejection_reason: string | null;
+  account_mismatch?: boolean;
   run_cost_usd: number;
 };
 
@@ -133,6 +134,21 @@ export function useScout({ poll = false }: { poll?: boolean } = {}) {
     onError: (error: Error) => setMessage(error.message),
   });
 
+  const forget = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/scout/forget", { method: "POST" });
+      return response.json();
+    },
+    onSuccess: async (body) => {
+      setMessage(
+        body.error
+          ? `Could not forget: ${body.error}`
+          : "Forgotten. The next run will start fresh under the current API key — no questions were removed.",
+      );
+      await invalidate();
+    },
+  });
+
   const pull = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/scout/pull", { method: "POST" });
@@ -158,5 +174,6 @@ export function useScout({ poll = false }: { poll?: boolean } = {}) {
     park,
     sync,
     pull,
+    forget,
   };
 }

@@ -8,7 +8,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.integrations.yutori import YutoriClient, YutoriError, YutoriNotFound
+from app.integrations.yutori import (
+    YutoriClient,
+    YutoriError,
+    YutoriForbidden,
+    YutoriNotFound,
+)
 from app.models.scout import Scout, ScoutEvent
 from app.models.webhook_event import WebhookEvent
 from app.repositories import scout_repository
@@ -139,6 +144,71 @@ async def record_event(
         logger.warning("Failed to record scout event %s: %s", event_type, exc)
 
 
+def fingerprint(api_key: str) -> str:
+    """Identify the account behind a key without storing the key twice.
+
+    Yutori exposes no account id, so this is the only way to tell "created by
+    the key you have now" from "created by someone else's". One-way and
+    truncated: it identifies, it does not reveal.
+    """
+    return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+
+
+async def current_fingerprint(db: AsyncSession) -> str | None:
+    api_key = await get_api_key(db, "yutori_api_key")
+    return fingerprint(api_key) if api_key else None
+
+
+async def account_mismatch(db: AsyncSession, scout: Scout | None) -> bool:
+    """True when the stored Scout was created by a different API key.
+
+    A NULL fingerprint means "created before we started recording this", which
+    is unknown rather than mismatched — so it is not treated as a mismatch, and
+    the first successful edit repairs it.
+    """
+    if (
+        scout is None
+        or scout.external_scout_id is None
+        or not scout.account_fingerprint
+    ):
+        return False
+    current = await current_fingerprint(db)
+    return current is not None and current != scout.account_fingerprint
+
+
+async def forget_remote_scout(db: AsyncSession) -> dict[str, Any]:
+    """Drop our reference to a Scout we can no longer administer.
+
+    The escape hatch for a key change: the Scout still exists in whichever
+    account created it, and nothing here can stop or delete it — but this app
+    should stop pretending it owns it. Local only, and it touches no discovered
+    data (ADR 0004: removing a link never removes what it found).
+    """
+    scout = await scout_repository.get(db)
+    if scout is None:
+        return {"action": "skipped", "error": "No Scout exists"}
+
+    previous = scout.external_scout_id
+    scout.external_scout_id = None
+    scout.account_fingerprint = None
+    scout.external_status = None
+    scout.next_run_at = None
+    scout.update_count = None
+    scout.run_state = "idle"
+    scout.run_kind = None
+    scout.run_external_id = None
+    scout.sync_status = "pending"
+    scout.last_sync_error = None
+    await scout_repository.save(db, scout)
+    await record_event(
+        db,
+        "parked",
+        scout=scout,
+        detail={"action": "forgotten", "external_scout_id": previous},
+    )
+    return {"action": "forgotten", "external_scout_id": previous}
+
+
 async def get_client(db: AsyncSession) -> YutoriClient | None:
     """A client built from the stored key, or None when there isn't a usable one.
 
@@ -193,6 +263,15 @@ async def sync(
     if not settings.public_base_url:
         return SyncResult(action="skipped", error="PUBLIC_BASE_URL is not configured")
 
+    if await account_mismatch(db, scout):
+        # Calling anyway would just earn a 403. Say what is actually wrong.
+        return SyncResult(
+            action="skipped",
+            scout_id=scout.external_scout_id if scout else None,
+            error="This Scout was created with a different Yutori API key, so this "
+            "key cannot edit it. Forget it to start fresh under the current key.",
+        )
+
     client = YutoriClient(api_key)
     interval_seconds = max(profile_data.scout.interval_days, 1) * SECONDS_PER_DAY
 
@@ -223,6 +302,27 @@ async def sync(
                 output_interval_seconds=interval_seconds,
             )
             action = "updated"
+    except YutoriForbidden:
+        # Valid key, someone else's Scout. Recorded so the UI can offer the fix
+        # rather than showing a raw 403.
+        logger.warning("Scout belongs to another Yutori account")
+        scout.sync_status = "unreachable"
+        scout.last_sync_error = (
+            "This Scout was created with a different Yutori API key, so this key "
+            "cannot edit it. Forget it to start fresh under the current key."
+        )
+        await scout_repository.save(db, scout)
+        await record_event(
+            db,
+            "error",
+            scout=scout,
+            detail={"stage": "sync", "error": "account_mismatch"},
+        )
+        return SyncResult(
+            action="failed",
+            scout_id=scout.external_scout_id,
+            error=scout.last_sync_error,
+        )
     except YutoriError as exc:
         # Deliberately swallowed: the caller's profile save must still succeed.
         logger.warning("Scout sync failed: %s", exc)
@@ -238,6 +338,10 @@ async def sync(
     scout.sync_status = "active"
     scout.last_sync_error = None
     scout.last_synced_at = datetime.now(UTC)
+    # A successful edit proves this key owns the Scout — which records the owner
+    # for a newly created one, and repairs a NULL left by rows that predate
+    # fingerprinting.
+    scout.account_fingerprint = fingerprint(api_key)
     await scout_repository.save(db, scout)
     # The full query is logged, not a diff, so that reading the timeline later
     # shows what was actually being searched at the time — which is how a change
@@ -281,6 +385,18 @@ async def refresh_detail(db: AsyncSession, *, force: bool = False) -> Scout | No
 
     try:
         detail = await client.get_scout(scout.external_scout_id)
+    except YutoriForbidden:
+        # Valid key, someone else's Scout. Keep the reference so the UI can
+        # explain and offer to forget it, but stop claiming to know its state.
+        scout.external_status = None
+        scout.next_run_at = None
+        scout.sync_status = "unreachable"
+        scout.last_sync_error = (
+            "This Scout was created with a different Yutori API key, so this key "
+            "cannot read or edit it. Forget it to start fresh under the current key."
+        )
+        scout.detail_refreshed_at = datetime.now(UTC)
+        return await scout_repository.save(db, scout)
     except YutoriNotFound:
         # Someone deleted it at Yutori's end. Forget the id so the next run
         # creates a fresh Scout rather than restarting one that isn't there.

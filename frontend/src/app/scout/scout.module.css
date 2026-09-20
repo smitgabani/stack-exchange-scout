@@ -350,3 +350,36 @@
   line-height: 1.45;
   word-break: break-word;
 }
+
+.alertActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+/* On the coral alert block, so it inverts rather than using the page palette. */
+.alertButton {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  color: var(--on-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.alertButton:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.alertButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

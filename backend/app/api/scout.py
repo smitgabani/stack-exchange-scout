@@ -39,6 +39,11 @@ class ScoutStatus(BaseModel):
     last_update_at: datetime | None = None
     rejection_reason: str | None = None
 
+    # True when the stored Scout was created under a different API key, so no
+    # edit to it can succeed. Surfaced as a state rather than left to fail as a
+    # 403 at the moment someone presses something.
+    account_mismatch: bool = False
+
     # So the confirmation dialog's figure comes from config, not hardcoded copy.
     run_cost_usd: float = settings.yutori_run_cost_usd
 
@@ -73,10 +78,11 @@ def mask_webhook_url(url: str | None) -> str | None:
     return f"{parts.scheme}://{parts.netloc}{parts.path}"
 
 
-def _status_from(scout: Any) -> ScoutStatus:
+def _status_from(scout: Any, *, mismatch: bool = False) -> ScoutStatus:
     if scout is None:
         return ScoutStatus(configured=False)
     return ScoutStatus(
+        account_mismatch=mismatch,
         configured=scout.external_scout_id is not None,
         external_scout_id=scout.external_scout_id,
         sync_status=scout.sync_status,
@@ -106,7 +112,8 @@ async def get_scout(db: AsyncSession = Depends(get_db)) -> ScoutStatus:
     await scout_service.poll_research_run(db)
     await scout_service.refresh_detail(db)
     await scout_service.finish_run_if_complete(db)
-    return _status_from(await scout_service.get_status(db))
+    scout = await scout_service.get_status(db)
+    return _status_from(scout, mismatch=await scout_service.account_mismatch(db, scout))
 
 
 @router.post(
@@ -176,6 +183,18 @@ async def park_scout(db: AsyncSession = Depends(get_db)) -> dict:
     return {"action": result.action, "error": result.error}
 
 
+@router.post("/scout/forget")
+async def forget_scout(db: AsyncSession = Depends(get_db)) -> dict:
+    """Drop the reference to a Scout this key cannot administer. Free, local.
+
+    The escape hatch after changing to a key from another account: Yutori
+    answers `403 "Only the creator of a scout can edit it"`, and nothing here
+    can fix that. Forgetting clears the link so the next run starts fresh —
+    and touches no discovered questions.
+    """
+    return await scout_service.forget_remote_scout(db)
+
+
 @router.post("/scout/pull")
 async def pull_scout_updates(db: AsyncSession = Depends(get_db)) -> dict:
     """Ingest updates Yutori produced that never reached our webhook. Free."""
@@ -233,8 +252,9 @@ async def scout_panel(include_raw: bool = False, db: AsyncSession = Depends(get_
     current_query = query_generator.generate(ProfileData.model_validate(profile.data))
     query_is_current = bool(scout and scout.query_text == current_query)
 
+    mismatch = await scout_service.account_mismatch(db, scout)
     return {
-        "status": _status_from(scout).model_dump(mode="json"),
+        "status": _status_from(scout, mismatch=mismatch).model_dump(mode="json"),
         "query_text": scout.query_text if scout else None,
         "current_query_text": None if query_is_current else current_query,
         "query_is_current": query_is_current,

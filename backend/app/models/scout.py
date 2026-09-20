@@ -61,6 +61,12 @@ class Scout(Base):
     # The research task id, when run_kind is research_task.
     run_external_id: Mapped[str | None] = mapped_column(String(128))
 
+    # Which API key created this Scout: sha256(key)[:16]. Yutori has no account
+    # id, and a key from another account cannot edit someone else's Scout — so
+    # this is how that is known before an edit is attempted rather than after
+    # it fails with a 403. Derived and one-way; not a second copy of the key.
+    account_fingerprint: Mapped[str | None] = mapped_column(String(32))
+
     # --- mirrored from Yutori's scout detail, for display --------------------
     external_status: Mapped[str | None] = mapped_column(String(16))
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -183,7 +183,7 @@ function StatusCard({ status }: { status: ScoutStatus }) {
 
 export default function ScoutPage() {
   // The one page where someone is watching a run, so the only one that polls.
-  const { scout, message, park, sync, pull, isRunning } = useScout({ poll: true });
+  const { scout, message, park, sync, pull, forget, isRunning } = useScout({ poll: true });
   const [showRaw, setShowRaw] = useState(false);
   const { data: panel, isLoading } = useQuery({
     queryKey: ["scout-panel", showRaw],
@@ -202,7 +202,7 @@ export default function ScoutPage() {
   // the backend it talks to. Default anything the older API won't send.
   const diag = panel.run_diagnostics ?? { run_state: "idle", has_run_record: false };
   const raw = panel.raw ?? { scout_detail: null, usage: null, latest_update: null };
-  const busy = park.isPending || sync.isPending || pull.isPending;
+  const busy = park.isPending || sync.isPending || pull.isPending || forget.isPending;
 
   return (
     <main className={styles.page}>
@@ -225,6 +225,33 @@ export default function ScoutPage() {
           <RunScoutButton className={styles.primary} label="Run now" />
         </div>
       </div>
+
+      {/* A Scout created under another account cannot be edited by this key —
+          Yutori answers 403. Nothing here can fix that, so the page explains it
+          and offers the only real action: stop pointing at it. */}
+      {status.account_mismatch && (
+        <div className={styles.alert}>
+          <strong>This Scout belongs to a different Yutori account.</strong> It was
+          created with another API key, so the key you are using now cannot read,
+          edit, run or delete it — Yutori refuses with &ldquo;Only the creator of a
+          scout can edit it&rdquo;. The Scout itself keeps existing in whichever
+          account made it; only its owner can stop it.
+          <div className={styles.alertActions}>
+            <button
+              type="button"
+              className={styles.alertButton}
+              onClick={() => forget.mutate()}
+              disabled={busy}
+            >
+              Forget this Scout
+            </button>
+            <span>
+              Clears the link only. No discovered questions are removed, and a
+              research run works regardless.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* An out-of-credit Scout looks exactly like one that found nothing, and
           the dashboard would claim the latter. This says which it is. */}

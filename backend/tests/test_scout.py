@@ -9,7 +9,7 @@ would destroy the live Scout.
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.api.scout import mask_webhook_url
 from app.core.config import settings
@@ -18,6 +18,11 @@ from app.models.scout import Scout, ScoutEvent
 from app.models.webhook_event import WebhookEvent
 from app.schemas.profile import ProfileData
 from app.services import scout_service
+
+
+async def _async_value(value):
+    """Tiny awaitable so a coroutine function can be monkeypatched inline."""
+    return value
 
 
 class FakeClient:
@@ -589,3 +594,72 @@ async def test_a_failed_research_task_closes_the_run_and_records_why(
         .order_by(ScoutEvent.created_at.desc())
     )
     assert event.detail["rejection_reason"] == "insufficient_prepaid_balance"
+
+
+@pytest.mark.anyio
+async def test_a_scout_from_another_account_is_not_edited(
+    db_session, scout_row, profile_data, monkeypatch
+):
+    """Yutori answers 403 "Only the creator of a scout can edit it". Knowing the
+    owner beforehand turns that into an explanation instead of a failure."""
+    client = FakeClient()
+    _patch_client(monkeypatch, client)
+    # sync() reads the key itself rather than going through get_client, so both
+    # have to be stubbed for the guard to be the thing under test.
+    monkeypatch.setattr(scout_service, "get_api_key", lambda db, name: _async_value("key-b"))
+    monkeypatch.setattr(
+        scout_service, "current_fingerprint", lambda db: _async_value("bbbbbbbbbbbbbbbb")
+    )
+
+    scout_row.account_fingerprint = "aaaaaaaaaaaaaaaa"
+    await db_session.commit()
+
+    assert await scout_service.account_mismatch(db_session, scout_row) is True
+
+    result = await scout_service.sync(db_session, profile_data, allow_create=True)
+
+    assert result.action == "skipped"
+    assert "different Yutori API key" in (result.error or "")
+    # The point of knowing: no call is made that could only have failed.
+    assert client.calls == []
+
+
+@pytest.mark.anyio
+async def test_an_unknown_owner_is_not_treated_as_a_mismatch(db_session, scout_row):
+    """A NULL fingerprint predates the column. Unknown is not wrong — blocking
+    on it would strand every Scout created before fingerprinting existed."""
+    scout_row.account_fingerprint = None
+    await db_session.commit()
+
+    assert await scout_service.account_mismatch(db_session, scout_row) is False
+
+
+@pytest.mark.anyio
+async def test_forgetting_a_scout_keeps_every_discovered_question(
+    db_session, scout_row, monkeypatch
+):
+    """ADR 0004: removing a link never removes what it found, or the user would
+    rediscover and re-pay for questions they have already seen."""
+    from app.models.question import Question
+
+    before = await db_session.scalar(select(func.count()).select_from(Question))
+
+    result = await scout_service.forget_remote_scout(db_session)
+
+    assert result["action"] == "forgotten"
+    await db_session.refresh(scout_row)
+    assert scout_row.external_scout_id is None
+    assert scout_row.account_fingerprint is None
+
+    after = await db_session.scalar(select(func.count()).select_from(Question))
+    assert after == before
+
+
+def test_fingerprint_identifies_without_revealing():
+    key = "yut_super_secret_key_value"
+    printed = scout_service.fingerprint(key)
+
+    assert len(printed) == 16
+    assert printed == scout_service.fingerprint(key)
+    assert printed != scout_service.fingerprint(key + "x")
+    assert key not in printed
