@@ -68,6 +68,59 @@ export type Run = {
   above_bar?: number;
 };
 
+/** What became of one question a run returned. */
+export type RunQuestionFate =
+  | "not_ingested"
+  | "unparseable"
+  | "awaiting_enrichment"
+  | "filtered_out"
+  | "dismissed"
+  | "in_pool"
+  | "made_a_challenge"
+  | "solved"
+  | "skipped";
+
+export type RunQuestion = {
+  stackoverflow_question_id: number;
+  question_id: string | null;
+  url: string;
+  title: string | null;
+  tags: string[];
+  status: string | null;
+  fate: RunQuestionFate;
+  rejection_reason: string | null;
+  candidate_score: number | null;
+  difficulty: number | null;
+  /** False = this run returned something the app already had. */
+  first_seen_here: boolean;
+  challenge_id: string | null;
+};
+
+export type RunDetail = {
+  id: string;
+  definition_id: string | null;
+  kind: "research_task" | "scout";
+  status: Run["status"];
+  cost_usd: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  delivered_by: string | null;
+  account_label: string | null;
+  error: string | null;
+  returned: number;
+  unique_questions: number;
+  unparseable: number;
+  new_here: number;
+  already_known: number;
+  above_bar: number;
+  challenges: number;
+  fates: Record<string, number>;
+  event_status: string | null;
+  has_payload: boolean;
+  cost_per_new_question: number | null;
+  questions: RunQuestion[];
+};
+
 export type Account = {
   id: number;
   label: string;
@@ -177,6 +230,8 @@ export const scoutApi = {
     ),
 
   listRuns: () => json<{ runs: Run[] }>("/api/scout-runs"),
+
+  getRun: (id: string) => json<RunDetail>(`/api/scout-runs/${id}`),
 
   /** Ask Yutori what happened to a run and collect the result if it is ready. */
   syncRun: (id: string) =>

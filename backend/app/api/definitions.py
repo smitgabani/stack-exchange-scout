@@ -287,6 +287,20 @@ async def list_runs(db: AsyncSession = Depends(get_db)) -> dict:
     return {"runs": await definition_service.run_history(db)}
 
 
+@router.get("/scout-runs/{run_id}")
+async def get_run(run_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """One run, and what became of every question it returned.
+
+    The point is to make a good query distinguishable from a lucky one: how
+    many results were new rather than already known, how many cleared the
+    digest bar, and where the rest were lost.
+    """
+    detail = await definition_service.run_detail(db, run_id)
+    if detail is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such run")
+    return detail
+
+
 @router.post("/scout-runs/{run_id}/sync")
 async def sync_run(run_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Ask Yutori what happened to this run and collect the result if ready.

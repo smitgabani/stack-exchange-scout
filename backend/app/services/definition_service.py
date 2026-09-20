@@ -18,12 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.integrations.yutori import YutoriError, YutoriForbidden, YutoriNotFound
+from app.models.challenge import Challenge
 from app.models.question import Question
 from app.models.scout_definition import ScoutDefinition, ScoutInstance, ScoutRun
 from app.models.webhook_event import WebhookEvent
 from app.repositories import credential_repository
 from app.schemas.profile import ProfileData
-from app.services import query_generator, scout_service
+from app.services import ingest_service, query_generator, scout_service
 
 logger = logging.getLogger(__name__)
 
@@ -650,3 +651,157 @@ async def effectiveness(db: AsyncSession) -> list[dict]:
     return sorted(
         rows, key=lambda r: (r["per_dollar"] is None, -(r["per_dollar"] or 0))
     )
+
+
+# What a question's current state means for the run that found it. Grouped
+# rather than shown raw, because "rejected" alone does not say whether the
+# filters threw it out or the user did.
+def _fate(question: Question | None, ingested: bool) -> str:
+    if question is None:
+        return "not_ingested" if not ingested else "unparseable"
+    if question.status == "enrichment_pending":
+        return "awaiting_enrichment"
+    if question.status == "rejected":
+        return "dismissed" if question.rejection_reason == "user_dismissed" else "filtered_out"
+    if question.status in ("selected", "presented"):
+        return "made_a_challenge"
+    if question.status == "solved":
+        return "solved"
+    if question.status == "skipped":
+        return "skipped"
+    return "in_pool"
+
+
+async def run_detail(db: AsyncSession, run_id: uuid.UUID) -> dict | None:
+    """One run, and the fate of every question it returned.
+
+    Reads the run's stored payload rather than querying `questions` by
+    `source_event_id`. That join answers a different question than it appears
+    to: ingest dedupes on `canonical_url` and only moves `last_seen_at` on a
+    re-sighting, so a question this run returned but that was already known
+    still points at the event that first saw it. Counting by the join makes a
+    run that returned twenty known questions look like it returned nothing —
+    true about its *new* yield, misleading about what it actually did.
+
+    So the payload says what came back, and `questions` says what became of
+    each one. The gap between the two is the rediscovery rate, which is the
+    number that tells a sharp query from a stale one.
+    """
+    run = await db.get(ScoutRun, run_id)
+    if run is None:
+        return None
+
+    event = (
+        await db.get(WebhookEvent, run.webhook_event_id) if run.webhook_event_id else None
+    )
+    ingested = bool(event and event.status == "processed")
+
+    returned: list[dict[str, Any]] = []
+    if event is not None:
+        returned = ingest_service.parse_candidates(event.payload)
+
+    wanted: dict[int, dict[str, Any]] = {}
+    unparseable = 0
+    for candidate in returned:
+        question_id = ingest_service.extract_question_id(
+            candidate.get("question_id")
+        ) or ingest_service.extract_question_id(candidate.get("url"))
+        if question_id is None:
+            unparseable += 1
+            continue
+        # A run can return the same question twice; the pool holds it once.
+        wanted.setdefault(question_id, candidate)
+
+    rows: list[dict[str, Any]] = []
+    if wanted:
+        found = (
+            await db.scalars(
+                select(Question).where(Question.stackoverflow_question_id.in_(wanted))
+            )
+        ).all()
+        by_id = {q.stackoverflow_question_id: q for q in found}
+
+        challenge_rows = (
+            await db.execute(
+                select(Challenge.question_id, Challenge.id).where(
+                    Challenge.question_id.in_([q.id for q in found])
+                )
+            )
+        ).all()
+        challenges = {question_id: cid for question_id, cid in challenge_rows}
+
+        for question_id, candidate in wanted.items():
+            question = by_id.get(question_id)
+            rows.append(
+                {
+                    "stackoverflow_question_id": question_id,
+                    "question_id": str(question.id) if question else None,
+                    "url": (question.url if question else None)
+                    or candidate.get("url")
+                    or f"https://stackoverflow.com/questions/{question_id}",
+                    "title": (question.title if question else None) or candidate.get("title"),
+                    "tags": (question.tags if question else None)
+                    or [str(t) for t in (candidate.get("tags") or [])],
+                    "status": question.status if question else None,
+                    "fate": _fate(question, ingested),
+                    "rejection_reason": question.rejection_reason if question else None,
+                    "candidate_score": float(question.candidate_score)
+                    if question is not None and question.candidate_score is not None
+                    else None,
+                    "difficulty": (question.difficulty if question else None)
+                    or candidate.get("difficulty"),
+                    # False means this run returned a question the app already
+                    # had — paid for, but bought nothing new.
+                    "first_seen_here": bool(
+                        question is not None
+                        and event is not None
+                        and question.source_event_id == event.id
+                    ),
+                    "challenge_id": str(challenges[question.id])
+                    if question is not None and question.id in challenges
+                    else None,
+                }
+            )
+
+    rows.sort(
+        key=lambda r: (r["candidate_score"] is None, -(r["candidate_score"] or 0), r["title"] or "")
+    )
+
+    new_here = sum(1 for r in rows if r["first_seen_here"])
+    above_bar = sum(
+        1
+        for r in rows
+        if r["candidate_score"] is not None and r["candidate_score"] >= settings.digest_min_score
+    )
+    tally: dict[str, int] = {}
+    for row in rows:
+        tally[row["fate"]] = tally.get(row["fate"], 0) + 1
+
+    return {
+        "id": str(run.id),
+        "definition_id": str(run.definition_id) if run.definition_id else None,
+        "kind": run.kind,
+        "status": run.status,
+        "cost_usd": float(run.cost_usd) if run.cost_usd is not None else None,
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        "delivered_by": run.delivered_by,
+        "account_label": run.account_label,
+        "error": run.error,
+        "returned": len(returned),
+        "unique_questions": len(wanted),
+        "unparseable": unparseable,
+        "new_here": new_here,
+        "already_known": len(rows) - new_here,
+        "above_bar": above_bar,
+        "challenges": sum(1 for r in rows if r["challenge_id"]),
+        "fates": tally,
+        # The page has to be able to say "this run's results are still sitting
+        # in the inbox" — that is a $0.35 result not yet in the pool.
+        "event_status": event.status if event else None,
+        "has_payload": event is not None,
+        "cost_per_new_question": round(float(run.cost_usd) / new_here, 4)
+        if run.cost_usd and new_here
+        else None,
+        "questions": rows,
+    }
