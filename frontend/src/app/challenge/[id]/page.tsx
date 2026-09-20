@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { llmApi } from "@/lib/llm-api";
 import { ConfirmDialog } from "../../confirm-dialog";
+import { InfoButton } from "../../info-button";
 import { useState } from "react";
 import { Block, ProgressiveHints, SPECIAL_BLOCKS, isGated, labelFor } from "./blocks";
 import styles from "./challenge.module.css";
@@ -74,11 +75,29 @@ export default function ChallengePage() {
     mutationFn: () => llmApi.reformatChallenge(params.id, chosenFormat),
     onSuccess: async (result) => {
       setFormatOpen(false);
-      setNote(
-        result.added.length === 0
-          ? `Already has everything ${result.format} asks for — no call was made.`
-          : `Added ${result.added.length} section${result.added.length === 1 ? "" : "s"} from ${result.format}.`,
-      );
+      // A short result has to explain itself: "I asked for nine and got two"
+      // was previously something you had to work out from the page.
+      const parts: string[] = [];
+      if (result.added.length === 0 && result.missing.length === 0) {
+        parts.push(`Already has everything ${result.format} asks for — no call was made.`);
+      } else {
+        parts.push(
+          `Added ${result.added.length} section${result.added.length === 1 ? "" : "s"}: ${result.added
+            .map(labelFor)
+            .join(", ")}.`,
+        );
+      }
+      if (result.missing.length > 0) {
+        parts.push(
+          `The model did not produce ${result.missing.map(labelFor).join(", ")} — press Add sections again to retry just those.`,
+        );
+      }
+      if (result.dropped_links.length > 0) {
+        parts.push(
+          `${result.dropped_links.length} link${result.dropped_links.length === 1 ? "" : "s"} did not resolve and ${result.dropped_links.length === 1 ? "was" : "were"} dropped.`,
+        );
+      }
+      setNote(parts.join(" "));
       await queryClient.invalidateQueries({ queryKey: ["challenge"] });
       await queryClient.invalidateQueries({ queryKey: ["challenges"] });
     },
@@ -123,9 +142,12 @@ export default function ChallengePage() {
 
       <div className={styles.titleRow}>
         <h1 className={styles.title}>{challenge.question_title ?? "Challenge"}</h1>
-        <button type="button" className={styles.formatButton} onClick={() => setFormatOpen(true)}>
-          {challenge.format_name ? `Format: ${challenge.format_name}` : "Add sections"}
-        </button>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <button type="button" className={styles.formatButton} onClick={() => setFormatOpen(true)}>
+            {challenge.format_name ? `Format: ${challenge.format_name}` : "Add sections"}
+          </button>
+          <InfoButton text="Adds any blocks from the format you pick that this challenge doesn't already have. Sections you've already revealed, like hints, are left untouched. Costs one LLM call, or nothing if there's nothing new to add — and the challenge keeps its existing link." />
+        </span>
       </div>
 
       {note && <div className={styles.notice}>{note}</div>}

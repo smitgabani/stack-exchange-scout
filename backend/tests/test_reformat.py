@@ -228,3 +228,53 @@ async def test_a_spoiler_in_an_added_block_is_refused(existing_challenge) -> Non
 
     with pytest.raises(digest_service.PromotionError):
         await _reformat(challenge_id, question_id, ["common_pitfalls"], _Spoiler())
+
+
+@pytest.mark.anyio
+async def test_blocks_the_model_declines_are_reported(existing_challenge) -> None:
+    """The bug this reporting exists for: nine blocks requested, two returned,
+    and nothing on the page said so. A short challenge must be explained.
+    """
+
+    class _Partial(_TopUpProvider):
+        async def generate_json(self, *, system_instruction, prompt, schema=None):
+            self.schemas.append(schema)
+            # Answers one of the two requested blocks and ignores the other.
+            return {"self_check": ["Does it handle an empty list?"]}
+
+    challenge_id, question_id = existing_challenge
+
+    result = await _reformat(
+        challenge_id, question_id, ["self_check", "common_pitfalls"], _Partial()
+    )
+
+    assert result["added"] == ["self_check"]
+    assert result["missing"] == ["common_pitfalls"]
+
+
+@pytest.mark.anyio
+async def test_a_resource_block_emptied_by_link_checking_is_reported(existing_challenge) -> None:
+    """Every link invented, so the block is empty and not worth storing — but
+    it must not read as a block that was never asked for.
+    """
+
+    class _BadLinks(_TopUpProvider):
+        async def generate_json(self, *, system_instruction, prompt, schema=None):
+            self.schemas.append(schema)
+            return {
+                "learning_resources": [
+                    {
+                        "title": "Invented",
+                        "url": "https://not-a-real-host-8c1f2a.invalid/guide",
+                        "why": "hallucinated",
+                    }
+                ]
+            }
+
+    challenge_id, question_id = existing_challenge
+
+    result = await _reformat(challenge_id, question_id, ["learning_resources"], _BadLinks())
+
+    assert result["added"] == []
+    assert result["missing"] == ["learning_resources"]
+    assert len(result["dropped_links"]) == 1

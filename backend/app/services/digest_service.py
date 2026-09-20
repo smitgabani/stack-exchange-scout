@@ -282,7 +282,13 @@ async def reformat_challenge(
         # so is cheaper and truer than pretending nothing happened.
         challenge.format_name = fmt.name
         await db.commit()
-        return {"added": [], "format": fmt.name, "spent_call": False}
+        return {
+            "added": [],
+            "missing": [],
+            "dropped_links": [],
+            "format": fmt.name,
+            "spent_call": False,
+        }
 
     provider = provider or await resolve_provider(db, profile_data)
     template = await prompt_service.get_active(db)
@@ -293,11 +299,9 @@ async def reformat_challenge(
     system_instruction = challenge_service.compose_system_instruction(
         template.system_instruction, missing
     )
+    # Every missing block is required: the schema contains exactly what was
+    # asked for and did not arrive.
     schema = challenge_blocks.build_schema(missing)
-    # build_schema marks core blocks required; none of the missing ones can be
-    # required here, since a core block absent from an existing challenge is
-    # not something this path is meant to repair.
-    schema["required"] = []
 
     try:
         payload = await provider.generate_json(
@@ -307,7 +311,11 @@ async def reformat_challenge(
     except (challenge_service.ChallengeValidationError, LLMError) as exc:
         raise PromotionError(f"Could not add those sections: {exc}") from exc
 
-    await format_service.verify_content_links(added, missing)
+    dropped = await format_service.verify_content_links(added, missing)
+    # A resource block whose every link failed verification is now empty, and
+    # an empty block is not worth storing — but it must be reported, or it is
+    # indistinguishable from one that was never requested.
+    added = {key: value for key, value in added.items() if value not in (None, "", [], {})}
 
     challenge.content = {**current, **added}
     challenge.format_name = fmt.name
@@ -315,7 +323,17 @@ async def reformat_challenge(
     challenge.model = provider.model
     await db.commit()
     await db.refresh(challenge)
-    return {"added": list(added.keys()), "format": fmt.name, "spent_call": True}
+
+    still_missing = [block.key for block in missing if block.key not in added]
+    return {
+        "added": list(added.keys()),
+        # Asked for and not produced. Surfaced so "I chose nine and got two"
+        # is visible rather than something to work out from the page.
+        "missing": still_missing,
+        "dropped_links": dropped,
+        "format": fmt.name,
+        "spent_call": True,
+    }
 
 
 async def load_digest_questions(db: AsyncSession, digest_id) -> list[tuple[Question, ChallengeRow]]:

@@ -182,7 +182,14 @@ export const llmApi = {
   /** Adds the blocks a format wants that a challenge lacks. One LLM call,
    *  or none when there is nothing to add. Keeps the challenge's id. */
   reformatChallenge: (challengeId: string, formatId: number | null) =>
-    json<{ added: string[]; format: string; spent_call: boolean }>(
+    json<{
+      added: string[];
+      /** Asked for and not produced by the model. */
+      missing: string[];
+      dropped_links: string[];
+      format: string;
+      spent_call: boolean;
+    }>(
       `/api/challenges/${challengeId}/reformat${formatId === null ? "" : `?format_id=${formatId}`}`,
       { method: "POST" },
     ),

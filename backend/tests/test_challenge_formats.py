@@ -108,8 +108,19 @@ def test_the_schema_grows_with_the_selected_blocks() -> None:
     assert "glossary" not in lean["properties"]
     assert "glossary" in rich["properties"]
     assert "self_check" in rich["properties"]
-    # Optional blocks are never required — an omitted block beats an invented one.
-    assert "glossary" not in rich["required"]
+
+
+def test_every_selected_block_is_required() -> None:
+    """Optional-to-the-model meant optional in practice: a nine-block format
+    came back with two. Turning a block on is a request, so the schema says so.
+    """
+    schema = challenge_blocks.build_schema(
+        challenge_blocks.resolve(["glossary", "self_check", "learning_resources"])
+    )
+
+    assert set(schema["required"]) == set(schema["properties"])
+    for key in ("glossary", "self_check", "learning_resources"):
+        assert key in schema["required"]
 
 
 def test_the_instructions_grow_with_the_selected_blocks() -> None:

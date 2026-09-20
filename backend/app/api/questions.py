@@ -10,7 +10,7 @@ from app.core.db import get_db
 from app.models.challenge import Challenge
 from app.models.question import Question
 from app.schemas.profile import ProfileData
-from app.services import digest_service, enrichment_service, rank_stage
+from app.services import digest_service, enrichment_service, format_service, rank_stage
 from app.services.profile_service import get_or_create_profile
 
 router = APIRouter(tags=["questions"])
@@ -228,7 +228,20 @@ async def promote_question(
         # resolve_provider only raises for a missing/unusable key.
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
-    return {"challenge_id": str(challenge.id), "question_id": str(question.id)}
+    # Recomputed rather than threaded back out of the service: cheap, and it
+    # keeps "what did I ask for" and "what arrived" compared in one place.
+    fmt = await format_service.resolve_for_run(db, format_id)
+    produced = challenge.content or {}
+    missing = [block.key for block in fmt.blocks if block.key not in produced]
+
+    return {
+        "challenge_id": str(challenge.id),
+        "question_id": str(question.id),
+        "format": fmt.name,
+        # Asked for and not produced, so a short challenge is explained rather
+        # than left to be noticed.
+        "missing": missing,
+    }
 
 
 @router.post("/candidates/enrich")

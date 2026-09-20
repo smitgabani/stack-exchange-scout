@@ -306,13 +306,19 @@ def resolve(keys: list[str] | tuple[str, ...] | None) -> list[Block]:
 
 
 def build_schema(blocks: list[Block]) -> dict[str, Any]:
-    """The structured-output schema for this selection of blocks."""
+    """The structured-output schema for this selection of blocks.
+
+    Every selected block is required. Marking only the core fields was the
+    original instinct — an optional block the model cannot fill is better
+    omitted than invented — but in practice it meant the model simply declined
+    the harder ones: a nine-block format returned two. Turning a block on is a
+    request, so the schema states it as one, and quality is handled where it
+    belongs, in validation and link checking.
+    """
     return {
         "type": "object",
         "properties": {block.key: block.schema for block in blocks},
-        # Only the core text fields are demanded. An optional block the model
-        # cannot fill for a given question is better omitted than invented.
-        "required": [b.key for b in blocks if b.core and b.key != "estimated_difficulty"],
+        "required": [block.key for block in blocks],
     }
 
 
