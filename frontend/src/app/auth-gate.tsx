@@ -19,7 +19,6 @@ const NAV_LINKS = [
   // The other half of the pipeline: discovery finds questions, this turns them
   // into challenges. Same shape of section, same reason for existing.
   { href: "/llm/pipeline", label: "LLM", match: "/llm" },
-  { href: "/settings", label: "Settings" },
 ];
 
 async function fetchSession(): Promise<{ authenticated: boolean }> {

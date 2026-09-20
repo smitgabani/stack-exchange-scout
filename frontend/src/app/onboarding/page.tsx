@@ -135,7 +135,7 @@ export default function OnboardingPage() {
                 autoFocus
               />
               <div className={styles.hint}>
-                Gemini turns selected questions into challenges. OpenAI is available later, in Settings, as an
+                Gemini turns selected questions into challenges. OpenAI is available later, under LLM, as an
                 optional alternative provider.
               </div>
               <button className={styles.btnPrimary} disabled={!geminiKey || saving} onClick={handleGeminiContinue}>
