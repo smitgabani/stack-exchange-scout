@@ -1,0 +1,232 @@
+"""Saved scout definitions: the workspace's CRUD and run surface (ADR 0004)."""
+
+import uuid
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import require_yutori_key
+from app.core.config import settings
+from app.core.db import get_db
+from app.schemas.profile import ProfileData
+from app.services import definition_service
+from app.services.profile_service import get_or_create_profile
+
+router = APIRouter(tags=["scout-definitions"])
+
+
+class DefinitionIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    query_source: str = "topics"
+    query_text: str | None = None
+    notes: str | None = None
+    config: dict[str, Any] | None = None
+
+
+class DefinitionPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    query_source: str | None = None
+    query_text: str | None = None
+    notes: str | None = None
+    config: dict[str, Any] | None = None
+    status: str | None = None
+
+
+def _out(definition: Any, *, rendered: str | None = None) -> dict:
+    return {
+        "id": str(definition.id),
+        "name": definition.name,
+        "notes": definition.notes,
+        "query_source": definition.query_source,
+        "query_text": definition.query_text,
+        # What would be sent if it ran right now. For a topics-based
+        # definition that is recomputed from the profile, so an edit to topics
+        # shows here before it costs anything to discover.
+        "rendered_query": rendered,
+        "config": definition.config,
+        "status": definition.status,
+        "created_at": definition.created_at.isoformat()
+        if definition.created_at
+        else None,
+        "updated_at": definition.updated_at.isoformat()
+        if definition.updated_at
+        else None,
+    }
+
+
+async def _profile_data(db: AsyncSession) -> ProfileData:
+    profile = await get_or_create_profile(db)
+    return ProfileData.model_validate(profile.data)
+
+
+@router.get("/scout-definitions")
+async def list_definitions(
+    include_archived: bool = False, db: AsyncSession = Depends(get_db)
+) -> dict:
+    definitions = await definition_service.list_definitions(
+        db, include_archived=include_archived
+    )
+    profile_data = await _profile_data(db)
+    history = await definition_service.run_history(db)
+
+    stats: dict[str, dict] = {}
+    for run in history:
+        key = run["definition_id"] or ""
+        entry = stats.setdefault(
+            key, {"runs": 0, "spend_usd": 0.0, "questions": 0, "last_run": None}
+        )
+        entry["runs"] += 1
+        entry["spend_usd"] = round(entry["spend_usd"] + (run["cost_usd"] or 0), 2)
+        entry["questions"] += run.get("questions") or 0
+        entry["last_run"] = entry["last_run"] or run["started_at"]
+
+    return {
+        "definitions": [
+            {
+                **_out(d, rendered=definition_service.render_query(d, profile_data)),
+                "stats": stats.get(
+                    str(d.id),
+                    {"runs": 0, "spend_usd": 0.0, "questions": 0, "last_run": None},
+                ),
+            }
+            for d in definitions
+        ],
+        "run_cost_usd": settings.yutori_run_cost_usd,
+    }
+
+
+@router.post("/scout-definitions", status_code=status.HTTP_201_CREATED)
+async def create_definition(
+    body: DefinitionIn, db: AsyncSession = Depends(get_db)
+) -> dict:
+    definition = await definition_service.create_definition(
+        db,
+        name=body.name,
+        query_source=body.query_source,
+        query_text=body.query_text,
+        notes=body.notes,
+        config=body.config,
+    )
+    return _out(
+        definition,
+        rendered=definition_service.render_query(definition, await _profile_data(db)),
+    )
+
+
+async def _require(db: AsyncSession, definition_id: uuid.UUID):
+    definition = await definition_service.get_definition(db, definition_id)
+    if definition is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No such scout"
+        )
+    return definition
+
+
+@router.get("/scout-definitions/{definition_id}")
+async def get_definition(
+    definition_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    definition = await _require(db, definition_id)
+    return {
+        **_out(
+            definition,
+            rendered=definition_service.render_query(
+                definition, await _profile_data(db)
+            ),
+        ),
+        "runs": await definition_service.run_history(db, definition_id),
+    }
+
+
+@router.patch("/scout-definitions/{definition_id}")
+async def patch_definition(
+    definition_id: uuid.UUID, body: DefinitionPatch, db: AsyncSession = Depends(get_db)
+) -> dict:
+    definition = await _require(db, definition_id)
+    changes = body.model_dump(exclude_unset=True)
+    if changes.get("query_source") not in (None, "topics", "freeform"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="query_source must be 'topics' or 'freeform'",
+        )
+    if changes.get("status") not in (None, "draft", "ready", "archived"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="status must be 'draft', 'ready' or 'archived'",
+        )
+    definition = await definition_service.update_definition(db, definition, changes)
+    return _out(
+        definition,
+        rendered=definition_service.render_query(definition, await _profile_data(db)),
+    )
+
+
+@router.post(
+    "/scout-definitions/{definition_id}/clone", status_code=status.HTTP_201_CREATED
+)
+async def clone_definition(
+    definition_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    definition = await _require(db, definition_id)
+    clone = await definition_service.clone_definition(db, definition)
+    return _out(
+        clone, rendered=definition_service.render_query(clone, await _profile_data(db))
+    )
+
+
+@router.delete("/scout-definitions/{definition_id}")
+async def delete_definition(
+    definition_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Delete a saved query. Its runs and every discovered question survive."""
+    definition = await _require(db, definition_id)
+    kept = await definition_service.delete_definition(db, definition)
+    return {"deleted": True, "kept": kept}
+
+
+@router.post(
+    "/scout-definitions/{definition_id}/run", dependencies=[Depends(require_yutori_key)]
+)
+async def run_definition(
+    definition_id: uuid.UUID, mode: str = "research", db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Run this scout now. **Billable** — about $0.35."""
+    if mode not in ("research", "scout"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="mode must be 'research' or 'scout'",
+        )
+    definition = await _require(db, definition_id)
+    outcome = await definition_service.run_definition(
+        db, definition, await _profile_data(db), mode=mode
+    )
+    if not outcome.started:
+        # 409 for "already running", 502 for anything Yutori refused.
+        code = (
+            status.HTTP_409_CONFLICT
+            if outcome.error and "in flight" in outcome.error
+            else status.HTTP_502_BAD_GATEWAY
+        )
+        raise HTTPException(
+            status_code=code, detail=outcome.error or "Could not start the run"
+        )
+    return {
+        "started": True,
+        "run_id": outcome.run_id,
+        "external_id": outcome.external_id,
+        "kind": outcome.kind,
+        "cost_usd": settings.yutori_run_cost_usd,
+    }
+
+
+@router.get("/scout-runs")
+async def list_runs(db: AsyncSession = Depends(get_db)) -> dict:
+    return {"runs": await definition_service.run_history(db)}
+
+
+@router.get("/scout-effectiveness")
+async def effectiveness(db: AsyncSession = Depends(get_db)) -> dict:
+    """Definitions ranked by questions per dollar."""
+    return {"rows": await definition_service.effectiveness(db)}
