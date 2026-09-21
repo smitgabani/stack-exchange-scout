@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { ConfirmDialog } from "../../confirm-dialog";
+import { InfoButton } from "../../info-button";
 import {
   type Definition,
   MODE_LABEL,
@@ -141,6 +142,7 @@ export default function ScoutsPage() {
           <button className={styles.primary} onClick={() => setCreating(true)}>
             New scout
           </button>
+          <InfoButton text="Saves a new query definition. Free to create — nothing runs and nothing is billed until you press Run on it." />
         </div>
       </div>
 
@@ -284,6 +286,7 @@ export default function ScoutsPage() {
                     >
                       Clone
                     </button>
+                    <InfoButton text="Makes a copy of this scout's query as a new, separate definition. The copy starts with no runs and no spend of its own." />
                     <Link className={`${styles.secondary} ${styles.tiny}`} href={`/yutori/scouts/${definition.id}`}>
                       Edit
                     </Link>
@@ -294,6 +297,7 @@ export default function ScoutsPage() {
                     >
                       Delete
                     </button>
+                    <InfoButton text="Removes this saved query from the app only. It does not delete anything at Yutori — a Scout monitor created from it keeps running and billing until deleted on the Monitors page. Its run history and every question it found are kept." />
                     <button
                       className={`${styles.primary} ${styles.tiny}`}
                       onClick={() => { setMode(defaultMode(definition.config)); setRunTarget(definition); }}
@@ -301,6 +305,7 @@ export default function ScoutsPage() {
                     >
                       Run · {money(cost)}
                     </button>
+                    <InfoButton text="Asks Yutori to search Stack Overflow now, using this scout's query. Costs the amount shown. Choose Scout monitor if you want it to keep running on its own interval afterward — that mode keeps billing until retired." />
                   </div>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { llmApi } from "@/lib/llm-api";
 import { colorForTopic } from "@/lib/topic-color";
 import { ConfirmDialog } from "../confirm-dialog";
+import { InfoButton } from "../info-button";
 import styles from "./questions.module.css";
 
 type QuestionRow = {
@@ -160,25 +161,34 @@ function QuestionCard({
             Make this a challenge
           </button>
         )}
+        {!question.challenge_id && (
+          <InfoButton text="Generates a coding challenge from this question using your LLM provider. Costs one LLM call. Does not spend Yutori credit and does not start a new discovery run." />
+        )}
 
         {dismissed ? (
-          <button
-            type="button"
-            className={styles.qactionGhost}
-            onClick={() => onRestore(question)}
-            disabled={busy}
-          >
-            Restore
-          </button>
+          <>
+            <button
+              type="button"
+              className={styles.qactionGhost}
+              onClick={() => onRestore(question)}
+              disabled={busy}
+            >
+              Restore
+            </button>
+            <InfoButton text="Returns this dismissed question to your active candidate pool." />
+          </>
         ) : (
-          <button
-            type="button"
-            className={styles.qactionDanger}
-            onClick={() => onDismiss(question)}
-            disabled={busy}
-          >
-            Dismiss
-          </button>
+          <>
+            <button
+              type="button"
+              className={styles.qactionDanger}
+              onClick={() => onDismiss(question)}
+              disabled={busy}
+            >
+              Dismiss
+            </button>
+            <InfoButton text="Removes this question from your candidate pool without deleting it, so it stops appearing here. It also won't be re-discovered by a future Scout run. You can bring it back anytime from the Dismissed filter." />
+          </>
         )}
       </div>
     </div>
@@ -289,6 +299,7 @@ export default function QuestionsPage() {
         >
           {running === "Ingest" ? "Ingesting…" : "Ingest webhooks"}
         </button>
+        <InfoButton text="Pulls in Yutori discovery results that arrived via webhook but haven't been added to your candidate pool yet." />
         <button
           className={styles.actionButton}
           onClick={() => runStage("/api/candidates/enrich", "Enrich")}
@@ -297,6 +308,7 @@ export default function QuestionsPage() {
         >
           {running === "Enrich" ? "Enriching…" : "Enrich pending"}
         </button>
+        <InfoButton text="Fetches full Stack Overflow data (score, answers, tags, body) for candidates that currently only have bare metadata." />
         <button
           className={styles.actionButton}
           onClick={() => runStage("/api/candidates/rank", "Rank")}
@@ -305,6 +317,7 @@ export default function QuestionsPage() {
         >
           {running === "Rank" ? "Ranking…" : "Re-score"}
         </button>
+        <InfoButton text="Re-runs scoring against your current profile for every candidate, picking up any recent changes to your topics or concepts." />
         {stageMessage && <span className={styles.stageResult}>{stageMessage}</span>}
       </div>
 

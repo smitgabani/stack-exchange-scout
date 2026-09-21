@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { colorForTopic } from "@/lib/topic-color";
+import { InfoButton } from "../info-button";
 import styles from "./topics.module.css";
 
 // What the backend actually does with this page's fields, in the order it does
@@ -205,6 +206,13 @@ function ConceptCard({
         <button className={styles.addTopic} onClick={submit} type="button">
           + Add
         </button>
+        <InfoButton
+          text={
+            excluded
+              ? "Adds a concept that causes any matching question to be rejected outright, once you press Save."
+              : "Adds a concept that gives a small ranking bonus to matching questions, once you press Save."
+          }
+        />
       </div>
     </div>
   );
@@ -338,6 +346,7 @@ export default function TopicsPage() {
           <button className={styles.addTopic} onClick={addTopic} type="button">
             + Add topic
           </button>
+          <InfoButton text="Adds a new topic to your list with a default weight of 50%. Nothing is sent to the server until you press Save." />
         </div>
       </div>
 
@@ -502,6 +511,7 @@ export default function TopicsPage() {
         <button className={styles.btnPrimary} onClick={handleSave} disabled={saving} type="button">
           {saving ? "Saving…" : "Save"}
         </button>
+        <InfoButton text="Writes your topics, concepts, difficulty range and preferences to your profile, and re-aims the Scout's next search at your new topics. Questions already discovered are unaffected — they keep the profile version they were found under." />
       </div>
     </main>
   );

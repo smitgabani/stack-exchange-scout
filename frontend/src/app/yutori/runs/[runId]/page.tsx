@@ -13,6 +13,7 @@ import {
   scoutApi,
   when,
 } from "@/lib/scout-api";
+import { InfoButton } from "../../../info-button";
 import styles from "../../../workspace.module.css";
 
 /** Each stage is somewhere candidates are lost, so a run that returned plenty
@@ -220,6 +221,7 @@ export default function RunPage() {
           >
             {ingest.isPending ? "Ingesting…" : "Ingest them now"}
           </button>
+          <InfoButton text="Pulls this run's already-paid-for results out of the inbox and adds them to your candidate pool, so they can be scored and turned into challenges." />
         </div>
       )}
 

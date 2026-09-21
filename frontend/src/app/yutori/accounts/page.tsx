@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { type Account, money, scoutApi, when } from "@/lib/scout-api";
+import { InfoButton } from "../../info-button";
 import styles from "../../workspace.module.css";
 
 export default function AccountsPage() {
@@ -122,6 +123,7 @@ export default function AccountsPage() {
         </div>
         <div className={styles.actions}>
           <button className={styles.primary} onClick={() => setAdding(true)}>Add a key</button>
+          <InfoButton text="Stores a new Yutori API key after Yutori confirms it is valid, and makes it the active key that future runs are charged to." />
         </div>
       </div>
 
@@ -194,6 +196,7 @@ export default function AccountsPage() {
                       >
                         Save
                       </button>
+                      <InfoButton text="Overrides the calculated spend shown for this account with the amount you type, or clears the override (if left empty) to go back to the calculated total. Does not change what Yutori actually billed." />
                       <button
                         className={`${styles.secondary} ${styles.tiny}`}
                         onClick={() => setEditingSpend(null)}
@@ -242,13 +245,16 @@ export default function AccountsPage() {
                 )}
                 <div className={styles.actions}>
                   {!account.is_active && (
-                    <button
-                      className={`${styles.secondary} ${styles.tiny}`}
-                      onClick={() => activate.mutate(account.id)}
-                      disabled={activate.isPending}
-                    >
-                      Make active
-                    </button>
+                    <>
+                      <button
+                        className={`${styles.secondary} ${styles.tiny}`}
+                        onClick={() => activate.mutate(account.id)}
+                        disabled={activate.isPending}
+                      >
+                        Make active
+                      </button>
+                      <InfoButton text="Makes this the active Yutori key. From now on, any run you start (from any page) is charged to this account instead." />
+                    </>
                   )}
                   <button
                     className={`${styles.secondary} ${styles.tiny}`}
@@ -265,6 +271,7 @@ export default function AccountsPage() {
                   >
                     Remove
                   </button>
+                  <InfoButton text="Deletes this stored key so the app can no longer reach that Yutori account. Every question, digest and run it produced stays — only the key and the ability to run anything against it are removed." />
                 </div>
               </div>
             </div>

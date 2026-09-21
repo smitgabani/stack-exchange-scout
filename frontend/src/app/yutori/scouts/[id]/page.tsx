@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ConfirmDialog } from "../../../confirm-dialog";
+import { InfoButton } from "../../../info-button";
 import {
   type Definition,
   MODE_LABEL,
@@ -108,9 +109,11 @@ export default function DefinitionPage() {
           >
             {save.isPending ? "Saving…" : "Save"}
           </button>
+          <InfoButton text="Writes your edits to this saved query. Nothing is sent to Yutori and nothing is billed — editing is always free." />
           <button className={styles.primary} onClick={() => setAsking("run")}>
             Run · $0.35
           </button>
+          <InfoButton text="Asks Yutori to search Stack Overflow now, using this scout's query. Costs about $0.35. Choose Scout monitor if you want it to keep running on its own interval afterward — that mode keeps billing until retired." />
         </div>
       </div>
 
@@ -280,6 +283,13 @@ export default function DefinitionPage() {
             >
               {data.status === "archived" ? "Restore from archive" : "Archive"}
             </button>
+            <InfoButton
+              text={
+                data.status === "archived"
+                  ? "Makes this scout runnable again and shows it in the default scouts list."
+                  : "Hides this scout from the default scouts list and blocks running it, without deleting it or any of its history. Restore it anytime."
+              }
+            />
           </div>
           <div className={styles.dangerZone}>
             <h2>Delete this scout</h2>
@@ -296,6 +306,7 @@ export default function DefinitionPage() {
             </p>
             <div className={styles.actions} style={{ marginTop: "14px" }}>
               <button className={styles.danger} onClick={() => setAsking("delete")}>Delete scout</button>
+              <InfoButton text="Removes this saved query from the app only. It does not delete anything at Yutori — a Scout monitor created from it keeps running and billing until deleted on the Monitors page. Its run history and every question it found are kept." />
             </div>
           </div>
         </div>

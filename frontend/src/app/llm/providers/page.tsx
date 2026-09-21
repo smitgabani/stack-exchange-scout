@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { llmApi } from "@/lib/llm-api";
+import { InfoButton } from "../../info-button";
 import ws from "../../workspace.module.css";
 
 type Provider = "gemini" | "openai";
@@ -76,6 +77,7 @@ function KeyRow({ id, name, note, active }: { id: Provider; name: string; note: 
             >
               {save.isPending ? "Saving…" : "Save"}
             </button>
+            <InfoButton text="Stores this key encrypted at rest, replacing any key already saved for this provider. It cannot be read back afterward, only replaced." />
             <button className={`${ws.secondary} ${ws.tiny}`} onClick={() => setEditing(false)}>
               Cancel
             </button>
@@ -131,7 +133,7 @@ export default function ProvidersPage() {
           Which service generates challenges. The prompt and the validation rules are identical
           either way — only the model differs.
         </div>
-        <div className={ws.seg} style={{ marginTop: 12 }}>
+        <div className={ws.seg} style={{ marginTop: 12, alignItems: "center" }}>
           {PROVIDERS.map((p) => {
             const disabled = p.id === "openai" && !openaiConnected;
             return (
@@ -146,6 +148,7 @@ export default function ProvidersPage() {
               </button>
             );
           })}
+          <InfoButton text="Switches which service generates future challenges. Challenges already generated keep the provider and model that made them — only new generations use the switch." />
         </div>
         {message && <div className={ws.notice}>{message}</div>}
       </div>

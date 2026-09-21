@@ -6,6 +6,7 @@ import { RunScoutButton } from "../../run-scout-button";
 import { type ScoutStatus, useScout } from "../../use-scout";
 import { type Instance, scoutApi, when as fmt } from "@/lib/scout-api";
 import { ConfirmDialog } from "../../confirm-dialog";
+import { InfoButton } from "../../info-button";
 import ws from "../../workspace.module.css";
 import styles from "../scout.module.css";
 
@@ -252,7 +253,9 @@ export default function ScoutPage() {
           >
             Park
           </button>
+          <InfoButton text="Tells Yutori to stop this Scout's schedule so it no longer runs (or bills) on its own. It stays parked until you start a run again — it does not delete the Scout or any questions it already found." />
           <RunScoutButton className={styles.primary} label="Run now" />
+          <InfoButton text="Asks Yutori to search Stack Overflow now, using your current topics. Costs about $0.35. On this page it also wakes a parked Scout." />
         </div>
       </div>
 
@@ -374,19 +377,28 @@ export default function ScoutPage() {
                                 : "—"}
                             </td>
                             <td>
-                              <button
-                                type="button"
-                                className={styles.textButton}
-                                onClick={() => setDeleteTarget(instance)}
-                                disabled={removeInstance.isPending || instance.usable === false}
-                                title={
-                                  instance.usable === false
-                                    ? "Created with a different API key"
-                                    : undefined
-                                }
-                              >
-                                {instance.kind === "scout" ? "Delete at Yutori" : "Forget"}
-                              </button>
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <button
+                                  type="button"
+                                  className={styles.textButton}
+                                  onClick={() => setDeleteTarget(instance)}
+                                  disabled={removeInstance.isPending || instance.usable === false}
+                                  title={
+                                    instance.usable === false
+                                      ? "Created with a different API key"
+                                      : undefined
+                                  }
+                                >
+                                  {instance.kind === "scout" ? "Delete at Yutori" : "Forget"}
+                                </button>
+                                <InfoButton
+                                  text={
+                                    instance.kind === "scout"
+                                      ? "Permanently deletes this Scout at Yutori, stopping it from running or billing again. Cannot be undone — questions it already found stay in your pool."
+                                      : "Removes this app's record of a finished research task. The task is already over at Yutori, so nothing there changes."
+                                  }
+                                />
+                              </span>
                             </td>
                           </tr>
                         ))}
@@ -452,14 +464,17 @@ export default function ScoutPage() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2 className={styles.sectionTitle}>Query being searched</h2>
-          <button
-            type="button"
-            className={styles.textButton}
-            onClick={() => sync.mutate()}
-            disabled={busy}
-          >
-            Re-sync
-          </button>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <button
+              type="button"
+              className={styles.textButton}
+              onClick={() => sync.mutate()}
+              disabled={busy}
+            >
+              Re-sync
+            </button>
+            <InfoButton text="Pushes your current topics to Yutori as this Scout's search query, replacing whatever it was last searching for. Does not start a run by itself." />
+          </span>
         </div>
         <div className={styles.pageSub}>
           Last pushed to Yutori {when(panel.query_synced_at)}. This is exactly what Yutori
@@ -513,14 +528,17 @@ export default function ScoutPage() {
                   unstick a dead reference is worse than an extra button. */}
               <dt>Link</dt>
               <dd>
-                <button
-                  type="button"
-                  className={styles.textButton}
-                  onClick={() => forget.mutate()}
-                  disabled={busy}
-                >
-                  Forget this Scout
-                </button>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <button
+                    type="button"
+                    className={styles.textButton}
+                    onClick={() => forget.mutate()}
+                    disabled={busy}
+                  >
+                    Forget this Scout
+                  </button>
+                  <InfoButton text="Clears this app's link to the Scout at Yutori. The Scout itself keeps existing and running at Yutori (still billing) until it is deleted there directly — this only stops this app from tracking it. No discovered questions are removed." />
+                </span>
               </dd>
             </div>
           )}

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { type ChallengeFormat, llmApi } from "@/lib/llm-api";
 import { ConfirmDialog } from "../../confirm-dialog";
+import { InfoButton } from "../../info-button";
 import ws from "../../workspace.module.css";
 import styles from "../llm.module.css";
 
@@ -88,6 +89,7 @@ export default function FormatsPage() {
             <button className={ws.primary} onClick={() => setDraft({ ...EMPTY })}>
               New format
             </button>
+            <InfoButton text="Opens a blank format definition for you to name and pick blocks for. Nothing is saved until you press Save format." />
           </div>
         </div>
         {message && <div className={ws.notice}>{message}</div>}
@@ -165,6 +167,7 @@ export default function FormatsPage() {
             >
               {save.isPending ? "Saving…" : "Save format"}
             </button>
+            <InfoButton text="Creates or updates this format. Challenges already generated with a different format are unaffected — only challenges generated from now on use this one." />
             <button className={ws.secondary} onClick={() => setDraft(null)}>
               Cancel
             </button>
@@ -204,6 +207,9 @@ export default function FormatsPage() {
                         Make default
                       </button>
                     )}
+                    {!format.is_default && (
+                      <InfoButton text="Makes this the format used automatically when new challenges are generated (including from digests). Existing challenges are unaffected." />
+                    )}
                     <button
                       className={`${ws.secondary} ${ws.tiny}`}
                       onClick={() =>
@@ -223,6 +229,7 @@ export default function FormatsPage() {
                     >
                       Delete
                     </button>
+                    <InfoButton text="Deletes this format definition. Challenges already generated with it are untouched and keep showing this format's name." />
                   </div>
                 </div>
               </div>

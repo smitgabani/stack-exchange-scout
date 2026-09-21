@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { type TestResult, llmApi } from "@/lib/llm-api";
 import { ConfirmDialog } from "../../confirm-dialog";
+import { InfoButton } from "../../info-button";
 import ws from "../../workspace.module.css";
 import styles from "../llm.module.css";
 
@@ -120,10 +121,14 @@ export default function PromptPage() {
             >
               {save.isPending ? "Saving…" : "Save as new version"}
             </button>
+            <InfoButton text="Writes your edited prompt as a new version and makes it active immediately. The previous version stays in history, so any challenge already generated remains traceable to the exact prompt text that produced it." />
             {!isDefault && (
-              <button className={ws.secondary} onClick={() => reset.mutate()} disabled={reset.isPending}>
-                Reset to default
-              </button>
+              <>
+                <button className={ws.secondary} onClick={() => reset.mutate()} disabled={reset.isPending}>
+                  Reset to default
+                </button>
+                <InfoButton text="Discards any stored custom prompt and reverts to the prompt that ships in the code." />
+              </>
             )}
           </div>
         </div>
@@ -205,6 +210,7 @@ export default function PromptPage() {
             >
               {test.isPending ? "Generating…" : "Test generate"}
             </button>
+            <InfoButton text="Sends your current prompt (including unsaved edits) to your LLM provider for the selected question and shows the raw result. Costs one real LLM call. Nothing is saved — no challenge is created and the question is unchanged." />
           </div>
         </div>
 
@@ -295,13 +301,16 @@ export default function PromptPage() {
                     <td>{v.notes ?? "—"}</td>
                     <td>
                       {!v.is_active && (
-                        <button
-                          className={`${ws.secondary} ${ws.tiny}`}
-                          onClick={() => activate.mutate(v.version)}
-                          disabled={activate.isPending}
-                        >
-                          Activate
-                        </button>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <button
+                            className={`${ws.secondary} ${ws.tiny}`}
+                            onClick={() => activate.mutate(v.version)}
+                            disabled={activate.isPending}
+                          >
+                            Activate
+                          </button>
+                          <InfoButton text="Makes this earlier prompt version active again. The version that's currently active is kept in history, not deleted." />
+                        </span>
                       )}
                     </td>
                   </tr>
