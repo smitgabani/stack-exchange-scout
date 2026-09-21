@@ -12,7 +12,7 @@
 }
 
 .pageTitle {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   color: #181d26;
 }
@@ -23,29 +23,47 @@
   margin-top: 8px;
 }
 
-.filters {
+/* Tab strip, matching the LLM and Yutori sections. These are buttons rather
+   than links because the tabs change a filter on this page, not the route. */
+.tabs {
   display: flex;
-  gap: 10px;
+  gap: 4px;
   flex-wrap: wrap;
-  align-items: center;
+  border-bottom: 1px solid var(--hairline);
 }
 
-.filterChip {
+.tab {
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
-  padding: 10px 16px;
-  border-radius: 9999px;
-  border: 1px solid #dddddd;
+  color: var(--muted);
+  background: none;
+  border: none;
   cursor: pointer;
-  background: #ffffff;
-  color: #333840;
+  padding: 12px 16px;
+  /* The active tab is marked by a bar sitting on the strip's own border, so
+     the row does not shift by a pixel when the selection moves. */
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
 }
 
-.filterChip.on {
-  background: #181d26;
-  border-color: #181d26;
-  color: #ffffff;
+.tab:hover {
+  color: var(--ink);
+}
+
+.tabActive {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .tabs {
+    gap: 0;
+  }
+
+  .tab {
+    padding: 12px 12px;
+  }
 }
 
 .grid {
@@ -251,14 +269,6 @@
 /* Pressed states — design.md §4 evaluates components as Default and
    Active/Pressed, and these were missing entirely. */
 
-.filterChip:active {
-  background: var(--surface-strong);
-}
-
-.filterChip.on:active {
-  background: var(--primary-active);
-}
-
 .actionButton:active:not(:disabled) {
   background: var(--surface-strong);
 }
@@ -292,4 +302,49 @@
 .dialogHint {
   font-size: 13px;
   color: #41454d;
+}
+
+/* --- phone ------------------------------------------------------------ */
+@media (max-width: 560px) {
+  .qcard {
+    padding: 18px 16px;
+  }
+
+  /* Three pipeline triggers, each with an info dot beside it, wrapped into a
+     ragged block at part widths. One per row, each sized to leave room for
+     its dot, so the pair stays on one line. */
+  .actions {
+    gap: 8px;
+  }
+
+  .actionButton {
+    flex: 1 1 calc(100% - 26px);
+  }
+
+  .stageResult {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Seven filters do not fit on a phone, so the strip scrolls sideways and
+     bleeds into the page gutter — matching the LLM and Yutori sections. */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-left: calc(-1 * var(--gutter));
+    margin-right: calc(-1 * var(--gutter));
+    padding-left: var(--gutter);
+    padding-right: var(--gutter);
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 }

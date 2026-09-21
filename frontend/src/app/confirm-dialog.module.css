@@ -73,3 +73,22 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+@media (max-width: 480px) {
+  .inner {
+    padding: 22px 20px 20px;
+  }
+
+  /* Confirm labels here are full sentences ("Delete challenge"), which put
+     the pair over the dialog width once the dialog is phone-sized. Stacked,
+     with the confirming action on top where the thumb rests. */
+  .actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .cancel,
+  .confirm {
+    width: 100%;
+  }
+}

@@ -1,5 +1,6 @@
 .bg {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   display: flex;
   align-items: center;
@@ -131,4 +132,19 @@
   line-height: 1.4;
   margin-top: 24px;
   max-width: 300px;
+}
+
+@media (max-width: 480px) {
+  .bg {
+    padding: 16px;
+    /* Centring a tall card vertically on a short screen crops its top; from
+       here the card sits at the top and the page scrolls normally. */
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+
+  .card {
+    padding: 32px 24px 28px;
+    border-radius: 20px;
+  }
 }

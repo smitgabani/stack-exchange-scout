@@ -40,12 +40,27 @@
      one of these rather than inventing its own number. */
   --content-narrow: 760px;
   --content-wide: 1180px;
-  --page-padding: 48px 40px 96px;
+  /* The side gutter is named on its own because elements that bleed to the
+     screen edge (the scrolling tab strips, the nav) need to cancel exactly
+     as much padding as the page applies. */
+  --gutter: 40px;
+  --page-padding: 48px var(--gutter) 96px;
   --page-gap: 32px;
+
+  /* The page-level type scale and the padding of the big centred cards
+     (login, onboarding, the dashboard hero). Held as tokens so the phone
+     step-down happens once here rather than in a media query inside every
+     page's stylesheet — the same argument as the two content widths above. */
+  --title-page: 32px;
+  --title-hero: 36px;
+  --card-padding: 56px 48px;
 }
 
 html {
   height: 100%;
+  /* Safari on iOS inflates text in landscape unless this is pinned, which
+     silently breaks every width the layout was designed against. */
+  -webkit-text-size-adjust: 100%;
 }
 
 html,
@@ -79,8 +94,40 @@ a {
   text-decoration: none;
 }
 
+/* Phone. The multi-column grids have already collapsed by this width in each
+   page's own stylesheet; what changes here is the chrome every page shares. */
 @media (max-width: 640px) {
   :root {
-    --page-padding: 32px 20px 64px;
+    --gutter: 20px;
+    --page-padding: 32px var(--gutter) 64px;
+    --page-gap: 24px;
+    --title-page: 26px;
+    --title-hero: 28px;
+    --card-padding: 32px 24px;
+  }
+}
+
+/* Small phones (iPhone SE and the 360px Android baseline), where a 40px
+   gutter is a sixth of the screen. */
+@media (max-width: 380px) {
+  :root {
+    --gutter: 16px;
+    --page-padding: 28px var(--gutter) 56px;
+    --title-page: 24px;
+    --title-hero: 25px;
+    --card-padding: 28px 20px;
+  }
+}
+
+/* iOS Safari zooms the whole page in when a field is focused whose text is
+   under 16px, and does not zoom back out afterwards. Every control in the app
+   is 13-14px by design, so the floor is raised at phone widths only — and it
+   needs !important, because those sizes come from CSS-module classes that
+   would otherwise win on specificity against a bare element selector. */
+@media (max-width: 640px) {
+  input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 }

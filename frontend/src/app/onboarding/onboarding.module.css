@@ -1,5 +1,6 @@
 .bg {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   display: flex;
   align-items: center;
@@ -13,7 +14,7 @@
   max-width: 560px;
   background: #ffffff;
   border-radius: 24px;
-  padding: 56px 48px;
+  padding: var(--card-padding);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -29,7 +30,7 @@
 }
 
 .title {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   line-height: 1.2;
   margin-top: 6px;
@@ -156,4 +157,16 @@
   justify-content: center;
   flex-shrink: 0;
   font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .bg {
+    padding: 16px;
+    align-items: flex-start;
+    padding-top: 32px;
+  }
+
+  .card {
+    border-radius: 20px;
+  }
 }

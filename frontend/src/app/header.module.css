@@ -13,8 +13,10 @@
   padding: 0 40px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  /* The gap is the nav's old internal spacing: the logout button used to sit
+     inside the nav and is now a sibling, so this is what keeps it the same
+     distance from the last link. */
+  gap: 28px;
 }
 
 .brand {
@@ -24,6 +26,9 @@
   font-size: 16px;
   font-weight: 500;
   color: var(--ink);
+  /* Holds the nav and the logout button together on the right, which is what
+     justify-content: space-between did while they were a single element. */
+  margin-right: auto;
 }
 
 .nav {
@@ -72,11 +77,56 @@
   color: var(--ink);
 }
 
+/* Five nav entries plus a button do not fit on a phone in one row, and the
+   nav itself never wrapped — it simply overflowed. So the bar splits into two
+   rows: the wordmark and the logout button, then the nav across the full
+   width, scrolling sideways rather than wrapping into a ragged block. */
 @media (max-width: 640px) {
   .inner {
     flex-wrap: wrap;
-    gap: 12px;
-    padding: 12px 20px;
+    gap: 10px 12px;
+    padding: 12px var(--gutter);
+    min-height: 0;
+  }
+
+  .brand {
+    order: 1;
+    font-size: 15px;
+  }
+
+  .logout {
+    order: 2;
+    padding: 7px 14px;
+  }
+
+  .nav {
+    order: 3;
+    width: 100%;
+    gap: 20px;
+    overflow-x: auto;
+    /* Bleeds into the gutter so the last entry can scroll clear of the
+       padding edge instead of stopping underneath it. */
+    margin: 0 calc(-1 * var(--gutter));
+    padding: 0 var(--gutter);
+    /* A scrollbar here would sit on top of the links on every platform that
+       draws one, and the strip is short enough to read as scrollable. */
+    scrollbar-width: none;
+  }
+
+  .nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .navLink {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand {
+    font-size: 14px;
+    gap: 8px;
   }
 
   .nav {

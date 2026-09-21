@@ -14,7 +14,7 @@
 .hero {
   background: #f5e9d4;
   border-radius: 16px;
-  padding: 56px 48px;
+  padding: var(--card-padding);
 }
 
 .eyebrow {
@@ -25,7 +25,7 @@
 }
 
 .heroTitle {
-  font-size: 36px;
+  font-size: var(--title-hero);
   font-weight: 400;
   line-height: 1.2;
   color: #181d26;
@@ -99,6 +99,12 @@
 
 @media (max-width: 900px) {
   .digestGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .digestGrid {
     grid-template-columns: 1fr;
   }
 }
@@ -151,11 +157,11 @@
   background: #aa2d00;
   color: #ffffff;
   border-radius: 16px;
-  padding: 40px;
+  padding: var(--card-padding);
 }
 
 .emptyTitle {
-  font-size: 24px;
+  font-size: clamp(21px, 5vw, 24px);
   font-weight: 400;
   margin-bottom: 10px;
 }
@@ -203,6 +209,7 @@
   color: #41454d;
 }
 
+
 .digestList {
   display: flex;
   flex-direction: column;
@@ -238,4 +245,30 @@
 
 .secondaryButton:active:not(:disabled) {
   background: var(--surface-strong);
+}
+
+@media (max-width: 480px) {
+  .actions {
+    gap: 10px;
+  }
+
+  /* One button per row, sized to leave exactly the info dot and the gap
+     beside it — otherwise the dot wrapped onto a line of its own, orphaned
+     from the button it explains. */
+  .button,
+  .secondaryButton {
+    flex: 1 1 calc(100% - 28px);
+    text-align: center;
+  }
+
+  .message {
+    flex-basis: 100%;
+  }
+
+  /* Label and status stack instead of being squeezed onto one line. */
+  .digestRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }

@@ -25,7 +25,7 @@
   flex-wrap: wrap;
 }
 
-.title { font-size: 30px; font-weight: 400; color: var(--ink); }
+.title { font-size: calc(var(--title-page) - 2px); font-weight: 400; color: var(--ink); }
 .sub { font-size: 14px; color: var(--muted); margin-top: 8px; line-height: 1.45; max-width: 64ch; }
 .back { font-size: 14px; font-weight: 500; color: var(--link); }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
@@ -173,7 +173,7 @@
   text-align: center; color: var(--muted); font-size: 14px;
 }
 
-.dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px 28px; border-top: 1px solid var(--hairline); padding-top: 20px; }
+.dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px 28px; border-top: 1px solid var(--hairline); padding-top: 20px; }
 .dl div { display: flex; flex-direction: column; gap: 3px; }
 .dl dt { font-size: 12px; color: var(--muted); }
 .dl dd { font-size: 14.5px; color: var(--ink); word-break: break-word; }
@@ -184,7 +184,7 @@
 
 .sectionTitle { font-size: 19px; font-weight: 500; color: var(--ink); }
 .section { display: flex; flex-direction: column; gap: 14px; }
-.sectionHead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.sectionHead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .hint { font-size: 13px; color: var(--muted); line-height: 1.45; }
 
 /* --- funnel ---------------------------------------------------------- */
@@ -194,8 +194,34 @@
 .funnelCount { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 
 @media (max-width: 880px) {
-  .stats, .blocks, .grid2 { grid-template-columns: 1fr; }
+  /* Stats stay two-up rather than dropping straight to one: four short
+     numbers in a single column is a lot of scrolling for very little data. */
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .blocks, .grid2 { grid-template-columns: 1fr; }
   .item { grid-template-columns: 1fr; }
   .itemSide { align-items: flex-start; }
   .funnelStep { grid-template-columns: 120px 1fr 44px; }
+}
+
+@media (max-width: 560px) {
+  .stats { grid-template-columns: 1fr; }
+
+  /* A 120px label column leaves the bar too short to compare lengths, which
+     is the only thing the bar is for — so the label sits on its own line and
+     the bar and its count get the full width underneath. */
+  .funnelStep {
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+  }
+  .funnelStep > :first-child { grid-column: 1 / -1; }
+
+  /* Header actions go full width: at this size they were wrapping one
+     per line anyway, at ragged widths. */
+  .head, .sectionHead { gap: 14px; }
+  .actions { width: 100%; }
+  .actions > * { flex: 1 1 auto; }
+
+  .empty { padding: 24px 18px; }
+  .card { padding: 18px; }
+  .dangerZone { padding: 16px; }
 }

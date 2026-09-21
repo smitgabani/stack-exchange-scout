@@ -288,6 +288,23 @@ export default function QuestionsPage() {
         </div>
       </div>
 
+      <nav className={styles.tabs}>
+        {FILTERS.map((filter) => {
+          const active = filter.label === activeFilter.label;
+          return (
+            <button
+              key={filter.label}
+              type="button"
+              className={`${styles.tab} ${active ? styles.tabActive : ""}`}
+              aria-current={active ? "page" : undefined}
+              onClick={() => setActiveFilter(filter)}
+            >
+              {filter.label}
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Manual stage triggers. These become scheduled jobs in M11; until then
           running the pipeline by hand is the only way to advance candidates. */}
       <div className={styles.actions}>
@@ -319,19 +336,6 @@ export default function QuestionsPage() {
         </button>
         <InfoButton text="Re-runs scoring against your current profile for every candidate, picking up any recent changes to your topics or concepts." />
         {stageMessage && <span className={styles.stageResult}>{stageMessage}</span>}
-      </div>
-
-      <div className={styles.filters}>
-        {FILTERS.map((filter) => (
-          <button
-            key={filter.label}
-            type="button"
-            className={`${styles.filterChip} ${filter.label === activeFilter.label ? styles.on : ""}`}
-            onClick={() => setActiveFilter(filter)}
-          >
-            {filter.label}
-          </button>
-        ))}
       </div>
 
       {actionError && <div className={styles.stageResult}>{actionError}</div>}

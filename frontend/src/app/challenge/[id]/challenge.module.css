@@ -20,7 +20,7 @@
 }
 
 .title {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   line-height: 1.25;
   color: #181d26;
@@ -396,7 +396,7 @@
 
 .resourceList {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 12px;
   max-width: 100%;
 }
@@ -572,4 +572,51 @@
 .diagramToggle:hover {
   color: var(--ink);
   border-color: var(--border-strong);
+}
+
+/* --- phone ------------------------------------------------------------ */
+@media (max-width: 560px) {
+  /* The ink problem block is the page's centrepiece; at 40px/36px its padding
+     was eating a quarter of the screen width. */
+  .problemBlock {
+    padding: 26px 20px;
+    border-radius: 12px;
+  }
+
+  .problemText {
+    font-size: 18px;
+  }
+
+  .whyCard,
+  .metaCard {
+    padding: 20px;
+  }
+
+  .notice {
+    padding: 26px 18px;
+  }
+
+  .diagram {
+    padding: 12px;
+  }
+
+  .diagramLoading {
+    padding: 24px 16px;
+  }
+
+  /* Status and the reopen button stop competing for one line. */
+  .completedBanner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .titleRow {
+    gap: 12px;
+  }
+
+  .statBig {
+    font-size: 22px;
+  }
 }

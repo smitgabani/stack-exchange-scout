@@ -17,7 +17,7 @@
 }
 
 .pageTitle {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   color: var(--ink);
 }
@@ -144,7 +144,7 @@
 }
 
 .blockValue {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   line-height: 1.2;
   margin-top: 8px;
@@ -213,7 +213,7 @@
 
 .config {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 16px 32px;
   border-top: 1px solid var(--hairline);
   padding-top: 20px;
@@ -382,4 +382,28 @@
 .alertButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* --- phone ------------------------------------------------------------ */
+@media (max-width: 560px) {
+  /* headerActions is flex-shrink: 0, so a two-button group stayed at full
+     width and pushed the header sideways instead of wrapping under it. */
+  .headerActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .headerActions > * {
+    flex: 1 1 auto;
+  }
+
+  .primary,
+  .secondary {
+    padding: 12px 16px;
+  }
+
+  .alert,
+  .notice {
+    padding: 14px 16px;
+  }
 }

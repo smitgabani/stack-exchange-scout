@@ -19,7 +19,7 @@
 }
 
 .sectionTitle {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   color: var(--ink);
 }
@@ -85,5 +85,28 @@
 
   .tab {
     padding: 12px 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* The tab strip bleeds into the page gutter so the last tab can scroll
+     clear of the edge, and scrolls rather than wrapping to a second row. */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-left: calc(-1 * var(--gutter));
+    margin-right: calc(-1 * var(--gutter));
+    padding-left: var(--gutter);
+    padding-right: var(--gutter);
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 }

@@ -12,7 +12,7 @@
 }
 
 .pageTitle {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   color: #181d26;
 }
@@ -198,10 +198,15 @@
 .addRow {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .addRow input {
   flex: 1;
+  /* A text input's intrinsic minimum is its `size` in characters, which beats
+     flex: 1 and pushed the button and info dot off a narrow screen. */
+  min-width: 0;
   font-family: inherit;
   font-size: 14px;
   padding: 10px 14px;
@@ -404,6 +409,7 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 20px 0;
   background: linear-gradient(to top, #ffffff 70%, transparent);
@@ -461,4 +467,83 @@
 .addTopic:active,
 .guideOpen:active {
   color: var(--link-active);
+}
+
+/* --- phone ------------------------------------------------------------ */
+
+/* The topic row is an avatar, a 120px name, a slider, a percentage and a
+   remove button on one line — about 284px of fixed furniture, which leaves
+   the slider roughly 50px on a phone. The slider is the control the row
+   exists for, so below this width the row wraps and gives it the full
+   width on a line of its own. */
+@media (max-width: 560px) {
+  .topicRow {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+  }
+
+  .topicName {
+    /* flex-basis 0, not auto: on auto the name claims its full content width,
+       and because the row wraps the percentage and the remove button were
+       pushed onto lines of their own rather than the name giving way. */
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    /* With the row's full width to itself a long name can wrap onto a second
+       line, which beats the desktop ellipsis when there is nothing else
+       competing for the space. */
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .topicSlider {
+    flex: 1 0 100%;
+    /* Ordered after its siblings so the row reads as two lines — name, value
+       and remove on top, slider underneath — rather than three, which is what
+       source order (slider in the middle) would have produced. */
+    order: 1;
+    /* Comfortably thumb-sized: the default track is about 20px tall. */
+    height: 28px;
+  }
+
+  .card {
+    padding: 20px 18px;
+  }
+
+  .diffRow {
+    gap: 20px;
+  }
+
+  /* Wrapping is self-selecting here: a toggle is 44px and stays on the label's
+     line, while the stepper is ~145px and drops below it rather than crushing
+     the label into a three-word column. */
+  .prefRow {
+    flex-wrap: wrap;
+    gap: 10px 16px;
+  }
+
+  .prefText {
+    flex: 1 1 60%;
+  }
+
+  .guideInner {
+    padding: 22px 20px 24px;
+  }
+
+  /* Three frequency buttons at 14px padding each overflow below this. */
+  .freqRow {
+    flex-wrap: wrap;
+  }
+
+  .freqBtn {
+    flex: 1 1 calc(50% - 5px);
+  }
+}
+
+@media (max-width: 380px) {
+  /* Each on its own line rather than two cramped columns. */
+  .freqBtn {
+    flex: 1 1 100%;
+  }
 }

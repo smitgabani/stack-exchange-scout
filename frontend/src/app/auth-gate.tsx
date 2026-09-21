@@ -85,10 +85,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
-            <button className={styles.logout} onClick={handleLogout}>
-              Log out
-            </button>
           </nav>
+          {/* A sibling of the nav rather than its last child: on a phone the
+              nav becomes a full-width scrolling strip, and the way out of the
+              app should not be something you have to scroll to find. */}
+          <button className={styles.logout} onClick={handleLogout}>
+            Log out
+          </button>
         </div>
       </header>
       <OnboardingGate>{children}</OnboardingGate>

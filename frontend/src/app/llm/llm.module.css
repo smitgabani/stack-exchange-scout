@@ -19,7 +19,7 @@
 }
 
 .sectionTitle {
-  font-size: 32px;
+  font-size: var(--title-page);
   font-weight: 400;
   color: var(--ink);
 }
@@ -207,7 +207,7 @@
    reading rather than by remembering key names. */
 .blockGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
   gap: 10px;
   margin-top: 10px;
 }
@@ -255,4 +255,27 @@
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--muted);
+}
+
+@media (max-width: 560px) {
+  /* The tab strip bleeds into the page gutter so the last tab can scroll
+     clear of the edge, and scrolls rather than wrapping to a second row. */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-left: calc(-1 * var(--gutter));
+    margin-right: calc(-1 * var(--gutter));
+    padding-left: var(--gutter);
+    padding-right: var(--gutter);
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 }

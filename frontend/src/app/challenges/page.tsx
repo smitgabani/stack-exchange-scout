@@ -22,12 +22,15 @@ type ChallengeRow = {
   solved_at: string | null;
 };
 
-type SourceFilter = { label: string; value: "all" | "digest" | "manual" };
+// Completion is a separate axis from source, but the tab strip is one row, so
+// "Completed" is a tab of its own that ignores the source filter.
+type Tab = { label: string; source: "all" | "digest" | "manual"; completion: "active" | "completed" };
 
-const FILTERS: SourceFilter[] = [
-  { label: "All challenges", value: "all" },
-  { label: "From digests", value: "digest" },
-  { label: "Picked by you", value: "manual" },
+const TABS: Tab[] = [
+  { label: "All challenges", source: "all", completion: "active" },
+  { label: "From digests", source: "digest", completion: "active" },
+  { label: "Picked by you", source: "manual", completion: "active" },
+  { label: "✓ Completed", source: "all", completion: "completed" },
 ];
 
 async function fetchChallenges(source: string, completion: string): Promise<ChallengeRow[]> {
@@ -81,26 +84,23 @@ export default function ChallengesPage() {
 function ChallengesPageInner() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
-  // Completion is a separate axis from source: "which challenges came from
-  // where" and "which are done" are independent questions, and the tab bar
-  // asks the second one directly rather than nesting it inside the first.
   // The dashboard's completed-count link deep-links here with ?view=completed.
-  const [showCompleted, setShowCompleted] = useState(
-    () => searchParams.get("view") === "completed",
+  const [activeTab, setActiveTab] = useState(() =>
+    searchParams.get("view") === "completed" ? TABS[3] : TABS[0],
   );
-  const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
   const [pendingDelete, setPendingDelete] = useState<ChallengeRow | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const completion = showCompleted ? "completed" : "active";
+  const { source, completion } = activeTab;
+  const showCompleted = completion === "completed";
   const {
     data: challenges,
     isLoading,
     isError,
     error,
   } = useQuery({
-    queryKey: ["challenges", activeFilter.value, completion],
-    queryFn: () => fetchChallenges(activeFilter.value, completion),
+    queryKey: ["challenges", source, completion],
+    queryFn: () => fetchChallenges(source, completion),
   });
 
   async function refresh() {
@@ -146,6 +146,23 @@ function ChallengesPageInner() {
         </div>
       </div>
 
+      <nav className={styles.tabs}>
+        {TABS.map((tab) => {
+          const active = tab.label === activeTab.label;
+          return (
+            <button
+              key={tab.label}
+              type="button"
+              className={`${styles.tab} ${active ? styles.tabActive : ""}`}
+              aria-current={active ? "page" : undefined}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+
       {/* The motivational element the user asked for: a plain count, not a
           streak or a badge system — those need day-boundary and timezone
           logic worth its own design pass, not bolted on here. */}
@@ -154,27 +171,6 @@ function ChallengesPageInner() {
           🎉 You&apos;ve completed {challenges.length} challenge{challenges.length === 1 ? "" : "s"}.
         </div>
       )}
-
-      <div className={styles.filters}>
-        {!showCompleted &&
-          FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              className={`${styles.filterChip} ${filter.value === activeFilter.value ? styles.on : ""}`}
-              onClick={() => setActiveFilter(filter)}
-            >
-              {filter.label}
-            </button>
-          ))}
-        <button
-          type="button"
-          className={`${styles.filterChip} ${styles.completedChip} ${showCompleted ? styles.on : ""}`}
-          onClick={() => setShowCompleted((v) => !v)}
-        >
-          {showCompleted ? "← Back to active" : "✓ Completed"}
-        </button>
-      </div>
 
       {actionError && <div className={styles.message}>{actionError}</div>}
 

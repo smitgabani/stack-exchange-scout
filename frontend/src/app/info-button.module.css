@@ -51,3 +51,39 @@
   line-height: 1.4;
   box-shadow: 0 8px 24px rgba(24, 29, 38, 0.25);
 }
+
+/* An 18px control is well under the ~44px a fingertip needs. The hit area is
+   grown with a pseudo-element so the dot itself stays the size the layout
+   was drawn around. */
+.button::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.button {
+  position: relative;
+}
+
+/* The popover is anchored left: 0 under its button, so one opened near the
+   right edge runs off screen — and html has overflow-x: hidden, which clips
+   it rather than letting it scroll into view. On a phone it becomes a strip
+   pinned above the bottom edge instead, where width is never in question.
+   The existing full-screen backdrop already dismisses it. */
+@media (max-width: 640px) {
+  .popover {
+    position: fixed;
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-width: none;
+    font-size: 13px;
+    padding: 14px 16px;
+  }
+}
