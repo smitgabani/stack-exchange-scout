@@ -62,6 +62,17 @@ class Challenge(Base):
     # survive the format being renamed or deleted.
     format_name: Mapped[str | None] = mapped_column(String(80))
 
+    # What was actually sent, per call: a list of
+    # {at, blocks, system_instruction, prompt_version}. A list rather than one
+    # column because a challenge is not always one generation — a top-up
+    # (`reformat_challenge`) adds blocks with a second, different instruction,
+    # and a single column would either lose the original or omit the addition.
+    #
+    # This is what makes block instructions safely editable: reword a block and
+    # the challenges made before the edit still say exactly what produced them.
+    # Null on everything generated before that was recorded.
+    generations: Mapped[list | None] = mapped_column(JSONB)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     @property

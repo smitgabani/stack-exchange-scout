@@ -13,8 +13,17 @@ rendering key/value dumps and would leave every new field unvalidated, because
 the app would have no idea what the field meant. Here, adding a capability
 means adding a block and a renderer for its `kind` — the system never has to
 handle a shape it has never seen.
+
+This module is the *built-in* half of the library. Users may also reword any
+block's instruction and define blocks of their own, both stored in the database
+and merged over this registry by `block_service.resolve` (ADR 0005). That does
+not weaken the guarantee above, because a user-defined block picks a `kind`
+rather than writing a schema: its shape comes from `_SCHEMA_BY_KIND`, so it is
+still a shape the UI already knows how to draw. What lives in code is the
+structure; what lives in the database is the wording and the selection.
 """
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -33,6 +42,95 @@ KINDS = (
     "stat",
     "diagram",
 )
+
+# The shape each kind implies. This is what makes user-defined blocks possible
+# without letting anyone write a JSON Schema: a custom block picks a kind, and
+# its schema follows from that choice, so there is always a renderer that knows
+# what to do with the result.
+#
+# Every block below builds its schema from here too, so a custom `checklist`
+# and the built-in `self_check` are guaranteed to ask for the same shape rather
+# than merely happening to agree today.
+_SCHEMA_BY_KIND: dict[str, dict[str, Any]] = {
+    "prose": {"type": "string"},
+    "chips": {"type": "array", "items": {"type": "string"}},
+    "list": {"type": "array", "items": {"type": "string"}},
+    "checklist": {"type": "array", "items": {"type": "string"}},
+    "rating": {"type": "integer"},
+    "progressive_hints": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"label": {"type": "string"}, "text": {"type": "string"}},
+            "required": ["label", "text"],
+        },
+    },
+    "steps": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"step": {"type": "string"}, "detail": {"type": "string"}},
+            "required": ["step"],
+        },
+    },
+    "definition_list": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"term": {"type": "string"}, "definition": {"type": "string"}},
+            "required": ["term", "definition"],
+        },
+    },
+    "resource_list": {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "url": {"type": "string"},
+                "why": {"type": "string"},
+            },
+            "required": ["title", "url", "why"],
+        },
+    },
+    "stat": {
+        "type": "object",
+        "properties": {"value": {"type": "string"}, "rationale": {"type": "string"}},
+        "required": ["value"],
+    },
+    "diagram": {
+        "type": "object",
+        "properties": {"caption": {"type": "string"}, "mermaid": {"type": "string"}},
+        "required": ["mermaid"],
+    },
+}
+
+# What a user-defined block may choose. Two kinds are deliberately withheld:
+# `progressive_hints` is special-cased by `_normalise_hints` and demanded by
+# `validate`, and `rating` is bound to the `estimated_difficulty` column. A
+# second block of either kind would be silently mishandled rather than simply
+# rendered, so the picker does not offer them.
+_RESERVED_KINDS = frozenset({"progressive_hints", "rating"})
+CUSTOM_KINDS: tuple[str, ...] = tuple(k for k in KINDS if k not in _RESERVED_KINDS)
+
+# Kinds whose values carry URLs that must resolve before the challenge is
+# stored. Derived from the kind so a custom resource list is link-checked on
+# the same terms as the built-in ones.
+_URL_KINDS = frozenset({"resource_list"})
+
+
+def schema_for(kind: str) -> dict[str, Any]:
+    """A fresh copy of the schema a kind implies.
+
+    Copied rather than shared: `build_schema` embeds these by reference into
+    the schema sent to the provider, and a caller mutating that result would
+    otherwise be editing the registry itself.
+    """
+    return copy.deepcopy(_SCHEMA_BY_KIND[kind])
+
+
+def kind_has_urls(kind: str) -> bool:
+    return kind in _URL_KINDS
 
 
 @dataclass(frozen=True)
@@ -56,21 +154,6 @@ class Block:
     examples: list[str] = field(default_factory=list)
 
 
-def _resource_schema() -> dict[str, Any]:
-    return {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "url": {"type": "string"},
-                "why": {"type": "string"},
-            },
-            "required": ["title", "url", "why"],
-        },
-    }
-
-
 BLOCKS: tuple[Block, ...] = (
     # --- core: always present ---
     Block(
@@ -80,7 +163,7 @@ BLOCKS: tuple[Block, ...] = (
         kind="prose",
         column="problem_summary",
         core=True,
-        schema={"type": "string"},
+        schema=schema_for("prose"),
         instruction="Explain the problem concisely.",
     ),
     Block(
@@ -90,7 +173,7 @@ BLOCKS: tuple[Block, ...] = (
         kind="prose",
         column="why_interesting",
         core=True,
-        schema={"type": "string"},
+        schema=schema_for("prose"),
         instruction="Explain why the question is interesting.",
     ),
     Block(
@@ -100,7 +183,7 @@ BLOCKS: tuple[Block, ...] = (
         kind="chips",
         column="concepts",
         core=True,
-        schema={"type": "array", "items": {"type": "string"}},
+        schema=schema_for("chips"),
         instruction="Identify the technical concepts involved.",
     ),
     Block(
@@ -110,7 +193,7 @@ BLOCKS: tuple[Block, ...] = (
         kind="prose",
         column="starting_direction",
         core=True,
-        schema={"type": "string"},
+        schema=schema_for("prose"),
         instruction="Give the user a useful starting direction.",
     ),
     Block(
@@ -120,14 +203,7 @@ BLOCKS: tuple[Block, ...] = (
         kind="progressive_hints",
         column="hints",
         core=True,
-        schema={
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"label": {"type": "string"}, "text": {"type": "string"}},
-                "required": ["label", "text"],
-            },
-        },
+        schema=schema_for("progressive_hints"),
         instruction=(
             "Provide exactly three progressive hints: the first points at the relevant area, "
             "the second names the important concept, the third gets close to the solution "
@@ -141,7 +217,7 @@ BLOCKS: tuple[Block, ...] = (
         kind="rating",
         column="estimated_difficulty",
         core=True,
-        schema={"type": "integer"},
+        schema=schema_for("rating"),
         instruction="Estimate difficulty from 1 to 5.",
     ),
     # --- optional: understanding the problem ---
@@ -150,7 +226,7 @@ BLOCKS: tuple[Block, ...] = (
         label="You should know",
         description="What to understand before attempting this.",
         kind="chips",
-        schema={"type": "array", "items": {"type": "string"}},
+        schema=schema_for("chips"),
         instruction=(
             "List the prerequisite knowledge someone needs before attempting this, as short "
             "topic names. Do not explain the solution."
@@ -161,14 +237,7 @@ BLOCKS: tuple[Block, ...] = (
         label="Terms",
         description="Unfamiliar terms from the question, defined.",
         kind="definition_list",
-        schema={
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"term": {"type": "string"}, "definition": {"type": "string"}},
-                "required": ["term", "definition"],
-            },
-        },
+        schema=schema_for("definition_list"),
         instruction=(
             "Define any jargon or library-specific terms appearing in the question that a "
             "competent developer new to this area would not know. Define the term itself, not "
@@ -180,14 +249,7 @@ BLOCKS: tuple[Block, ...] = (
         label="Picture it",
         description="A diagram of the situation, drawn as Mermaid.",
         kind="diagram",
-        schema={
-            "type": "object",
-            "properties": {
-                "caption": {"type": "string"},
-                "mermaid": {"type": "string"},
-            },
-            "required": ["mermaid"],
-        },
+        schema=schema_for("diagram"),
         instruction=(
             "Draw the situation as a Mermaid diagram — a flowchart, sequence diagram or state "
             "diagram, whichever fits. Return only valid Mermaid source in the `mermaid` field, "
@@ -200,14 +262,7 @@ BLOCKS: tuple[Block, ...] = (
         label="How to approach it",
         description="Ordered steps for investigating, not solving.",
         kind="steps",
-        schema={
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"step": {"type": "string"}, "detail": {"type": "string"}},
-                "required": ["step"],
-            },
-        },
+        schema=schema_for("steps"),
         instruction=(
             "Outline an ordered investigation plan: what to check, measure or rule out, in "
             "order. Describe how to find the cause, never what the cause is."
@@ -218,7 +273,7 @@ BLOCKS: tuple[Block, ...] = (
         label="Common pitfalls",
         description="Mistakes people make on problems like this.",
         kind="list",
-        schema={"type": "array", "items": {"type": "string"}},
+        schema=schema_for("list"),
         instruction=(
             "List mistakes people commonly make on problems of this kind. Keep them general to "
             "the category of problem rather than specific to this bug's resolution."
@@ -229,7 +284,7 @@ BLOCKS: tuple[Block, ...] = (
         label="Check yourself",
         description="How to know your solution is actually right.",
         kind="checklist",
-        schema={"type": "array", "items": {"type": "string"}},
+        schema=schema_for("checklist"),
         instruction=(
             "List checks the user can run against their own solution to know whether it is "
             "correct — properties it must satisfy, cases it must handle. Do not state what the "
@@ -241,14 +296,7 @@ BLOCKS: tuple[Block, ...] = (
         label="Time",
         description="Roughly how long this should take.",
         kind="stat",
-        schema={
-            "type": "object",
-            "properties": {
-                "value": {"type": "string"},
-                "rationale": {"type": "string"},
-            },
-            "required": ["value"],
-        },
+        schema=schema_for("stat"),
         instruction=(
             "Estimate how long this should take a competent developer, as a short phrase such "
             "as '30-60 minutes', with one sentence of rationale."
@@ -261,7 +309,7 @@ BLOCKS: tuple[Block, ...] = (
         description="Documentation and guides for the underlying ideas.",
         kind="resource_list",
         has_urls=True,
-        schema=_resource_schema(),
+        schema=schema_for("resource_list"),
         instruction=(
             "Suggest documentation or guides that teach the underlying concepts. These must be "
             "about the general topic, never about this specific question or its resolution. "
@@ -276,7 +324,7 @@ BLOCKS: tuple[Block, ...] = (
         kind="resource_list",
         gated=True,
         has_urls=True,
-        schema=_resource_schema(),
+        schema=schema_for("resource_list"),
         instruction=(
             "Suggest material that addresses this specific problem directly, for someone who "
             "has given up solving it alone. Give a real, complete URL you are confident exists; "

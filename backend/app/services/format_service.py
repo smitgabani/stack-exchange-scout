@@ -15,7 +15,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.challenge_format import ChallengeFormat
-from app.services import challenge_blocks
+from app.services import block_service, challenge_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -37,23 +37,28 @@ class ActiveFormat:
         return [block.key for block in self.blocks]
 
 
-DEFAULT_FORMAT = ActiveFormat(
-    name="Standard", blocks=challenge_blocks.resolve(list(challenge_blocks.CORE_KEYS))
-)
+# The name the core blocks go by when nothing is stored. The blocks themselves
+# are no longer a module constant: their instructions are overridable, so the
+# effective default has to be read per call rather than frozen at import.
+DEFAULT_FORMAT_NAME = "Standard"
 
 
 async def get_default(db: AsyncSession) -> ActiveFormat:
     row = await db.scalar(select(ChallengeFormat).where(ChallengeFormat.is_default))
     if row is None:
-        return DEFAULT_FORMAT
-    return ActiveFormat(name=row.name, blocks=challenge_blocks.resolve(row.blocks))
+        # Still resolved through the database: the default format is the core
+        # blocks, and their instructions are overridable like any other.
+        return ActiveFormat(
+            name=DEFAULT_FORMAT_NAME, blocks=await block_service.resolve(db, None)
+        )
+    return ActiveFormat(name=row.name, blocks=await block_service.resolve(db, row.blocks))
 
 
 async def get_by_id(db: AsyncSession, format_id: int) -> ActiveFormat | None:
     row = await db.get(ChallengeFormat, format_id)
     if row is None:
         return None
-    return ActiveFormat(name=row.name, blocks=challenge_blocks.resolve(row.blocks))
+    return ActiveFormat(name=row.name, blocks=await block_service.resolve(db, row.blocks))
 
 
 async def resolve_for_run(db: AsyncSession, format_id: int | None) -> ActiveFormat:
@@ -70,14 +75,17 @@ async def list_formats(db: AsyncSession) -> list[ChallengeFormat]:
     return list(await db.scalars(select(ChallengeFormat).order_by(ChallengeFormat.name)))
 
 
-def _validate(name: str, blocks: list[str]) -> tuple[str, list[str]]:
+async def _validate(db: AsyncSession, name: str, blocks: list[str]) -> tuple[str, list[str]]:
     name = (name or "").strip()
     if not name:
         raise FormatError("A format needs a name.")
     if len(name) > 80:
         raise FormatError("That name is too long.")
 
-    unknown = [key for key in blocks if key not in challenge_blocks.BY_KEY]
+    # Both halves of the library count: a format may name a block the user
+    # defined just as readily as one that ships in the code.
+    known = await block_service.known_keys(db)
+    unknown = [key for key in blocks if key not in known]
     if unknown:
         raise FormatError(f"Unknown block(s): {', '.join(unknown)}")
 
@@ -95,7 +103,7 @@ async def create(
     description: str | None = None,
     make_default: bool = False,
 ) -> ChallengeFormat:
-    name, optional = _validate(name, blocks)
+    name, optional = await _validate(db, name, blocks)
 
     existing = await db.scalar(select(ChallengeFormat).where(ChallengeFormat.name == name))
     if existing is not None:
@@ -125,7 +133,7 @@ async def update_format(
     row = await db.get(ChallengeFormat, format_id)
     if row is None:
         return None
-    name, optional = _validate(name, blocks)
+    name, optional = await _validate(db, name, blocks)
 
     clash = await db.scalar(
         select(ChallengeFormat).where(ChallengeFormat.name == name, ChallengeFormat.id != format_id)

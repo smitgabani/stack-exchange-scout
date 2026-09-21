@@ -121,6 +121,16 @@ async def generate(
                     prompt_version=template.version or challenge_service.PROMPT_VERSION,
                     content=challenge.content,
                     format_name=fmt.name,
+                    generations=[
+                        challenge_service.generation_record(
+                            system_instruction=challenge.composed_instruction,
+                            blocks=fmt.blocks,
+                            prompt_version=template.version
+                            or challenge_service.PROMPT_VERSION,
+                            provider=provider.name,
+                            model=provider.model,
+                        )
+                    ],
                 )
             )
             db.add(DigestQuestion(digest_id=digest.id, question_id=question.id, position=position))
@@ -214,6 +224,15 @@ async def promote_question(
         prompt_version=template.version or challenge_service.PROMPT_VERSION,
         content=challenge.content,
         format_name=fmt.name,
+        generations=[
+            challenge_service.generation_record(
+                system_instruction=challenge.composed_instruction,
+                blocks=fmt.blocks,
+                prompt_version=template.version or challenge_service.PROMPT_VERSION,
+                provider=provider.name,
+                model=provider.model,
+            )
+        ],
     )
     db.add(row)
 
@@ -321,6 +340,19 @@ async def reformat_challenge(
     challenge.format_name = fmt.name
     challenge.provider = provider.name
     challenge.model = provider.model
+    # Appended, not replaced: this call produced only the blocks it was asked
+    # for, and the instruction that made the rest of the challenge is still
+    # the truth about the rest of the challenge.
+    challenge.generations = [
+        *(challenge.generations or []),
+        challenge_service.generation_record(
+            system_instruction=system_instruction,
+            blocks=missing,
+            prompt_version=template.version or challenge_service.PROMPT_VERSION,
+            provider=provider.name,
+            model=provider.model,
+        ),
+    ]
     await db.commit()
     await db.refresh(challenge)
 
