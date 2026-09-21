@@ -6,6 +6,7 @@ import { useState } from "react";
 import { colorForTopic } from "@/lib/topic-color";
 import { RunScoutButton } from "./run-scout-button";
 import { useScout } from "./use-scout";
+import { InfoButton } from "./info-button";
 import styles from "./dashboard.module.css";
 
 type DigestSummary = {
@@ -22,6 +23,7 @@ type ChallengeSummary = {
   question_tags: string[];
   estimated_difficulty: number | null;
   problem_summary: string;
+  question_status: string | null;
 };
 
 type DigestDetail = DigestSummary & { challenges: ChallengeSummary[] };
@@ -46,6 +48,14 @@ export default function DashboardPage() {
     queryKey: ["digests"],
     queryFn: () => getJson<DigestSummary[]>("/api/digests"),
   });
+  // Cheap enough to always fetch: a small, indexed query, and it's what makes
+  // the completed count feel present rather than something you have to go
+  // looking for.
+  const { data: completed } = useQuery({
+    queryKey: ["challenges", "completed"],
+    queryFn: () => getJson<ChallengeSummary[]>("/api/challenges?completion=completed&limit=200"),
+  });
+  const completedCount = completed?.length ?? 0;
 
   const latest = digests?.[0];
   const { data: latestDetail } = useQuery({
@@ -74,7 +84,10 @@ export default function DashboardPage() {
 
   const topics = profile?.data.topics ?? [];
   const frequency = profile?.data.digest.frequency_days ?? 3;
-  const challenges = latestDetail?.challenges ?? [];
+  // Completed challenges leave the working views the moment they're marked
+  // done — they still exist, just under Challenges → Completed, so finishing
+  // one shrinks the homepage instead of it accumulating solved cards forever.
+  const challenges = (latestDetail?.challenges ?? []).filter((c) => c.question_status !== "solved");
   const isEmptyDigest = latest?.status === "empty";
   const parked =
     !scout?.configured || scout.external_status === "done" || scout.external_status === "paused";
@@ -125,7 +138,14 @@ export default function DashboardPage() {
       )}
 
       <section>
-        <h2 className={styles.sectionTitle}>Latest challenges</h2>
+        <div className={styles.sectionHeadRow}>
+          <h2 className={styles.sectionTitle}>Latest challenges</h2>
+          {completedCount > 0 && (
+            <Link href="/challenges?view=completed" className={styles.completedLink}>
+              🎉 {completedCount} completed — see them
+            </Link>
+          )}
+        </div>
 
         {isEmptyDigest ? (
           <div className={styles.emptyDigest}>
@@ -162,6 +182,7 @@ export default function DashboardPage() {
       <section>
         <div className={styles.actions}>
           <RunScoutButton className={styles.button} />
+          <InfoButton text="Asks Yutori to search Stack Overflow for new questions matching your current topics. Costs about $0.35 per run. It does not run on a schedule — you have to start it here." />
           <button
             className={styles.secondaryButton}
             onClick={() => run("/api/digest/generate", "Digest generation")}
@@ -170,6 +191,7 @@ export default function DashboardPage() {
           >
             {running === "Digest generation" ? "Generating…" : "Generate digest"}
           </button>
+          <InfoButton text='Builds a digest from your best-scored candidate questions and turns them into challenges. This does not send anything — use "Send latest digest" separately for that.' />
           <button
             className={styles.secondaryButton}
             onClick={() => run("/api/digest/send", "Digest send")}
@@ -178,6 +200,7 @@ export default function DashboardPage() {
           >
             {running === "Digest send" ? "Sending…" : "Send latest digest"}
           </button>
+          <InfoButton text='Emails the most recently generated digest to your inbox via Resend. This does not create a new digest first — run "Generate digest" beforehand if you want fresh challenges included.' />
           {message && <span className={styles.message}>{message}</span>}
           {scoutMessage && <span className={styles.message}>{scoutMessage}</span>}
         </div>

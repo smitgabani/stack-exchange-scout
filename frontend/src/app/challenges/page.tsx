@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { ConfirmDialog } from "../confirm-dialog";
+import { InfoButton } from "../info-button";
 import styles from "./challenges.module.css";
 
 type ChallengeRow = {
@@ -16,6 +18,8 @@ type ChallengeRow = {
   question_url: string | null;
   question_tags: string[];
   estimated_difficulty: number | null;
+  question_status: string | null;
+  solved_at: string | null;
 };
 
 type SourceFilter = { label: string; value: "all" | "digest" | "manual" };
@@ -26,8 +30,8 @@ const FILTERS: SourceFilter[] = [
   { label: "Picked by you", value: "manual" },
 ];
 
-async function fetchChallenges(source: string): Promise<ChallengeRow[]> {
-  const response = await fetch(`/api/challenges?source=${source}&limit=200`);
+async function fetchChallenges(source: string, completion: string): Promise<ChallengeRow[]> {
+  const response = await fetch(`/api/challenges?source=${source}&completion=${completion}&limit=200`);
   if (!response.ok) {
     // A 404 here means the backend predates this page rather than that the
     // list is empty — worth saying, because the two look identical otherwise.
@@ -41,25 +45,70 @@ async function fetchChallenges(source: string): Promise<ChallengeRow[]> {
   return response.json();
 }
 
+async function post(path: string): Promise<void> {
+  const response = await fetch(path, { method: "POST" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `request failed: ${response.status}`);
+  }
+}
+
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function timeAgo(value: string | null): string {
+  if (!value) return "";
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
 export default function ChallengesPage() {
+  // useSearchParams bails a prerendered route to client rendering up to the
+  // nearest Suspense boundary, so the part of the page that reads it is
+  // split out rather than left at the top level.
+  return (
+    <Suspense fallback={<main className={styles.page}>Loading…</main>}>
+      <ChallengesPageInner />
+    </Suspense>
+  );
+}
+
+function ChallengesPageInner() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  // Completion is a separate axis from source: "which challenges came from
+  // where" and "which are done" are independent questions, and the tab bar
+  // asks the second one directly rather than nesting it inside the first.
+  // The dashboard's completed-count link deep-links here with ?view=completed.
+  const [showCompleted, setShowCompleted] = useState(
+    () => searchParams.get("view") === "completed",
+  );
   const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
   const [pendingDelete, setPendingDelete] = useState<ChallengeRow | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
+  const completion = showCompleted ? "completed" : "active";
   const {
     data: challenges,
     isLoading,
     isError,
     error,
   } = useQuery({
-    queryKey: ["challenges", activeFilter.value],
-    queryFn: () => fetchChallenges(activeFilter.value),
+    queryKey: ["challenges", activeFilter.value, completion],
+    queryFn: () => fetchChallenges(activeFilter.value, completion),
   });
+
+  async function refresh() {
+    await queryClient.invalidateQueries({ queryKey: ["challenges"] });
+    // The dashboard reads the same rows through the digest it shows.
+    await queryClient.invalidateQueries({ queryKey: ["digest"] });
+    await queryClient.invalidateQueries({ queryKey: ["questions"] });
+  }
 
   const remove = useMutation({
     mutationFn: async (challenge: ChallengeRow) => {
@@ -70,34 +119,64 @@ export default function ChallengesPage() {
     },
     onSuccess: async () => {
       setPendingDelete(null);
-      // The dashboard reads the same rows through the digest it shows.
-      await queryClient.invalidateQueries({ queryKey: ["challenges"] });
-      await queryClient.invalidateQueries({ queryKey: ["digest"] });
-      await queryClient.invalidateQueries({ queryKey: ["questions"] });
+      await refresh();
     },
+  });
+
+  const complete = useMutation({
+    mutationFn: (challenge: ChallengeRow) => post(`/api/questions/${challenge.question_id}/complete`),
+    onSuccess: refresh,
+    onError: (e: Error) => setActionError(e.message),
+  });
+
+  const reopen = useMutation({
+    mutationFn: (challenge: ChallengeRow) => post(`/api/questions/${challenge.question_id}/reopen`),
+    onSuccess: refresh,
+    onError: (e: Error) => setActionError(e.message),
   });
 
   return (
     <main className={styles.page}>
       <div>
-        <div className={styles.pageTitle}>Challenge history</div>
+        <div className={styles.pageTitle}>{showCompleted ? "Completed challenges" : "Challenge history"}</div>
         <div className={styles.pageSub}>
-          Every challenge ever generated, from any digest — plus the ones you picked yourself.
+          {showCompleted
+            ? "Every challenge you've finished. Nothing here is deleted — it's kept exactly so you can look back at it."
+            : "Every challenge ever generated, from any digest — plus the ones you picked yourself."}
         </div>
       </div>
 
+      {/* The motivational element the user asked for: a plain count, not a
+          streak or a badge system — those need day-boundary and timezone
+          logic worth its own design pass, not bolted on here. */}
+      {showCompleted && challenges && challenges.length > 0 && (
+        <div className={styles.completedBanner}>
+          🎉 You&apos;ve completed {challenges.length} challenge{challenges.length === 1 ? "" : "s"}.
+        </div>
+      )}
+
       <div className={styles.filters}>
-        {FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            type="button"
-            className={`${styles.filterChip} ${filter.value === activeFilter.value ? styles.on : ""}`}
-            onClick={() => setActiveFilter(filter)}
-          >
-            {filter.label}
-          </button>
-        ))}
+        {!showCompleted &&
+          FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              className={`${styles.filterChip} ${filter.value === activeFilter.value ? styles.on : ""}`}
+              onClick={() => setActiveFilter(filter)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        <button
+          type="button"
+          className={`${styles.filterChip} ${styles.completedChip} ${showCompleted ? styles.on : ""}`}
+          onClick={() => setShowCompleted((v) => !v)}
+        >
+          {showCompleted ? "← Back to active" : "✓ Completed"}
+        </button>
       </div>
+
+      {actionError && <div className={styles.message}>{actionError}</div>}
 
       {isLoading ? (
         <div className={styles.empty}>Loading…</div>
@@ -111,25 +190,30 @@ export default function ChallengesPage() {
         </div>
       ) : !challenges || challenges.length === 0 ? (
         <div className={styles.empty}>
-          <div className={styles.emptyTitle}>No challenges yet</div>
-          Generate a digest, or pick a question yourself from the candidate pool.
+          <div className={styles.emptyTitle}>
+            {showCompleted ? "Nothing completed yet" : "No challenges yet"}
+          </div>
+          {showCompleted
+            ? "Solve one and mark it complete — it'll show up here."
+            : "Generate a digest, or pick a question yourself from the candidate pool."}
         </div>
       ) : (
         <div className={styles.list}>
-          {/* Status and Feedback, which the mockup also shows, arrive with M8 —
-              there is no feedback table yet, so they are left out rather than
-              rendered as placeholders. */}
+          {/* Feedback, which the mockup also shows, arrives with M8 — there is
+              no feedback table yet, so it is left out rather than stubbed. */}
           <div className={`${styles.row} ${styles.head}`}>
-            <span>Date</span>
+            <span>{showCompleted ? "Completed" : "Date"}</span>
             <span>Question</span>
             <span>Difficulty</span>
-            <span>Source</span>
+            <span>{showCompleted ? "" : "Source"}</span>
             <span />
           </div>
 
           {challenges.map((challenge) => (
             <div key={challenge.id} className={styles.row}>
-              <span className={styles.date}>{formatDate(challenge.created_at)}</span>
+              <span className={styles.date}>
+                {showCompleted ? timeAgo(challenge.solved_at) : formatDate(challenge.created_at)}
+              </span>
               <span>
                 <Link href={`/challenge/${challenge.id}`} className={styles.qtitle}>
                   {challenge.question_title ?? "Untitled question"}
@@ -141,21 +225,47 @@ export default function ChallengesPage() {
               <span className={styles.diff}>
                 {challenge.estimated_difficulty ? `${challenge.estimated_difficulty}/5` : "—"}
               </span>
-              <span
-                className={`${styles.sourcePill} ${
-                  challenge.source === "manual" ? styles.sourceManual : styles.sourceDigest
-                }`}
-              >
-                {challenge.source === "manual" ? "Your pick" : "Digest"}
+              <span>
+                {!showCompleted && (
+                  <span
+                    className={`${styles.sourcePill} ${
+                      challenge.source === "manual" ? styles.sourceManual : styles.sourceDigest
+                    }`}
+                  >
+                    {challenge.source === "manual" ? "Your pick" : "Digest"}
+                  </span>
+                )}
               </span>
-              <button
-                type="button"
-                className={styles.deleteButton}
-                onClick={() => setPendingDelete(challenge)}
-                disabled={remove.isPending}
-              >
-                Delete
-              </button>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {showCompleted ? (
+                  <button
+                    type="button"
+                    className={styles.reopenButton}
+                    onClick={() => reopen.mutate(challenge)}
+                    disabled={reopen.isPending}
+                  >
+                    Reopen
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.completeButton}
+                    onClick={() => complete.mutate(challenge)}
+                    disabled={complete.isPending}
+                  >
+                    ✓ Mark complete
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={styles.deleteButton}
+                  onClick={() => setPendingDelete(challenge)}
+                  disabled={remove.isPending}
+                >
+                  Delete
+                </button>
+                <InfoButton text="Permanently deletes this challenge. The underlying question stays in your candidate pool and can be turned into a new challenge again later. If this challenge was emailed to you as part of a digest, that email's link will stop working." />
+              </span>
             </div>
           ))}
         </div>

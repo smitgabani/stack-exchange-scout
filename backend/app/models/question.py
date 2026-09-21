@@ -108,6 +108,10 @@ class Question(Base):
         UUID(as_uuid=True), ForeignKey("webhook_events.id", ondelete="SET NULL")
     )
 
+    # When a challenge on this question was marked complete. Distinct from
+    # status == "solved" so "how long ago" can be shown, not just "done".
+    solved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

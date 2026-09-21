@@ -1,0 +1,53 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.button {
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  border: 1px solid #b7bcc5;
+  background: #ffffff;
+  color: #41454d;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.button:hover {
+  border-color: #1b61c9;
+  color: #1b61c9;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.popover {
+  position: absolute;
+  z-index: 41;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: 260px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #181d26;
+  color: #f1f2f4;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  box-shadow: 0 8px 24px rgba(24, 29, 38, 0.25);
+}

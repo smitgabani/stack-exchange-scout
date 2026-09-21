@@ -42,6 +42,10 @@ class ChallengeOut(BaseModel):
     content: dict | None = None
     format_name: str | None = None
     blocks: list[str] = []
+    # Threaded from the joined question so list/detail views can tell a
+    # completed challenge apart without a second query.
+    question_status: str | None = None
+    solved_at: datetime | None = None
 
 
 class DigestOut(BaseModel):
@@ -74,6 +78,8 @@ def _challenge_out(challenge: Challenge, question=None) -> ChallengeOut:
         estimated_difficulty=challenge.estimated_difficulty,
         content=challenge.content,
         format_name=challenge.format_name,
+        question_status=question.status if question else None,
+        solved_at=question.solved_at if question else None,
         # The order to render in, resolved against the registry so a block
         # removed from the code stops rendering everywhere at once.
         blocks=[
@@ -122,6 +128,10 @@ async def get_digest(digest_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -
 async def list_challenges(
     db: AsyncSession = Depends(get_db),
     source: str = Query("all", pattern="^(all|digest|manual)$"),
+    # "active" is the default so a completed challenge disappears from the
+    # ordinary working views the moment it's marked done, without vanishing
+    # from the app — "completed" is where it goes to be seen, not deleted.
+    completion: str = Query("active", pattern="^(active|completed|all)$"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[ChallengeOut]:
@@ -140,6 +150,15 @@ async def list_challenges(
         statement = statement.where(Challenge.digest_id.is_(None))
     elif source == "digest":
         statement = statement.where(Challenge.digest_id.is_not(None))
+
+    if completion == "active":
+        statement = statement.where(Question.status != "solved")
+    elif completion == "completed":
+        statement = statement.where(Question.status == "solved")
+        # order_by() appends rather than replaces, so the default
+        # created_at ordering above has to be cleared or this would sort
+        # by created_at first and solved_at second, doing nothing visible.
+        statement = statement.order_by(None).order_by(Question.solved_at.desc())
 
     rows = (await db.execute(statement.limit(limit).offset(offset))).all()
     return [_challenge_out(challenge, question) for challenge, question in rows]

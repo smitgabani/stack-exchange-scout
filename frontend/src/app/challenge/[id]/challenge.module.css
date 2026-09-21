@@ -253,6 +253,69 @@
   color: #41454d;
 }
 
+.completedBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #e6f2e6;
+  color: var(--success, #006400);
+  border-radius: 12px;
+  padding: 16px 22px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.reopenLink {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--success, #006400);
+  background: none;
+  color: var(--success, #006400);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reopenLink:hover:not(:disabled) {
+  background: rgba(0, 100, 0, 0.08);
+}
+
+.reopenLink:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Deliberately not the coral used for the Stack Overflow button below —
+   this is a completion action, not the page's terminal one, and shouldn't
+   compete with it for attention. */
+.completeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  background: var(--success, #006400);
+  color: var(--on-primary);
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 12px;
+  padding: 16px 28px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.completeButton:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.completeButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* --- dynamic blocks ---------------------------------------------------- */
 
 .bulletList,

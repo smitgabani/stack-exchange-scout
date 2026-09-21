@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -40,11 +40,13 @@ class QuestionOut(BaseModel):
     # Whether a challenge already exists for this question, so the UI can show
     # a link to it instead of offering to spend another LLM call making one.
     challenge_id: uuid.UUID | None = None
+    solved_at: datetime | None = None
 
     @classmethod
     def from_model(cls, question: Question, challenge_id: uuid.UUID | None = None) -> "QuestionOut":
         return cls(
             challenge_id=challenge_id,
+            solved_at=question.solved_at,
             id=question.id,
             stackoverflow_question_id=question.stackoverflow_question_id,
             url=question.url,
@@ -187,6 +189,59 @@ async def restore_question(question_id: uuid.UUID, db: AsyncSession = Depends(ge
 
     question.status = "candidate"
     question.rejection_reason = None
+    await db.commit()
+    await db.refresh(question)
+    challenge_ids = await _challenge_ids_for(db, [question.id])
+    return QuestionOut.from_model(question, challenge_ids.get(question.id))
+
+
+@router.post("/questions/{question_id}/complete", response_model=QuestionOut)
+async def complete_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> QuestionOut:
+    """Mark a challenge solved.
+
+    Reuses `status = "solved"`, in the enum since M5 and never set anywhere —
+    M8 (Feedback) was meant to be what set it, and M8 has not been built.
+    Requires an existing challenge: marking a question "solved" that was never
+    turned into one has nothing to be motivated about.
+    """
+    question = await db.get(Question, question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+
+    challenge_ids = await _challenge_ids_for(db, [question.id])
+    if question.id not in challenge_ids:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question has no challenge yet, so there is nothing to complete.",
+        )
+
+    question.status = "solved"
+    question.solved_at = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(question)
+    return QuestionOut.from_model(question, challenge_ids.get(question.id))
+
+
+@router.post("/questions/{question_id}/reopen", response_model=QuestionOut)
+async def reopen_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> QuestionOut:
+    """Undo a completion, putting the challenge back in the active views.
+
+    Returns to "selected" — the state right after promotion or a digest run,
+    before completion — rather than "candidate": it already has a challenge
+    and re-entering the scoring pool would risk a second one being generated
+    for it.
+    """
+    question = await db.get(Question, question_id)
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    if question.status != "solved":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This question is not marked complete, so there is nothing to reopen.",
+        )
+
+    question.status = "selected"
+    question.solved_at = None
     await db.commit()
     await db.refresh(question)
     challenge_ids = await _challenge_ids_for(db, [question.id])

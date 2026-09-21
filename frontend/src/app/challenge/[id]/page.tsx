@@ -33,6 +33,8 @@ type ChallengeDetail = {
   format_name: string | null;
   /** Render order, resolved against the backend's block registry. */
   blocks: string[];
+  question_status: string | null;
+  solved_at: string | null;
 };
 
 async function fetchChallenge(id: string): Promise<ChallengeDetail> {
@@ -50,6 +52,23 @@ function postedAgo(value: string | null): string {
   if (days === 1) return "posted yesterday";
   if (days < 30) return `posted ${days} days ago`;
   return `posted ${Math.floor(days / 30)} months ago`;
+}
+
+function solvedAgo(value: string | null): string {
+  if (!value) return "";
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 30) return `${days} days ago`;
+  return `${Math.floor(days / 30)} months ago`;
+}
+
+async function post(path: string): Promise<void> {
+  const response = await fetch(path, { method: "POST" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `request failed: ${response.status}`);
+  }
 }
 
 export default function ChallengePage() {
@@ -70,6 +89,25 @@ export default function ChallengePage() {
 
   const queryClient = useQueryClient();
   const { data: formats } = useQuery({ queryKey: ["llm-formats"], queryFn: llmApi.formats });
+
+  async function refreshAfterStatusChange() {
+    await queryClient.invalidateQueries({ queryKey: ["challenge"] });
+    await queryClient.invalidateQueries({ queryKey: ["challenges"] });
+    await queryClient.invalidateQueries({ queryKey: ["digest"] });
+    await queryClient.invalidateQueries({ queryKey: ["questions"] });
+  }
+
+  const complete = useMutation({
+    mutationFn: () => post(`/api/questions/${challenge!.question_id}/complete`),
+    onSuccess: refreshAfterStatusChange,
+    onError: (e: Error) => setNote(e.message),
+  });
+
+  const reopen = useMutation({
+    mutationFn: () => post(`/api/questions/${challenge!.question_id}/reopen`),
+    onSuccess: refreshAfterStatusChange,
+    onError: (e: Error) => setNote(e.message),
+  });
 
   const reformat = useMutation({
     mutationFn: () => llmApi.reformatChallenge(params.id, chosenFormat),
@@ -152,6 +190,20 @@ export default function ChallengePage() {
 
       {note && <div className={styles.notice}>{note}</div>}
 
+      {challenge.question_status === "solved" && (
+        <div className={styles.completedBanner}>
+          <span>🎉 Completed {solvedAgo(challenge.solved_at)}</span>
+          <button
+            type="button"
+            className={styles.reopenLink}
+            onClick={() => reopen.mutate()}
+            disabled={reopen.isPending}
+          >
+            Reopen
+          </button>
+        </div>
+      )}
+
       <div className={styles.headerGrid}>
         <div className={styles.whyCard}>
           <div className={styles.cardLabel}>Why this was selected</div>
@@ -209,6 +261,17 @@ export default function ChallengePage() {
             gated.map((key) => <Block key={key} blockKey={key} value={content[key]} />)
           )}
         </div>
+      )}
+
+      {challenge.question_status !== "solved" && (
+        <button
+          type="button"
+          className={styles.completeButton}
+          onClick={() => complete.mutate()}
+          disabled={complete.isPending}
+        >
+          {complete.isPending ? "Marking complete…" : "✓ Mark as complete"}
+        </button>
       )}
 
       {challenge.question_url && <hr className={styles.hr} />}

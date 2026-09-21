@@ -46,6 +46,24 @@
   margin-bottom: 16px;
 }
 
+.sectionHeadRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.sectionHeadRow .sectionTitle {
+  margin-bottom: 16px;
+}
+
+.completedLink {
+  font-size: 14px;
+  font-weight: 500;
+  color: #006400;
+}
+
 .chipRow {
   display: flex;
   flex-wrap: wrap;

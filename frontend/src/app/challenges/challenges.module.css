@@ -143,6 +143,76 @@
   cursor: default;
 }
 
+.completeButton {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--success, #006400);
+  cursor: pointer;
+  justify-self: start;
+  white-space: nowrap;
+}
+
+.completeButton:hover:not(:disabled) {
+  border-color: var(--success, #006400);
+  background: #e6f2e6;
+}
+
+.completeButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reopenButton {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--muted);
+  cursor: pointer;
+  justify-self: start;
+}
+
+.reopenButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.reopenButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The tab that switches the whole page into the completed view, distinct
+   from the source chips it sits beside — its own look says "this is a
+   different axis", not just another filter value. */
+.completedChip {
+  margin-left: auto;
+  border-color: var(--success, #006400);
+  color: var(--success, #006400);
+}
+
+.completedChip.on {
+  background: var(--success, #006400);
+  border-color: var(--success, #006400);
+  color: #ffffff;
+}
+
+.completedBanner {
+  background: #e6f2e6;
+  color: var(--success, #006400);
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
 .empty {
   padding: 48px 0;
   text-align: center;
