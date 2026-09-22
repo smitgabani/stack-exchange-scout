@@ -13,7 +13,7 @@ from app.models.challenge import Challenge
 from app.models.digest import Digest
 from app.models.question import Question
 from app.schemas.profile import ProfileData
-from app.services import challenge_blocks, digest_service, email_service
+from app.services import block_service, digest_service, email_service
 from app.services.profile_service import get_or_create_profile
 
 router = APIRouter(tags=["digests"])
@@ -42,6 +42,11 @@ class ChallengeOut(BaseModel):
     content: dict | None = None
     format_name: str | None = None
     blocks: list[str] = []
+    # How to draw each of those blocks: {key, label, kind, gated}, in the same
+    # order. Added alongside `blocks` rather than replacing it — Vercel and Fly
+    # deploy separately, so a frontend still expecting a list of strings has to
+    # keep working while the two are out of step.
+    block_meta: list[dict] = []
     # Threaded from the joined question so list/detail views can tell a
     # completed challenge apart without a second query.
     question_status: str | None = None
@@ -57,7 +62,16 @@ class DigestOut(BaseModel):
     challenges: list[ChallengeOut] = []
 
 
-def _challenge_out(challenge: Challenge, question=None) -> ChallengeOut:
+def _challenge_out(challenge: Challenge, question, meta: dict[str, dict]) -> ChallengeOut:
+    """One challenge as the API returns it.
+
+    `meta` is the block library, fetched once by the caller: this runs per row
+    and the library is the same for all of them. Required rather than
+    defaulting to empty — an empty library silently yields a challenge with no
+    renderable blocks, which reads as "this challenge has no content" instead
+    of as the mistake it is.
+    """
+    order = block_service.present_order(list((challenge.content or {}).keys()), set(meta))
     return ChallengeOut(
         id=challenge.id,
         question_id=challenge.question_id,
@@ -80,13 +94,10 @@ def _challenge_out(challenge: Challenge, question=None) -> ChallengeOut:
         format_name=challenge.format_name,
         question_status=question.status if question else None,
         solved_at=question.solved_at if question else None,
-        # The order to render in, resolved against the registry so a block
-        # removed from the code stops rendering everywhere at once.
-        blocks=[
-            b.key
-            for b in challenge_blocks.resolve(list((challenge.content or {}).keys()))
-            if b.key in (challenge.content or {})
-        ],
+        # The order to render in, resolved against the library so a block
+        # deleted from either half stops rendering everywhere at once.
+        blocks=order,
+        block_meta=[meta[key] for key in order],
     )
 
 
@@ -114,13 +125,16 @@ async def get_digest(digest_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Digest not found")
 
     pairs = await digest_service.load_digest_questions(db, digest.id)
+    meta = await block_service.render_meta(db)
     return DigestOut(
         id=digest.id,
         status=digest.status,
         question_count=digest.question_count,
         generated_at=digest.generated_at,
         sent_at=digest.sent_at,
-        challenges=[_challenge_out(challenge, question) for question, challenge in pairs],
+        challenges=[
+            _challenge_out(challenge, question, meta) for question, challenge in pairs
+        ],
     )
 
 
@@ -161,7 +175,8 @@ async def list_challenges(
         statement = statement.order_by(None).order_by(Question.solved_at.desc())
 
     rows = (await db.execute(statement.limit(limit).offset(offset))).all()
-    return [_challenge_out(challenge, question) for challenge, question in rows]
+    meta = await block_service.render_meta(db)
+    return [_challenge_out(challenge, question, meta) for challenge, question in rows]
 
 
 @router.get("/challenges/{challenge_id}", response_model=ChallengeOut)
@@ -171,7 +186,7 @@ async def get_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(get_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
 
     question = await db.get(Question, challenge.question_id)
-    return _challenge_out(challenge, question)
+    return _challenge_out(challenge, question, await block_service.render_meta(db))
 
 
 @router.post("/challenges/{challenge_id}/reformat")
@@ -242,13 +257,16 @@ async def generate_digest(db: AsyncSession = Depends(get_db)) -> DigestOut:
         ) from exc
 
     pairs = await digest_service.load_digest_questions(db, digest.id)
+    meta = await block_service.render_meta(db)
     return DigestOut(
         id=digest.id,
         status=digest.status,
         question_count=digest.question_count,
         generated_at=digest.generated_at,
         sent_at=digest.sent_at,
-        challenges=[_challenge_out(challenge, question) for question, challenge in pairs],
+        challenges=[
+            _challenge_out(challenge, question, meta) for question, challenge in pairs
+        ],
     )
 
 

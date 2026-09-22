@@ -17,6 +17,7 @@ from app.models.challenge import Challenge
 from app.models.question import Question
 from app.schemas.profile import ProfileData
 from app.services import (
+    block_service,
     challenge_blocks,
     challenge_service,
     digest_service,
@@ -272,6 +273,12 @@ async def generations(db: AsyncSession = Depends(get_db), limit: int = 100) -> d
                 "prompt_version": challenge.prompt_version,
                 "estimated_difficulty": challenge.estimated_difficulty,
                 "created_at": challenge.created_at.isoformat() if challenge.created_at else None,
+                "format_name": challenge.format_name,
+                # What was actually sent, per call. Block instructions are
+                # editable, so recomposing this at read time would show the
+                # current wording and misattribute what this was made from.
+                # Null on anything generated before that was recorded.
+                "generations": challenge.generations,
             }
             for challenge, question in rows
         ]
@@ -282,13 +289,129 @@ async def generations(db: AsyncSession = Depends(get_db), limit: int = 100) -> d
 
 
 @router.get("/blocks")
-async def blocks() -> dict:
-    """The block library a format is built from.
+async def blocks(db: AsyncSession = Depends(get_db)) -> dict:
+    """The block library a format is built from — both halves of it.
 
-    Served from the registry rather than restated here, so a block added in
-    code appears in the editor without a second edit.
+    Served from the registry and the database rather than restated here, so a
+    block added in code appears in the editor without a second edit, and one
+    the user defined appears without a deploy.
+
+    `kinds` is every renderer that exists; `custom_kinds` is the subset a
+    user-defined block may choose. They differ because `progressive_hints` and
+    `rating` are special-cased elsewhere (ADR 0005).
     """
-    return {"blocks": challenge_blocks.catalogue(), "kinds": list(challenge_blocks.KINDS)}
+    return {
+        "blocks": await block_service.catalogue(db),
+        "kinds": list(challenge_blocks.KINDS),
+        "custom_kinds": list(challenge_blocks.CUSTOM_KINDS),
+        "max_instruction_chars": block_service.MAX_INSTRUCTION_CHARS,
+    }
+
+
+class CustomBlockIn(BaseModel):
+    key: str = Field(min_length=3, max_length=40)
+    label: str = Field(min_length=1, max_length=60)
+    kind: str
+    instruction: str = Field(min_length=1)
+    description: str | None = None
+    gated: bool = False
+
+
+class CustomBlockEdit(BaseModel):
+    """The key is absent on purpose — see `block_service.update_custom`."""
+
+    label: str = Field(min_length=1, max_length=60)
+    kind: str
+    instruction: str = Field(min_length=1)
+    description: str | None = None
+    gated: bool = False
+
+
+def _custom_out(row) -> dict:
+    return {
+        "id": row.id,
+        "key": row.key,
+        "label": row.label,
+        "description": row.description,
+        "kind": row.kind,
+        "instruction": row.instruction,
+        "gated": row.gated,
+        "custom": True,
+    }
+
+
+@router.post("/blocks/custom", status_code=status.HTTP_201_CREATED)
+async def create_custom_block(body: CustomBlockIn, db: AsyncSession = Depends(get_db)) -> dict:
+    """Define a block. Its schema comes from the kind, so none is accepted."""
+    try:
+        row = await block_service.create_custom(
+            db,
+            key=body.key,
+            label=body.label,
+            kind=body.kind,
+            instruction=body.instruction,
+            description=body.description,
+            gated=body.gated,
+        )
+    except block_service.BlockError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return _custom_out(row)
+
+
+@router.patch("/blocks/custom/{block_id}")
+async def update_custom_block(
+    block_id: int, body: CustomBlockEdit, db: AsyncSession = Depends(get_db)
+) -> dict:
+    try:
+        row = await block_service.update_custom(
+            db,
+            block_id,
+            label=body.label,
+            kind=body.kind,
+            instruction=body.instruction,
+            description=body.description,
+            gated=body.gated,
+        )
+    except block_service.BlockError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such block")
+    return _custom_out(row)
+
+
+@router.delete("/blocks/custom/{block_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_custom_block(block_id: int, db: AsyncSession = Depends(get_db)) -> None:
+    """Challenges that already have this block's output keep it in `content`,
+    but nothing resolves the key any more, so it stops being rendered.
+    """
+    if not await block_service.delete_custom(db, block_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such block")
+
+
+class InstructionIn(BaseModel):
+    instruction: str = Field(min_length=1)
+
+
+@router.put("/blocks/{block_key}/instruction")
+async def set_block_instruction(
+    block_key: str, body: InstructionIn, db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Reword what a built-in block asks for. Its shape is unaffected."""
+    try:
+        instruction = await block_service.set_instruction(db, block_key, body.instruction)
+    except block_service.BlockError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return {"key": block_key, "instruction": instruction, "is_overridden": True}
+
+
+@router.delete("/blocks/{block_key}/instruction")
+async def reset_block_instruction(block_key: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Go back to the instruction that ships in the code."""
+    try:
+        instruction = await block_service.reset_instruction(db, block_key)
+    except block_service.BlockError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return {"key": block_key, "instruction": instruction, "is_overridden": False}
 
 
 class FormatIn(BaseModel):

@@ -374,19 +374,3 @@ def build_instructions(blocks: list[Block]) -> str:
     """The numbered list of what to produce, one line per block."""
     lines = [f"{index}. {block.instruction}" for index, block in enumerate(blocks, start=1)]
     return "\n".join(lines)
-
-
-def catalogue() -> list[dict[str, Any]]:
-    """The block library, for the format editor."""
-    return [
-        {
-            "key": block.key,
-            "label": block.label,
-            "description": block.description,
-            "kind": block.kind,
-            "core": block.core,
-            "gated": block.gated,
-            "has_urls": block.has_urls,
-        }
-        for block in BLOCKS
-    ]

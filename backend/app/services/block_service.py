@@ -40,6 +40,12 @@ MAX_INSTRUCTION_CHARS = 1200
 # `challenges.content` and a lookup on the frontend.
 _KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,39}$")
 
+# Words that would collide with a literal path segment under /llm/blocks.
+# Unreachable today — the instruction endpoints only accept built-in keys —
+# but a key is permanent once challenges are stored under it, so it is far
+# cheaper to refuse the name than to discover the clash later.
+_RESERVED_KEYS = frozenset({"custom", "instruction"})
+
 
 class BlockError(RuntimeError):
     """A block or instruction was rejected before it could be stored."""
@@ -81,6 +87,8 @@ def _validate_key(key: str) -> str:
         raise BlockError(
             f"“{key}” is a built-in block. Edit its instruction instead of redefining it."
         )
+    if key in _RESERVED_KEYS:
+        raise BlockError(f"“{key}” is reserved. Pick another key.")
     return key
 
 
@@ -163,6 +171,50 @@ async def known_keys(db: AsyncSession) -> set[str]:
     return set(challenge_blocks.BY_KEY) | set(rows)
 
 
+async def render_meta(db: AsyncSession) -> dict[str, dict[str, Any]]:
+    """What the frontend needs to draw each block: label, kind, gated.
+
+    Deliberately not the instruction — this is served with every challenge,
+    and the prompt is neither useful to the reader nor small.
+
+    One query for the whole library, because the challenge list renders up to
+    two hundred rows and resolving per row would be two hundred round trips.
+    """
+    meta: dict[str, dict[str, Any]] = {
+        block.key: {"key": block.key, "label": block.label, "kind": block.kind, "gated": block.gated}
+        for block in challenge_blocks.BLOCKS
+    }
+    rows = await db.scalars(select(CustomBlock).order_by(CustomBlock.key))
+    for row in rows:
+        meta[row.key] = {
+            "key": row.key,
+            "label": row.label,
+            "kind": row.kind,
+            "gated": row.gated,
+        }
+    return meta
+
+
+def present_order(content_keys: list[str], known: set[str]) -> list[str]:
+    """The keys a challenge actually has, in the order to render them.
+
+    The pure half of `resolve`'s ordering, so a caller that already holds the
+    library can arrange many challenges without going back to the database.
+    Core blocks lead; everything else follows in the order the content stored
+    it; anything that no longer resolves is dropped, which is what makes a
+    deleted block stop rendering everywhere at once.
+    """
+    present = set(content_keys)
+    # Core keys are filtered by `known` too, so this never names a key the
+    # caller has no metadata for — the docstring's promise applies to all of
+    # them, not just the optional ones.
+    ordered: list[str] = [k for k in challenge_blocks.CORE_KEYS if k in present and k in known]
+    for key in content_keys:
+        if key not in ordered and key in known:
+            ordered.append(key)
+    return ordered
+
+
 # --- the library, for the editor ----------------------------------------
 
 
@@ -177,6 +229,9 @@ async def catalogue(db: AsyncSession) -> list[dict[str, Any]]:
 
     entries: list[dict[str, Any]] = [
         {
+            # Built-ins have no row of their own, so no id. The editor keys
+            # off `custom` to decide which endpoints apply.
+            "id": None,
             "key": block.key,
             "label": block.label,
             "description": block.description,
@@ -193,6 +248,9 @@ async def catalogue(db: AsyncSession) -> list[dict[str, Any]]:
     ]
     entries.extend(
         {
+            # What `/llm/blocks/custom/{id}` needs: without it the editor can
+            # list a custom block but not edit or delete the one it listed.
+            "id": row.id,
             "key": row.key,
             "label": row.label,
             "description": row.description or "",
