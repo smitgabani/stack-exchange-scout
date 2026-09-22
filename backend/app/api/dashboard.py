@@ -10,6 +10,7 @@ challenge. The counts and the streak are there to make progress visible, the
 funnel to make the machinery legible, and everything else is secondary.
 """
 
+import html
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends
@@ -64,7 +65,11 @@ def _streak(weeks_with_a_solve: set[date], this_week: date) -> int:
 def _card(challenge: Challenge, question: Question) -> dict:
     return {
         "id": str(challenge.id),
-        "question_title": question.title,
+        # Stack Exchange returns titles HTML-encoded, and they are stored that
+        # way — "Can&#39;t read the header". Decoded here because this is the
+        # largest text on the page. React escapes whatever it renders, so the
+        # decoded string is still displayed safely as text.
+        "question_title": html.unescape(question.title) if question.title else None,
         "question_tags": (question.tags or [])[:4],
         "estimated_difficulty": challenge.estimated_difficulty,
         "created_at": challenge.created_at.isoformat() if challenge.created_at else None,
@@ -177,7 +182,11 @@ async def dashboard(db: AsyncSession = Depends(get_db)) -> dict:
         "last_run": (
             {
                 "at": last_run.started_at.isoformat() if last_run.started_at else None,
-                "cost_usd": last_run.cost_usd,
+                # A Numeric column comes back as Decimal whatever the Mapped
+                # annotation claims, and FastAPI serialises Decimal as a
+                # string. The page called .toFixed() on "0.35" and the whole
+                # dashboard failed to render.
+                "cost_usd": float(last_run.cost_usd) if last_run.cost_usd is not None else None,
                 "questions_found": last_run.questions_found,
             }
             if last_run

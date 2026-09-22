@@ -110,3 +110,65 @@ def test_up_next_never_repeats_the_lead_challenge(
 
 def test_the_dashboard_requires_a_session(client: TestClient) -> None:
     assert client.get("/dashboard").status_code == 401
+
+
+# --- 🔒 the response carries real types, not what the fixtures assumed ---
+
+
+def test_a_run_cost_is_serialised_as_a_number(
+    client: TestClient, auth_cookies: dict[str, str]
+) -> None:
+    """The bug that broke the live page.
+
+    `scout_runs.cost_usd` is Numeric, so it comes back as Decimal whatever its
+    annotation says, and FastAPI serialises Decimal as the string "0.35". The
+    frontend called .toFixed() on it and the whole dashboard failed to render.
+    Stubbed tests used the number 0.35 and could never have seen it.
+    """
+    import asyncio
+    from decimal import Decimal
+
+    from sqlalchemy import delete
+
+    from app.core.db import async_session
+    from app.models.scout_definition import ScoutRun
+
+    async def plant() -> object:
+        async with async_session() as session:
+            run = ScoutRun(
+                kind="research_task",
+                status="succeeded",
+                cost_usd=Decimal("0.3500"),
+                questions_found=12,
+            )
+            session.add(run)
+            await session.commit()
+            return run.id
+
+    async def remove(run_id) -> None:
+        async with async_session() as session:
+            await session.execute(delete(ScoutRun).where(ScoutRun.id == run_id))
+            await session.commit()
+
+    run_id = asyncio.run(plant())
+    try:
+        body = client.get("/dashboard", cookies=auth_cookies).json()
+        cost = body["last_run"]["cost_usd"]
+        assert isinstance(cost, int | float), f"cost_usd came back as {type(cost).__name__}: {cost!r}"
+        assert cost == 0.35
+    finally:
+        asyncio.run(remove(run_id))
+
+
+def test_card_titles_are_decoded_from_stack_exchange_html() -> None:
+    """Stack Exchange stores titles HTML-encoded; the hero showed them raw."""
+    import uuid
+
+    from app.api.dashboard import _card
+    from app.models.challenge import Challenge
+    from app.models.question import Question
+
+    question = Question(title="Can&#39;t read the &quot;Set-Cookie&quot; header", tags=["axios"])
+    challenge = Challenge(id=uuid.uuid4(), estimated_difficulty=3)
+
+    assert _card(challenge, question)["question_title"] == "Can't read the \"Set-Cookie\" header"

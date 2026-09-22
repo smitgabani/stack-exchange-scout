@@ -456,7 +456,7 @@ export default function DashboardPage() {
           {last_run
             ? `Last scout run ${ago(last_run.at)}${
                 last_run.questions_found != null ? ` · ${last_run.questions_found} found` : ""
-              }${last_run.cost_usd != null ? ` · $${last_run.cost_usd.toFixed(2)}` : ""}`
+              }${last_run.cost_usd != null ? ` · $${Number(last_run.cost_usd).toFixed(2)}` : ""}`
             : "No scout run yet"}
         </span>
       </div>
