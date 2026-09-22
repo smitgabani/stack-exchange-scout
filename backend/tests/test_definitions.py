@@ -5,6 +5,7 @@ every test creates its own definitions and removes them again, and no test may
 reach Yutori — a stray create_research_task would spend $0.35.
 """
 
+import uuid
 from datetime import UTC, datetime
 
 import pytest
@@ -284,6 +285,40 @@ async def test_a_scout_owned_by_another_account_is_not_reported_as_deleted(
 
     await db_session.delete(instance)
     await db_session.commit()
+
+
+@pytest.mark.anyio
+async def test_forget_drops_the_row_without_calling_yutori(db_session, definition, monkeypatch):
+    """The escape hatch `delete_instance` cannot be: an instance under another
+    account's key would otherwise be permanently stuck with no way off the
+    list — not deletable (wrong key), and previously not forgettable either.
+    """
+    from app.models.scout_definition import ScoutInstance
+    from app.services import definition_service as svc
+
+    instance = ScoutInstance(definition_id=definition.id, kind="scout", external_id="not-ours")
+    db_session.add(instance)
+    await db_session.commit()
+    await db_session.refresh(instance)
+
+    def client(db):
+        raise AssertionError("forget must never call out to Yutori")
+
+    monkeypatch.setattr(scout_service, "get_client", client)
+
+    result = await svc.forget_instance(db_session, instance.id)
+
+    assert result["forgotten"] is True
+    assert await db_session.get(ScoutInstance, instance.id) is None
+
+
+@pytest.mark.anyio
+async def test_forgetting_an_unknown_instance_reports_it(db_session):
+    from app.services import definition_service as svc
+
+    result = await svc.forget_instance(db_session, uuid.uuid4())
+
+    assert result["forgotten"] is False
 
 
 @pytest.mark.anyio

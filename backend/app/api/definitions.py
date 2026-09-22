@@ -282,6 +282,23 @@ async def delete_instance(
     return result
 
 
+@router.post("/scout-instances/{instance_id}/forget")
+async def forget_instance(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Drop this app's record of an instance without touching Yutori.
+
+    For the one case `DELETE` cannot handle: an instance created under a
+    different account's key. Yutori answers 403 to a delete from any other
+    key, so the row would otherwise be permanently stuck in the list with no
+    way off it.
+    """
+    result = await definition_service.forget_instance(db, instance_id)
+    if not result.get("forgotten"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=result.get("error") or "No such instance"
+        )
+    return result
+
+
 @router.get("/scout-runs")
 async def list_runs(db: AsyncSession = Depends(get_db)) -> dict:
     return {"runs": await definition_service.run_history(db)}

@@ -33,3 +33,9 @@
   color: var(--ink);
   font-weight: 500;
 }
+
+.error {
+  font-size: 13px;
+  color: var(--coral, #aa2d00);
+  margin-left: 10px;
+}

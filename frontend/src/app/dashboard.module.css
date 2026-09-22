@@ -1,3 +1,12 @@
+/* The dashboard, rebuilt around what the app is for: solving a challenge.
+   It used to lead with a static hero and three maintenance buttons — the
+   least valuable things on the page — with the challenges below the fold.
+
+   design.md is followed rather than sampled. The signature colours appear
+   only as full-bleed structural blocks (§1), weights never exceed 500 (§2),
+   card grids stagger rather than align (§3), and there are no hover states,
+   only default and active (§4). */
+
 .page {
   max-width: var(--content-wide);
   /* body is a flex column, and auto side margins there suppress the
@@ -11,57 +20,350 @@
   gap: var(--page-gap);
 }
 
-.hero {
-  background: #f5e9d4;
+/* --- 1. Today ------------------------------------------------------- */
+
+/* One challenge, one action. Everything else on the page is secondary to
+   getting into this. A signature block, because design.md reserves those
+   for exactly this kind of structural punctuation. */
+.today {
+  background: var(--cream);
   border-radius: 16px;
   padding: var(--card-padding);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.todayEmpty {
+  background: var(--mint);
+  color: var(--forest);
 }
 
 .eyebrow {
   font-size: 13px;
   font-weight: 600;
-  color: #41454d;
-  margin-bottom: 12px;
+  letter-spacing: 0.16px;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
-.heroTitle {
+.todayEmpty .eyebrow {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.todayTitle {
   font-size: var(--title-hero);
   font-weight: 400;
   line-height: 1.2;
-  color: #181d26;
+  color: var(--ink);
+  max-width: 24ch;
 }
 
-.heroSub {
-  font-size: 15px;
-  color: #333840;
-  line-height: 1.5;
-  margin-top: 12px;
-  max-width: 560px;
+.todayEmpty .todayTitle {
+  color: inherit;
 }
 
-.sectionTitle {
-  font-size: 20px;
+.todayChallenge {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--ink);
+  max-width: 40ch;
+}
+
+.todayMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--body-text);
+}
+
+/* Sits on a signature block, so a translucent white rather than a fill of
+   its own — design.md §1 reserves solid colour for whole blocks. */
+.todayTag {
+  font-size: 13px;
   font-weight: 500;
-  color: #181d26;
-  margin-bottom: 16px;
+  padding: 5px 12px;
+  border-radius: 9999px;
+  border: 1px solid rgba(24, 29, 38, 0.18);
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--body-text);
 }
 
-.sectionHeadRow {
+.todayActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.cta {
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  padding: 16px 28px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  background: var(--primary);
+  color: var(--on-primary);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.cta:active {
+  background: var(--primary-active);
+}
+
+.ctaQuiet {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+  padding: 16px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.todayEmpty .ctaQuiet {
+  color: inherit;
+}
+
+/* --- 2. Momentum ---------------------------------------------------- */
+
+/* Deliberately not a rigid row: design.md §3 asks card grids to stagger.
+   The streak block is the tall one because it is the number that carries
+   the most meaning over time. */
+.momentum {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.stat {
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink);
+  min-height: 132px;
+}
+
+.statTall {
+  min-height: 168px;
+}
+
+.statMint { background: var(--mint); }
+.statPeach { background: var(--peach); }
+.statSoft { background: var(--surface-soft); }
+
+.statValue {
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.statLabel {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.statNote {
+  font-size: 13px;
+  color: var(--body-text);
+  margin-top: auto;
+  line-height: 1.4;
+}
+
+/* Twelve weeks of completions. Bars rather than a line: at this size a
+   line implies precision the data does not have. */
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 40px;
+  margin-top: auto;
+}
+
+.sparkBar {
+  flex: 1;
+  border-radius: 2px 2px 0 0;
+  background: rgba(24, 29, 38, 0.22);
+  min-height: 2px;
+}
+
+.sparkBarOn {
+  background: var(--ink);
+}
+
+/* --- 3. Up next ----------------------------------------------------- */
+
+.sectionHead {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px 16px;
-}
-
-.sectionHeadRow .sectionTitle {
   margin-bottom: 16px;
 }
 
-.completedLink {
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.sectionLink {
   font-size: 14px;
   font-weight: 500;
-  color: #006400;
+  color: var(--link);
+}
+
+.upNext {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.upNextCard {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--canvas);
+}
+
+.upNextCard:active {
+  background: var(--surface-soft);
+}
+
+/* Staggered, per design.md §3 — a uniform row reads as a spec sheet. */
+.upNextCard:nth-child(2) { margin-top: 16px; }
+.upNextCard:nth-child(3) { margin-top: 32px; }
+
+.upNextTitle {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.upNextMeta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* --- 4. Pipeline ---------------------------------------------------- */
+
+.funnel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.funnelGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.funnelGroupTitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 4px;
+}
+
+.funnelRow {
+  display: grid;
+  grid-template-columns: 140px 1fr 44px;
+  gap: 16px;
+  align-items: center;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--body-text);
+}
+
+.funnelBar {
+  height: 20px;
+  border-radius: 4px;
+  min-width: 3px;
+  background: var(--surface-strong);
+}
+
+/* Neutrals only. design.md §1: the signature colours are for whole blocks,
+   "never as thin element fills" — which a 20px bar is. Emphasis comes from
+   ink against grey instead: the rows that matter most are darkest. */
+.funnelBarMid { background: var(--border-strong); }
+.funnelBarInk { background: var(--ink); }
+
+.funnelCount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.funnelNote {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+  max-width: 68ch;
+  margin-top: 8px;
+}
+
+/* --- 5. Actions + 6. Footer ------------------------------------------ */
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.button {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 14px 24px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.button:active:not(:disabled) { background: var(--primary-active); }
+.button:disabled { background: var(--border-strong); cursor: not-allowed; }
+
+.secondaryButton {
+  composes: button;
+  background: var(--canvas);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+}
+
+.secondaryButton:active:not(:disabled) { background: var(--surface-strong); }
+
+.message {
+  font-size: 14px;
+  color: var(--muted);
 }
 
 .chipRow {
@@ -82,8 +384,6 @@
   color: var(--body-text);
 }
 
-/* Carries the topic's palette colour, so a topic is recognisable here, on the
-   Topics page and on its question cards. */
 .chipDot {
   width: 8px;
   height: 8px;
@@ -91,184 +391,85 @@
   flex-shrink: 0;
 }
 
-.digestGrid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+.footerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  border-top: 1px solid var(--hairline);
+  padding-top: 16px;
+  font-size: 13.5px;
+  color: var(--muted);
 }
 
+.loading {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* --- phone ---------------------------------------------------------- */
+
 @media (max-width: 900px) {
-  .digestGrid {
+  .momentum,
+  .upNext {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .upNextCard:nth-child(2),
+  .upNextCard:nth-child(3) {
+    margin-top: 0;
   }
 }
 
 @media (max-width: 620px) {
-  .digestGrid {
+  .momentum,
+  .upNext {
     grid-template-columns: 1fr;
   }
-}
 
-.digestCard {
-  border-radius: 12px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 160px;
-  color: #181d26;
-}
+  .today {
+    border-radius: 12px;
+  }
 
-.tone0 {
-  background: #a8d8c4;
-}
+  .todayChallenge {
+    font-size: 19px;
+  }
 
-.tone1 {
-  background: #fcab79;
-}
+  .stat,
+  .statTall {
+    min-height: 0;
+  }
 
-.tone2 {
-  background: #f5e9d4;
-}
+  .statValue {
+    font-size: 32px;
+  }
 
-.difficultyBadge {
-  align-self: flex-start;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.55);
-  padding: 4px 10px;
-  border-radius: 6px;
-}
+  .funnel {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
 
-.cardTitle {
-  font-size: 17px;
-  font-weight: 500;
-  line-height: 1.35;
-}
+  .funnelRow {
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+  }
 
-.cardTags {
-  font-size: 13px;
-  color: #333840;
-  margin-top: auto;
-}
+  .funnelRow > :first-child {
+    grid-column: 1 / -1;
+  }
 
-.emptyDigest {
-  background: #aa2d00;
-  color: #ffffff;
-  border-radius: 16px;
-  padding: var(--card-padding);
-}
-
-.emptyTitle {
-  font-size: clamp(21px, 5vw, 24px);
-  font-weight: 400;
-  margin-bottom: 10px;
-}
-
-.emptySub {
-  font-size: 15px;
-  line-height: 1.5;
-  opacity: 0.92;
-  max-width: 600px;
-}
-
-.actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.button {
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 500;
-  padding: 14px 24px;
-  border-radius: 12px;
-  border: none;
-  cursor: pointer;
-  background: #181d26;
-  color: #ffffff;
-}
-
-.button:disabled {
-  background: #9297a0;
-  cursor: not-allowed;
-}
-
-.secondaryButton {
-  composes: button;
-  background: #ffffff;
-  color: #181d26;
-  border: 1px solid #dddddd;
-}
-
-.message {
-  font-size: 14px;
-  color: #41454d;
-}
-
-
-.digestList {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.digestRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border: 1px solid #dddddd;
-  border-radius: 10px;
-  padding: 14px 18px;
-  font-size: 14px;
-  color: #333840;
-}
-
-.statusPill {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  background: #f8fafc;
-  color: #41454d;
-}
-
-/* Pressed states — design.md §4 evaluates components as Default and
-   Active/Pressed, and these were missing entirely. */
-
-.button:active:not(:disabled) {
-  background: var(--primary-active);
-}
-
-.secondaryButton:active:not(:disabled) {
-  background: var(--surface-strong);
-}
-
-@media (max-width: 480px) {
   .actions {
     gap: 10px;
   }
 
-  /* One button per row, sized to leave exactly the info dot and the gap
-     beside it — otherwise the dot wrapped onto a line of its own, orphaned
-     from the button it explains. */
   .button,
   .secondaryButton {
     flex: 1 1 calc(100% - 28px);
     text-align: center;
   }
 
-  .message {
-    flex-basis: 100%;
-  }
-
-  /* Label and status stack instead of being squeezed onto one line. */
-  .digestRow {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+  .cta {
+    width: 100%;
+    text-align: center;
   }
 }

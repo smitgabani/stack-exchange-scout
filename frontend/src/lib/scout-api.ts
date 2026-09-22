@@ -266,6 +266,13 @@ export const scoutApi = {
       `/api/scout-instances/${id}`,
       { method: "DELETE" },
     ),
+  /** Drops the local record only, for an instance a different account owns —
+   *  `deleteInstance` refuses those with a 403 from Yutori. */
+  forgetInstance: (id: string) =>
+    json<{ forgotten: boolean; external_id?: string }>(
+      `/api/scout-instances/${id}/forget`,
+      { method: "POST" },
+    ),
   effectiveness: () => json<{ rows: EffectivenessRow[] }>("/api/scout-effectiveness"),
 
   listAccounts: () => json<{ accounts: Account[] }>("/api/accounts"),

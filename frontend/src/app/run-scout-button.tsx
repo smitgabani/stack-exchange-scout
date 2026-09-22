@@ -1,8 +1,9 @@
 "use client";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { scoutApi } from "@/lib/scout-api";
 import { ConfirmDialog } from "./confirm-dialog";
-import { useScout } from "./use-scout";
 import styles from "./run-scout-button.module.css";
 
 export type RunMode = "research" | "scout";
@@ -16,23 +17,37 @@ export type RunMode = "research" | "scout";
  * because it is the one that actually runs when asked — restart was measured
  * not to — and because its result can be polled back if the webhook is missed.
  *
- * The backend refuses a second run while one is in flight (409); this disabled
- * state is convenience, not the guard.
+ * Runs a specific scout definition (`POST /scout-definitions/{id}/run`) rather
+ * than the legacy singleton `/scout/run` — the caller resolves *which*
+ * definition via `usePrimaryScout`, since that answer depends on how many
+ * scouts exist and this component has no business guessing.
  */
 export function RunScoutButton({
+  definitionId,
   className,
   label = "Find new questions",
+  cost = 0.35,
+  isRunning = false,
   allowModeChoice = true,
 }: {
+  definitionId: string;
   className?: string;
   label?: string;
+  cost?: number;
+  isRunning?: boolean;
   allowModeChoice?: boolean;
 }) {
-  const { scout, isRunning, run } = useScout();
+  const queryClient = useQueryClient();
   const [asking, setAsking] = useState(false);
   const [mode, setMode] = useState<RunMode>("research");
 
-  const cost = scout?.run_cost_usd ?? 0.35;
+  const run = useMutation({
+    mutationFn: (m: RunMode) => scoutApi.runDefinition(definitionId, m),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["definitions"] });
+      await queryClient.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
 
   return (
     <>
@@ -44,6 +59,9 @@ export function RunScoutButton({
       >
         {isRunning ? "Scout running…" : label}
       </button>
+      {run.isError && (
+        <span className={styles.error}>{(run.error as Error).message}</span>
+      )}
       <ConfirmDialog
         open={asking}
         title="Start a discovery run?"

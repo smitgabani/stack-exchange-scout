@@ -247,6 +247,27 @@ async def run_definition(
     )
 
 
+async def forget_instance(db: AsyncSession, instance_id: uuid.UUID) -> dict[str, Any]:
+    """Drop the local record without touching Yutori.
+
+    `delete_instance` refuses on a 403 — the instance is still out there
+    running under another account, and saying "deleted" would be a lie. That
+    is correct, but it also means an instance pointing at another account's
+    key has no way to leave this app's list at all: not deletable (wrong key),
+    and until now not forgettable either. This is that second door: it clears
+    the reference this app holds and nothing else, mirroring the legacy
+    Scout's `/scout/forget` for the one case it existed to solve.
+    """
+    instance = await db.get(ScoutInstance, instance_id)
+    if instance is None:
+        return {"forgotten": False, "error": "No such instance"}
+
+    external_id = instance.external_id
+    await db.delete(instance)
+    await db.commit()
+    return {"forgotten": True, "external_id": external_id}
+
+
 async def delete_instance(db: AsyncSession, instance_id: uuid.UUID) -> dict[str, Any]:
     """Delete a Scout at Yutori and drop our record of it.
 

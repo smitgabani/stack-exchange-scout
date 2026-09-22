@@ -162,20 +162,34 @@ Read-only history plus two reconciliation actions per run:
   this run's payload.
 
 ### Monitors (`/yutori/monitors`)
-The raw view of what's live at Yutori right now, independent of what this
-app has recorded — useful for finding a Scout that's running (and
-billing) without a matching local record.
+Ownership and raw inventory, across every account you've used — not a
+status dashboard for one scout. (It used to be: a "Query being
+searched / Configuration / Updates / Last run / Timeline / Health"
+section here was built entirely on a legacy single-Scout model that
+predated multi-account keys. That content was removed rather than fixed,
+because it already exists correctly, per account, on a scout's own page
+under Scouts and a run's own page under Runs. "Find new questions" on
+the dashboard was on the same legacy path and now runs through a scout
+definition too, the same way the Scouts page always has.)
 
-- **Park** — pauses a Scout at Yutori so it stops running/billing, without
-  deleting its history here.
-- **Forget** — removes this app's tracking record of an instance without
-  touching it at Yutori (use when you know it's already gone remotely).
-- **Pull** — refreshes this list from Yutori's live inventory.
-- **Sync** — reconciles a specific tracked instance's state, same as the
-  Runs page's Sync.
-- **Delete** (per untracked/remote instance) — deletes the Scout at
-  Yutori itself. This is the one action here that stops something from
-  billing further — it is not merely a local "forget."
+**Remote objects** — every Scout/research task this app has created,
+grouped by the account that owns it.
+- **Delete at Yutori** (Scout, active-key rows only) — deletes the Scout
+  at Yutori itself. The one action here that stops something from
+  billing further.
+- **Forget** (research task rows) — removes the local record of an
+  already-finished task; nothing exists at Yutori to touch.
+- **Forget** (rows owned by another account) — removes only this app's
+  reference. Yutori is never contacted, so the Scout keeps running and
+  billing under whichever account created it — this is for clearing a
+  dead local link, not for stopping it.
+
+**Everything at Yutori** — read live from Yutori for the currently
+active account (Yutori has no way to list another account's Scouts
+without switching keys to it).
+- **List scouts and research tasks** — fetches this account's live
+  inventory. Free, and useful for finding a Scout that's running (and
+  billing) with no matching local record.
 
 ### Accounts (`/yutori/accounts`, `/yutori/accounts/[id]`)
 Manages Yutori API keys ("accounts") that pay for runs.
