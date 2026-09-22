@@ -3,7 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { jobsApi } from "@/lib/jobs-api";
 import { llmApi } from "@/lib/llm-api";
+import { JobStatus, useJob } from "../job-status";
 import { colorForTopic } from "@/lib/topic-color";
 import { ConfirmDialog } from "../confirm-dialog";
 import { InfoButton } from "../info-button";
@@ -220,18 +222,17 @@ export default function QuestionsPage() {
     await queryClient.invalidateQueries({ queryKey: ["challenges"] });
   }
 
+  // One LLM call, 15-30 seconds. Held the request open synchronously; now a
+  // job, so the button returns at once and the result is asked for.
+  const challengeJob = useJob(refresh);
+
   const promote = useMutation({
-    mutationFn: (question: QuestionRow) =>
-      postTo(
-        `/api/questions/${question.id}/challenge${
-          promoteFormat === null ? "" : `?format_id=${promoteFormat}`
-        }`,
-      ),
-    onSuccess: async () => {
+    mutationFn: (question: QuestionRow) => jobsApi.createChallenge(question.id, promoteFormat),
+    onSuccess: (job) => {
       setPendingPromote(null);
       setPromoteFormat(null);
       setActionError(null);
-      await refresh();
+      challengeJob.start(job);
     },
     onError: (error: Error) => {
       setPendingPromote(null);
@@ -339,6 +340,15 @@ export default function QuestionsPage() {
       </div>
 
       {actionError && <div className={styles.stageResult}>{actionError}</div>}
+
+      <JobStatus
+        job={challengeJob.job}
+        onCheck={() => challengeJob.check.mutate()}
+        checking={challengeJob.check.isPending}
+        estimate="around half a minute"
+      >
+        <span>Challenge ready — the card below now links to it.</span>
+      </JobStatus>
 
       {isLoading ? (
         <div className={styles.empty}>Loading…</div>

@@ -4,7 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { jobsApi } from "@/lib/jobs-api";
 import { llmApi } from "@/lib/llm-api";
+import { JobStatus, useJob } from "../../job-status";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
 import { Block, ProgressiveHints, SPECIAL_BLOCKS, indexBlocks } from "./blocks";
@@ -132,35 +134,53 @@ export default function ChallengePage() {
     onError: (e: Error) => setNote(e.message),
   });
 
+  // One LLM call for the missing sections. A job now: the request used to be
+  // held open for the whole generation.
+  const topUp = useJob(async (job) => {
+    const result = (job.result ?? {}) as {
+      added?: string[];
+      missing?: string[];
+      dropped_links?: string[];
+      format?: string;
+      spent_call?: boolean;
+    };
+    const parts: string[] = [];
+    if ((result.added?.length ?? 0) === 0 && (result.missing?.length ?? 0) === 0) {
+      parts.push(`Already has everything ${result.format} asks for — no call was made.`);
+    } else {
+      const added = result.added ?? [];
+      parts.push(
+        `Added ${added.length} section${added.length === 1 ? "" : "s"}: ${added
+          .map(labelFor)
+          .join(", ")}.`,
+      );
+    }
+    if ((result.missing?.length ?? 0) > 0) {
+      parts.push(
+        `The model did not produce ${(result.missing ?? [])
+          .map(labelFor)
+          .join(", ")} — press Add sections again to retry just those.`,
+      );
+    }
+    const dropped = result.dropped_links ?? [];
+    if (dropped.length > 0) {
+      parts.push(
+        `${dropped.length} link${dropped.length === 1 ? "" : "s"} did not resolve and ${
+          dropped.length === 1 ? "was" : "were"
+        } dropped.`,
+      );
+    }
+    setNote(parts.join(" "));
+    await queryClient.invalidateQueries({ queryKey: ["challenge"] });
+    await queryClient.invalidateQueries({ queryKey: ["challenges"] });
+  });
+
   const reformat = useMutation({
-    mutationFn: () => llmApi.reformatChallenge(params.id, chosenFormat),
-    onSuccess: async (result) => {
+    mutationFn: () => jobsApi.reformat(params.id, chosenFormat),
+    onSuccess: (job) => {
       setFormatOpen(false);
-      // A short result has to explain itself: "I asked for nine and got two"
-      // was previously something you had to work out from the page.
-      const parts: string[] = [];
-      if (result.added.length === 0 && result.missing.length === 0) {
-        parts.push(`Already has everything ${result.format} asks for — no call was made.`);
-      } else {
-        parts.push(
-          `Added ${result.added.length} section${result.added.length === 1 ? "" : "s"}: ${result.added
-            .map(labelFor)
-            .join(", ")}.`,
-        );
-      }
-      if (result.missing.length > 0) {
-        parts.push(
-          `The model did not produce ${result.missing.map(labelFor).join(", ")} — press Add sections again to retry just those.`,
-        );
-      }
-      if (result.dropped_links.length > 0) {
-        parts.push(
-          `${result.dropped_links.length} link${result.dropped_links.length === 1 ? "" : "s"} did not resolve and ${result.dropped_links.length === 1 ? "was" : "were"} dropped.`,
-        );
-      }
-      setNote(parts.join(" "));
-      await queryClient.invalidateQueries({ queryKey: ["challenge"] });
-      await queryClient.invalidateQueries({ queryKey: ["challenges"] });
+      setNote(null);
+      topUp.start(job);
     },
     onError: (e: Error) => {
       setFormatOpen(false);
@@ -212,6 +232,15 @@ export default function ChallengePage() {
       </div>
 
       {note && <div className={styles.notice}>{note}</div>}
+
+      <JobStatus
+        job={topUp.job}
+        onCheck={() => topUp.check.mutate()}
+        checking={topUp.check.isPending}
+        estimate="around half a minute"
+      >
+        <span>Sections added — they are on the page below.</span>
+      </JobStatus>
 
       {challenge.question_status === "solved" && (
         <div className={styles.completedBanner}>

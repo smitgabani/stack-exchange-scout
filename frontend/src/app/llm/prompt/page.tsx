@@ -2,7 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { jobsApi } from "@/lib/jobs-api";
 import { type TestResult, llmApi } from "@/lib/llm-api";
+import { JobStatus, useJob } from "../../job-status";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
 import ws from "../../workspace.module.css";
@@ -80,12 +82,20 @@ export default function PromptPage() {
     onError: (e: Error) => setMessage(e.message),
   });
 
+  // A real generation, thrown away. One LLM call, held the request open.
+  const testJob = useJob((job) => {
+    if (job.status === "succeeded" && job.result) {
+      setTestResult(job.result as unknown as TestResult);
+    }
+  });
+
   const test = useMutation({
-    mutationFn: () => llmApi.test(questionId),
-    onSuccess: (result) => {
+    mutationFn: () => jobsApi.test(questionId),
+    onSuccess: (job) => {
       setConfirmTest(false);
-      setTestResult(result);
       setMessage(null);
+      setTestResult(null);
+      testJob.start(job);
     },
     onError: (e: Error) => {
       setConfirmTest(false);
@@ -234,6 +244,15 @@ export default function PromptPage() {
           <div className={ws.empty}>Pick a question to see the prompt it would produce.</div>
         )}
       </div>
+
+      <JobStatus
+        job={testJob.job}
+        onCheck={() => testJob.check.mutate()}
+        checking={testJob.check.isPending}
+        estimate="around half a minute"
+      >
+        <span>Generation finished — the result is below.</span>
+      </JobStatus>
 
       {testResult && (
         <div className={ws.section}>

@@ -1,0 +1,61 @@
+.panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--body-text);
+  background: var(--surface-soft);
+}
+
+.done {
+  border-color: var(--success, #006400);
+  background: #e6f2e6;
+  color: var(--success, #006400);
+}
+
+/* Coral is reserved for things that actually went wrong, per design.md §1. */
+.failed {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: var(--on-primary);
+}
+
+.check {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-strong);
+  background: var(--canvas);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.check:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.check:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 560px) {
+  .panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .check {
+    width: 100%;
+  }
+}

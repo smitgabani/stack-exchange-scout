@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -8,6 +11,7 @@ from app.api import (
     auth,
     definitions,
     digests,
+    jobs,
     llm,
     profile,
     questions,
@@ -19,8 +23,29 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import require_session
 
+# Imported for its side effects: importing it registers the four job workers.
+from app.services import (
+    job_service,
+    job_workers,  # noqa: F401
+)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """A deploy kills whatever job was mid-flight.
+
+    Say so on the way back up, rather than leaving a row claiming to be
+    running — the UI cannot tell that apart from work still in progress, and
+    the user waits for something that will never finish.
+    """
+    await job_service.recover_interrupted()
+    yield
+
+
 app = FastAPI(
-    title="Stack Overflow Challenge Scout", dependencies=[Depends(require_session)]
+    title="Stack Overflow Challenge Scout",
+    dependencies=[Depends(require_session)],
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -41,6 +66,7 @@ app.include_router(webhooks.router)
 app.include_router(questions.router)
 app.include_router(digests.router)
 app.include_router(llm.router)
+app.include_router(jobs.router)
 
 
 @app.get("/")

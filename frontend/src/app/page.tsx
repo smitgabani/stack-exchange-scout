@@ -1,9 +1,11 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { colorForTopic } from "@/lib/topic-color";
+import { jobsApi } from "@/lib/jobs-api";
+import { JobStatus, useJob } from "./job-status";
 import { RunScoutButton } from "./run-scout-button";
 import { useScout } from "./use-scout";
 import { InfoButton } from "./info-button";
@@ -62,6 +64,24 @@ export default function DashboardPage() {
     queryKey: ["digest", latest?.id],
     queryFn: () => getJson<DigestDetail>(`/api/digests/${latest!.id}`),
     enabled: Boolean(latest?.id),
+  });
+
+  // Digest generation is up to ten LLM calls. Run inside the request it held
+  // a Vercel function open for over a minute, billed by the second; it is a
+  // background job now, and this page asks how it went only when told to.
+  const digestJob = useJob(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["digests"] });
+    await queryClient.invalidateQueries({ queryKey: ["digest"] });
+    await queryClient.invalidateQueries({ queryKey: ["challenges"] });
+  });
+
+  const startDigest = useMutation({
+    mutationFn: jobsApi.generateDigest,
+    onSuccess: (job) => {
+      setMessage(null);
+      digestJob.start(job);
+    },
+    onError: (e: Error) => setMessage(e.message),
   });
 
   async function run(path: string, label: string) {
@@ -185,11 +205,11 @@ export default function DashboardPage() {
           <InfoButton text="Asks Yutori to search Stack Overflow for new questions matching your current topics. Costs about $0.35 per run. It does not run on a schedule — you have to start it here." />
           <button
             className={styles.secondaryButton}
-            onClick={() => run("/api/digest/generate", "Digest generation")}
-            disabled={running !== null}
+            onClick={() => startDigest.mutate()}
+            disabled={running !== null || startDigest.isPending}
             type="button"
           >
-            {running === "Digest generation" ? "Generating…" : "Generate digest"}
+            {startDigest.isPending ? "Starting…" : "Generate digest"}
           </button>
           <InfoButton text='Builds a digest from your best-scored candidate questions and turns them into challenges. This does not send anything — use "Send latest digest" separately for that.' />
           <button
@@ -204,6 +224,19 @@ export default function DashboardPage() {
           {message && <span className={styles.message}>{message}</span>}
           {scoutMessage && <span className={styles.message}>{scoutMessage}</span>}
         </div>
+
+        <JobStatus
+          job={digestJob.job}
+          onCheck={() => digestJob.check.mutate()}
+          checking={digestJob.check.isPending}
+          estimate="a minute or two"
+        >
+          <span>
+            Digest ready —{" "}
+            {String((digestJob.job?.result as { question_count?: number })?.question_count ?? 0)}{" "}
+            challenges. It is below.
+          </span>
+        </JobStatus>
       </section>
 
       {digests && digests.length > 0 && (
