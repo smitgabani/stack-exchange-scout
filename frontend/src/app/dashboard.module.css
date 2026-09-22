@@ -3,9 +3,12 @@
    least valuable things on the page — with the challenges below the fold.
 
    design.md is followed rather than sampled. The signature colours appear
-   only as full-bleed structural blocks (§1), weights never exceed 500 (§2),
-   card grids stagger rather than align (§3), and there are no hover states,
-   only default and active (§4). */
+   only as full-bleed structural blocks (§1) — never as bars or thin fills,
+   which is why the pipeline is drawn in ink and grey. Headings and titles cap
+   at 500 (§2); the two small uppercase labels use 600, which is the `legal`
+   typography token rather than an exception to the rule. Card grids stagger
+   rather than align (§3), and there are no hover states, only default and
+   active (§4). */
 
 .page {
   max-width: var(--content-wide);

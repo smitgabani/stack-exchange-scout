@@ -66,7 +66,15 @@ type Dashboard = {
 
 async function fetchDashboard(): Promise<Dashboard> {
   const response = await fetch("/api/dashboard");
-  if (!response.ok) throw new Error(`dashboard failed: ${response.status}`);
+  if (!response.ok) {
+    // Vercel and Fly deploy separately. If this frontend lands first, the
+    // endpoint does not exist yet — say that, rather than "loading" forever.
+    throw new Error(
+      response.status === 404
+        ? "This page needs a newer backend than the one deployed — /dashboard returned 404."
+        : `Could not load the dashboard (HTTP ${response.status}).`,
+    );
+  }
   return response.json();
 }
 
@@ -92,7 +100,10 @@ export default function DashboardPage() {
   // One request for the whole page. Six separate fetches would each be a
   // Vercel function proxying to Fly, and the page could not render until the
   // slowest of them returned.
-  const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: fetchDashboard });
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: fetchDashboard,
+  });
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -127,6 +138,14 @@ export default function DashboardPage() {
     } finally {
       setSending(false);
     }
+  }
+
+  if (isError) {
+    return (
+      <main className={styles.page}>
+        <div className={styles.loading}>{(error as Error).message}</div>
+      </main>
+    );
   }
 
   if (isLoading || !data) {
