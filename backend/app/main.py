@@ -1,7 +1,9 @@
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +31,8 @@ from app.services import (
     job_workers,  # noqa: F401
 )
 
+logger = logging.getLogger("app.request")
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -47,6 +51,33 @@ app = FastAPI(
     dependencies=[Depends(require_session)],
     lifespan=lifespan,
 )
+
+@app.middleware("http")
+async def log_request_timing(request: Request, call_next):
+    """One line per request: method, path, status, milliseconds.
+
+    Written because answering "what is slow" meant guessing. Diagnosing the
+    connection-pool problem took a measurement script run over SSH against the
+    live machine, when the answer should have been in the logs.
+
+    Deliberately not a metrics stack: one structured line is greppable, costs
+    a timestamp subtraction, and is enough to find a slow endpoint.
+    """
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    # The query string can carry an API key on some settings routes, so only
+    # the path is logged.
+    logger.info(
+        "request path=%s method=%s status=%d ms=%.1f",
+        request.url.path,
+        request.method,
+        response.status_code,
+        elapsed_ms,
+    )
+    response.headers["Server-Timing"] = f"app;dur={elapsed_ms:.1f}"
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,

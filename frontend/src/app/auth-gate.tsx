@@ -21,8 +21,23 @@ const NAV_LINKS = [
   { href: "/llm/pipeline", label: "LLM", match: "/llm" },
 ];
 
-async function fetchSession(): Promise<{ authenticated: boolean }> {
-  const response = await fetch("/api/auth/session");
+export type Bootstrap = {
+  authenticated: boolean;
+  onboarding_complete: boolean;
+  yutori_key: boolean;
+  gemini_key: boolean;
+};
+
+/**
+ * The three questions every page load used to ask separately: is there a
+ * session, is the Yutori key stored, is the Gemini key stored. Three round
+ * trips before anything rendered, each one a Vercel function proxying to Fly.
+ *
+ * One query key, so `OnboardingGate` reads the same cached answer rather than
+ * fetching again.
+ */
+async function fetchBootstrap(): Promise<Bootstrap> {
+  const response = await fetch("/api/auth/bootstrap");
   if (!response.ok) {
     throw new Error(`session check failed: ${response.status}`);
   }
@@ -33,7 +48,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["session"], queryFn: fetchSession });
+  const { data, isLoading } = useQuery({ queryKey: ["bootstrap"], queryFn: fetchBootstrap });
   const authenticated = data?.authenticated ?? false;
 
   useEffect(() => {
@@ -57,7 +72,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    await queryClient.invalidateQueries({ queryKey: ["session"] });
+    await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
     router.replace("/login");
   }
 

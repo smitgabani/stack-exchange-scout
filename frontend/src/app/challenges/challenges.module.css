@@ -286,3 +286,34 @@
     flex-shrink: 0;
   }
 }
+
+/* Paging is explicit rather than on scroll: a scroll listener fires a request
+   the reader did not ask for, and every request here crosses a billed
+   function. One click, one page. */
+.loadMoreRow {
+  display: flex;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.loadMore {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--body-text);
+  cursor: pointer;
+}
+
+.loadMore:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.loadMore:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

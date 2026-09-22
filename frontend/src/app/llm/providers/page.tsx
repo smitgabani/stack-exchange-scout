@@ -44,6 +44,7 @@ function KeyRow({ id, name, note, active }: { id: Provider; name: string; note: 
       setValue("");
       setEditing(false);
       await queryClient.invalidateQueries({ queryKey: ["settings", `${id}-key`, "status"] });
+      await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
     },
   });
 

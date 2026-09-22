@@ -53,13 +53,52 @@ class ChallengeOut(BaseModel):
     solved_at: datetime | None = None
 
 
+class ChallengeSummaryOut(BaseModel):
+    """A challenge as a list renders it — which is not very much of one.
+
+    The full `ChallengeOut` carries `content`, averaging 2.7KB, plus the five
+    core fields duplicated out of it. At `limit=200` that is over half a
+    megabyte of generated prose that neither the challenges list nor the
+    dashboard ever displays: both show a title, tags, a difficulty and a date.
+
+    Every byte of it crossed a Vercel function, which is billed by the second.
+    """
+
+    id: uuid.UUID
+    question_id: uuid.UUID
+    digest_id: uuid.UUID | None = None
+    source: str = "digest"
+    created_at: datetime | None = None
+    question_title: str | None = None
+    question_tags: list[str] = []
+    estimated_difficulty: int | None = None
+    question_status: str | None = None
+    solved_at: datetime | None = None
+
+
+def _challenge_summary(challenge: Challenge, question=None) -> ChallengeSummaryOut:
+    return ChallengeSummaryOut(
+        id=challenge.id,
+        question_id=challenge.question_id,
+        digest_id=challenge.digest_id,
+        source=challenge.source,
+        created_at=challenge.created_at,
+        question_title=question.title if question else None,
+        question_tags=(question.tags or []) if question else [],
+        estimated_difficulty=challenge.estimated_difficulty,
+        question_status=question.status if question else None,
+        solved_at=question.solved_at if question else None,
+    )
+
+
 class DigestOut(BaseModel):
     id: uuid.UUID
     status: str
     question_count: int
     generated_at: datetime
     sent_at: datetime | None
-    challenges: list[ChallengeOut] = []
+    # Summaries: the dashboard shows a title, tags and a difficulty per card.
+    challenges: list[ChallengeSummaryOut] = []
 
 
 def _challenge_out(challenge: Challenge, question, meta: dict[str, dict]) -> ChallengeOut:
@@ -125,20 +164,17 @@ async def get_digest(digest_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Digest not found")
 
     pairs = await digest_service.load_digest_questions(db, digest.id)
-    meta = await block_service.render_meta(db)
     return DigestOut(
         id=digest.id,
         status=digest.status,
         question_count=digest.question_count,
         generated_at=digest.generated_at,
         sent_at=digest.sent_at,
-        challenges=[
-            _challenge_out(challenge, question, meta) for question, challenge in pairs
-        ],
+        challenges=[_challenge_summary(challenge, question) for question, challenge in pairs],
     )
 
 
-@router.get("/challenges", response_model=list[ChallengeOut])
+@router.get("/challenges", response_model=list[ChallengeSummaryOut])
 async def list_challenges(
     db: AsyncSession = Depends(get_db),
     source: str = Query("all", pattern="^(all|digest|manual)$"),
@@ -146,14 +182,26 @@ async def list_challenges(
     # ordinary working views the moment it's marked done, without vanishing
     # from the app — "completed" is where it goes to be seen, not deleted.
     completion: str = Query("active", pattern="^(active|completed|all)$"),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
-) -> list[ChallengeOut]:
+    before: datetime | None = Query(
+        None,
+        description="Keyset cursor: the `created_at` (or `solved_at`, when listing "
+        "completed) of the last row you already have.",
+    ),
+) -> list[ChallengeSummaryOut]:
     """Every challenge ever generated, newest first, whatever digest it came from.
 
     Without this the only reachable challenges were those in whichever digest
     the dashboard happened to show — anything in an older digest, or promoted
     by hand and so belonging to no digest at all, had no route to it.
+
+    Paged by cursor rather than offset. `OFFSET 200` makes Postgres walk two
+    hundred rows and discard them, and the window shifts under you whenever a
+    row is inserted — a challenge generated mid-scroll pushes one you have
+    already seen onto the next page. A cursor uses the index and is stable.
+
+    `offset` stays for the frontend deployed before this, which sends it.
     """
     statement = (
         select(Challenge, Question)
@@ -174,9 +222,14 @@ async def list_challenges(
         # by created_at first and solved_at second, doing nothing visible.
         statement = statement.order_by(None).order_by(Question.solved_at.desc())
 
+    if before is not None:
+        # Compared against whichever column the ordering above actually used,
+        # or the cursor would page through a different sequence than it reads.
+        column = Question.solved_at if completion == "completed" else Challenge.created_at
+        statement = statement.where(column < before)
+
     rows = (await db.execute(statement.limit(limit).offset(offset))).all()
-    meta = await block_service.render_meta(db)
-    return [_challenge_out(challenge, question, meta) for challenge, question in rows]
+    return [_challenge_summary(challenge, question) for challenge, question in rows]
 
 
 @router.get("/challenges/{challenge_id}", response_model=ChallengeOut)

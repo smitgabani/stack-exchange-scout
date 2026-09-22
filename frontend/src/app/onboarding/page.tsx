@@ -39,6 +39,9 @@ export default function OnboardingPage() {
     try {
       await saveKey("yutori", yutoriKey, yutoriLabel.trim() || "My Yutori account");
       await queryClient.invalidateQueries({ queryKey: ["settings", "yutori-key", "status"] });
+      // The gates read key status from the bootstrap call now, so saving a key
+      // has to refresh that too or onboarding never notices it is finished.
+      await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
       setStep("gemini");
     } finally {
       setSaving(false);
@@ -51,6 +54,7 @@ export default function OnboardingPage() {
     try {
       await saveKey("gemini", geminiKey);
       await queryClient.invalidateQueries({ queryKey: ["settings", "gemini-key", "status"] });
+      await queryClient.invalidateQueries({ queryKey: ["bootstrap"] });
       setStep("done");
     } finally {
       setSaving(false);

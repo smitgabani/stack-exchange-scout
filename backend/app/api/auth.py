@@ -1,13 +1,16 @@
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.db import get_db
 from app.core.security import (
     SESSION_COOKIE_NAME,
     SESSION_MAX_AGE_SECONDS,
     create_session_token,
     verify_session_token,
 )
+from app.services.credentials_service import has_api_key
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,3 +50,45 @@ async def session(request: Request) -> SessionStatus:
     token = request.cookies.get(SESSION_COOKIE_NAME)
     authenticated = token is not None and verify_session_token(token)
     return SessionStatus(authenticated=authenticated)
+
+
+class BootstrapOut(BaseModel):
+    """Everything the app shell needs before it can render anything."""
+
+    authenticated: bool
+    # Both keys present. Onboarding is the gate on this, and asking for it
+    # separately was two more requests.
+    onboarding_complete: bool
+    yutori_key: bool
+    gemini_key: bool
+
+
+@router.get("/bootstrap", response_model=BootstrapOut)
+async def bootstrap(request: Request, db: AsyncSession = Depends(get_db)) -> BootstrapOut:
+    """The three questions every page load used to ask separately.
+
+    `AuthGate` asked whether there was a session, then `OnboardingGate` asked
+    whether each of the two API keys was stored — three round trips before
+    anything rendered, each one a Vercel function proxying to Fly.
+
+    The key lookups are skipped entirely when there is no session, because the
+    answer is not usable and the database need not be woken to produce it.
+    """
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    authenticated = token is not None and verify_session_token(token)
+    if not authenticated:
+        return BootstrapOut(
+            authenticated=False,
+            onboarding_complete=False,
+            yutori_key=False,
+            gemini_key=False,
+        )
+
+    yutori = await has_api_key(db, "yutori_api_key")
+    gemini = await has_api_key(db, "gemini_api_key")
+    return BootstrapOut(
+        authenticated=True,
+        onboarding_complete=yutori and gemini,
+        yutori_key=yutori,
+        gemini_key=gemini,
+    )

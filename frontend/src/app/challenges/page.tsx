@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -33,8 +33,28 @@ const TABS: Tab[] = [
   { label: "✓ Completed", source: "all", completion: "completed" },
 ];
 
-async function fetchChallenges(source: string, completion: string): Promise<ChallengeRow[]> {
-  const response = await fetch(`/api/challenges?source=${source}&completion=${completion}&limit=200`);
+const PAGE_SIZE = 20;
+
+/**
+ * One page of challenges.
+ *
+ * `before` is a keyset cursor — the timestamp of the last row already held —
+ * rather than an offset. Offset paging makes Postgres walk and discard every
+ * row it skips, and the window shifts whenever a challenge is generated
+ * mid-scroll, showing you one you have already seen.
+ */
+async function fetchChallenges(
+  source: string,
+  completion: string,
+  before?: string,
+): Promise<ChallengeRow[]> {
+  const params = new URLSearchParams({
+    source,
+    completion,
+    limit: String(PAGE_SIZE),
+  });
+  if (before) params.set("before", before);
+  const response = await fetch(`/api/challenges?${params}`);
   if (!response.ok) {
     // A 404 here means the backend predates this page rather than that the
     // list is empty — worth saying, because the two look identical otherwise.
@@ -94,14 +114,28 @@ function ChallengesPageInner() {
   const { source, completion } = activeTab;
   const showCompleted = completion === "completed";
   const {
-    data: challenges,
+    data,
     isLoading,
     isError,
     error,
-  } = useQuery({
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ["challenges", source, completion],
-    queryFn: () => fetchChallenges(source, completion),
+    queryFn: ({ pageParam }) => fetchChallenges(source, completion, pageParam),
+    initialPageParam: undefined as string | undefined,
+    // The cursor is the sort key of the last row on the page just received —
+    // solved_at when listing completed, created_at otherwise, matching the
+    // column the backend orders and compares on.
+    getNextPageParam: (last) => {
+      if (last.length < PAGE_SIZE) return undefined;
+      const tail = last[last.length - 1];
+      return (completion === "completed" ? tail.solved_at : tail.created_at) ?? undefined;
+    },
   });
+
+  const challenges = data?.pages.flat();
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["challenges"] });
@@ -264,6 +298,19 @@ function ChallengesPageInner() {
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {hasNextPage && (
+        <div className={styles.loadMoreRow}>
+          <button
+            type="button"
+            className={styles.loadMore}
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+          >
+            {isFetchingNextPage ? "Loading…" : "Load more"}
+          </button>
         </div>
       )}
 

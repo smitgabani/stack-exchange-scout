@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_gemini_key
 from app.core.db import get_db
+from app.core.ratelimit import limit_llm
 from app.models.job import Job
 from app.services import job_service
 
@@ -65,7 +66,7 @@ class ReformatJobIn(BaseModel):
 @router.post(
     "/digest-generate",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_gemini_key)],
+    dependencies=[Depends(require_gemini_key), Depends(limit_llm)],
 )
 async def start_digest(
     background: BackgroundTasks, db: AsyncSession = Depends(get_db)
@@ -77,7 +78,7 @@ async def start_digest(
 @router.post(
     "/challenge-create",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_gemini_key)],
+    dependencies=[Depends(require_gemini_key), Depends(limit_llm)],
 )
 async def start_challenge(
     body: ChallengeJobIn, background: BackgroundTasks, db: AsyncSession = Depends(get_db)
@@ -93,7 +94,7 @@ async def start_challenge(
 @router.post(
     "/reformat",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_gemini_key)],
+    dependencies=[Depends(require_gemini_key), Depends(limit_llm)],
 )
 async def start_reformat(
     body: ReformatJobIn, background: BackgroundTasks, db: AsyncSession = Depends(get_db)
@@ -109,7 +110,7 @@ async def start_reformat(
 @router.post(
     "/llm-test",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(require_gemini_key)],
+    dependencies=[Depends(require_gemini_key), Depends(limit_llm)],
 )
 async def start_llm_test(
     body: ChallengeJobIn, background: BackgroundTasks, db: AsyncSession = Depends(get_db)

@@ -57,6 +57,10 @@ _EXEMPT_PATHS = {
     "/auth/login",
     "/auth/logout",
     "/auth/session",
+    # The app shell calls this before it knows whether anyone is logged in —
+    # deciding that is its job. It answers `authenticated: false` and nothing
+    # else without a session, so exempting it discloses nothing.
+    "/auth/bootstrap",
     "/feedback",
     "/webhooks/yutori",
     "/health",

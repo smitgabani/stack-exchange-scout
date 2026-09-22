@@ -4,30 +4,24 @@ import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-async function fetchKeyConnected(provider: "yutori" | "gemini"): Promise<boolean> {
-  const response = await fetch(`/api/settings/${provider}-key/status`);
-  if (!response.ok) {
-    throw new Error(`${provider} status check failed: ${response.status}`);
-  }
-  const body = await response.json();
-  return body.connected as boolean;
-}
+
 
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const yutori = useQuery({
-    queryKey: ["settings", "yutori-key", "status"],
-    queryFn: () => fetchKeyConnected("yutori"),
-  });
-  const gemini = useQuery({
-    queryKey: ["settings", "gemini-key", "status"],
-    queryFn: () => fetchKeyConnected("gemini"),
+  // No fetch of its own: AuthGate has already asked, under the same key, and
+  // the answer carries both keys. Two requests per page load removed.
+  const { data, isLoading } = useQuery({
+    queryKey: ["bootstrap"],
+    queryFn: async () => {
+      const response = await fetch("/api/auth/bootstrap");
+      if (!response.ok) throw new Error(`session check failed: ${response.status}`);
+      return response.json() as Promise<{ onboarding_complete: boolean }>;
+    },
   });
 
-  const isLoading = yutori.isLoading || gemini.isLoading;
-  const setupComplete = (yutori.data ?? false) && (gemini.data ?? false);
+  const setupComplete = data?.onboarding_complete ?? false;
 
   useEffect(() => {
     if (isLoading) return;
