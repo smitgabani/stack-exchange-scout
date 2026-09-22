@@ -3,11 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 import { llmApi } from "@/lib/llm-api";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
-import { useState } from "react";
-import { Block, ProgressiveHints, SPECIAL_BLOCKS, isGated, labelFor } from "./blocks";
+import { Block, ProgressiveHints, SPECIAL_BLOCKS, indexBlocks } from "./blocks";
 import styles from "./challenge.module.css";
 
 type Hint = { label: string; text: string };
@@ -33,6 +33,9 @@ type ChallengeDetail = {
   format_name: string | null;
   /** Render order, resolved against the backend's block registry. */
   blocks: string[];
+  /** How to draw each of those, in the same order. Absent on a backend older
+   *  than ADR 0005, which is why the library is merged in behind it. */
+  block_meta?: { key: string; label: string; kind: string; gated?: boolean }[];
   question_status: string | null;
   solved_at: string | null;
 };
@@ -89,6 +92,26 @@ export default function ChallengePage() {
 
   const queryClient = useQueryClient();
   const { data: formats } = useQuery({ queryKey: ["llm-formats"], queryFn: llmApi.formats });
+  // Every block that exists. Needed for two things this challenge's own
+  // metadata cannot supply: naming sections in a reformat result before they
+  // have been generated, and the two core fields a pre-formats challenge
+  // carries only in columns. Tiny and cached across every page that reads it.
+  const { data: library } = useQuery({ queryKey: ["llm-blocks"], queryFn: llmApi.blocks });
+
+  // The challenge's own metadata over the top of the whole library. Declared
+  // before the early returns below, because hooks have to run unconditionally.
+  const blockIndex = useMemo(
+    () => indexBlocks(library?.blocks, challenge?.block_meta),
+    [library, challenge],
+  );
+  const labelFor = useCallback(
+    (key: string) => blockIndex.get(key)?.label ?? key,
+    [blockIndex],
+  );
+  const isGated = useCallback(
+    (key: string) => Boolean(blockIndex.get(key)?.gated),
+    [blockIndex],
+  );
 
   async function refreshAfterStatusChange() {
     await queryClient.invalidateQueries({ queryKey: ["challenge"] });
@@ -237,7 +260,7 @@ export default function ChallengePage() {
       {/* Ungated blocks, in the order the format defines. Concepts, Start here
           and anything the format added all come through here. */}
       {ungated.map((key) => (
-        <Block key={key} blockKey={key} value={content[key]} />
+        <Block key={key} meta={blockIndex.get(key)} value={content[key]} />
       ))}
 
       <div className={styles.block}>
@@ -258,7 +281,7 @@ export default function ChallengePage() {
               I&apos;m stuck — show {gated.map(labelFor).join(" and ").toLowerCase()}
             </button>
           ) : (
-            gated.map((key) => <Block key={key} blockKey={key} value={content[key]} />)
+            gated.map((key) => <Block key={key} meta={blockIndex.get(key)} value={content[key]} />)
           )}
         </div>
       )}

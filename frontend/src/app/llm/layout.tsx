@@ -14,6 +14,7 @@ import styles from "./llm.module.css";
 const TABS = [
   { href: "/llm/pipeline", label: "Pipeline", hint: "How a question becomes a challenge" },
   { href: "/llm/prompt", label: "Prompt", hint: "Edit, preview and test the curator prompt" },
+  { href: "/llm/blocks", label: "Blocks", hint: "What each block asks the model for" },
   { href: "/llm/formats", label: "Formats", hint: "What a challenge is made of" },
   { href: "/llm/providers", label: "Providers", hint: "Keys, model and the active provider" },
   { href: "/llm/generations", label: "Generations", hint: "What produced each challenge" },

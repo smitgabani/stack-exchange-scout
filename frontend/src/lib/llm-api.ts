@@ -82,6 +82,8 @@ export type TestResult =
   | (TestMeta & { ok: false; error: string });
 
 export type BlockMeta = {
+  /** Null for a block that ships in the code — it has no row of its own. */
+  id: number | null;
   key: string;
   label: string;
   description: string;
@@ -89,6 +91,13 @@ export type BlockMeta = {
   core: boolean;
   gated: boolean;
   has_urls: boolean;
+  /** True when the user defined it, which decides which endpoints apply. */
+  custom: boolean;
+  /** What it currently asks the model for. */
+  instruction: string;
+  /** What "reset" would restore. Null for a custom block — it has no default. */
+  default_instruction: string | null;
+  is_overridden: boolean;
 };
 
 export type ChallengeFormat = {
@@ -147,7 +156,62 @@ export const llmApi = {
 
   generations: () => json<{ generations: Generation[] }>("/api/llm/generations"),
 
-  blocks: () => json<{ blocks: BlockMeta[]; kinds: string[] }>("/api/llm/blocks"),
+  blocks: () =>
+    json<{
+      blocks: BlockMeta[];
+      kinds: string[];
+      /** The subset a custom block may choose — narrower than `kinds`. */
+      custom_kinds: string[];
+      max_instruction_chars: number;
+    }>("/api/llm/blocks"),
+
+  createBlock: (body: {
+    key: string;
+    label: string;
+    kind: string;
+    instruction: string;
+    description?: string;
+    gated?: boolean;
+  }) =>
+    json<BlockMeta>("/api/llm/blocks/custom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  updateBlock: (
+    id: number,
+    body: {
+      label: string;
+      kind: string;
+      instruction: string;
+      description?: string | null;
+      gated?: boolean;
+    },
+  ) =>
+    json<BlockMeta>(`/api/llm/blocks/custom/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  deleteBlock: (id: number) =>
+    fetch(`/api/llm/blocks/custom/${id}`, { method: "DELETE" }).then((r) => {
+      if (!r.ok) throw new Error(`delete failed: ${r.status}`);
+    }),
+
+  /** Reword a block that ships in the code. Its shape is unaffected. */
+  setInstruction: (key: string, instruction: string) =>
+    json<{ key: string; instruction: string }>(`/api/llm/blocks/${key}/instruction`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction }),
+    }),
+
+  resetInstruction: (key: string) =>
+    json<{ key: string; instruction: string }>(`/api/llm/blocks/${key}/instruction`, {
+      method: "DELETE",
+    }),
 
   formats: () =>
     json<{ formats: ChallengeFormat[]; active: { name: string; blocks: string[] } }>(

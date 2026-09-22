@@ -7,12 +7,18 @@ import styles from "./challenge.module.css";
 /**
  * Renders a challenge from whatever blocks its format produced.
  *
- * The switch is on `kind`, not on the key, so adding a block to the backend
- * registry means adding a renderer here only when it introduces a new kind —
- * a new "list of strings" block needs no frontend change at all.
+ * The switch is on `kind`, and `kind` now arrives from the backend with the
+ * challenge rather than being looked up in a table here. That is what lets a
+ * block the user defined at runtime render at all: this file has never heard
+ * of `review_checklist`, but it knows how to draw a `checklist`.
  *
- * Anything with no renderer is skipped rather than dumped as JSON. A block the
- * UI cannot draw properly is better absent than shown as debug output.
+ * Until ADR 0005 this held a hardcoded map of every block key, which meant a
+ * user-defined block returned `null` — present in the data, invisible on the
+ * page. The map also had to be kept in step with the Python registry by hand.
+ *
+ * Anything whose kind has no renderer is skipped rather than dumped as JSON. A
+ * block the UI cannot draw properly is better absent than shown as debug
+ * output.
  */
 
 export type Resource = { title: string; url: string; why?: string };
@@ -20,26 +26,17 @@ export type Hint = { label: string; text: string };
 export type Step = { step: string; detail?: string };
 export type Term = { term: string; definition: string };
 
-/** Mirrors `challenge_blocks.BLOCKS`; the backend sends the order to render. */
-const BLOCK_META: Record<string, { label: string; kind: string; gated?: boolean }> = {
-  problem_summary: { label: "Problem", kind: "problem" },
-  why_interesting: { label: "Why this one", kind: "card" },
-  concepts: { label: "Concepts", kind: "chips" },
-  starting_direction: { label: "Start here", kind: "prose" },
-  hints: { label: "Hints", kind: "progressive_hints" },
-  estimated_difficulty: { label: "Difficulty", kind: "rating" },
-  prerequisites: { label: "You should know", kind: "chips" },
-  glossary: { label: "Terms", kind: "definition_list" },
-  visualisation: { label: "Picture it", kind: "diagram" },
-  approach_outline: { label: "How to approach it", kind: "steps" },
-  common_pitfalls: { label: "Common pitfalls", kind: "list" },
-  self_check: { label: "Check yourself", kind: "checklist" },
-  time_estimate: { label: "Time", kind: "stat" },
-  learning_resources: { label: "Learn the concepts", kind: "resource_list" },
-  solution_resources: { label: "If you're stuck", kind: "resource_list", gated: true },
-};
+/** What the backend sends per block, in `ChallengeOut.block_meta`. */
+export type BlockMeta = { key: string; label: string; kind: string; gated?: boolean };
 
-/** Blocks rendered inside the page's own layout rather than as a generic section. */
+/**
+ * Blocks the page lays out itself instead of as a generic section.
+ *
+ * Still keyed by name, and correctly so: this is a statement about *this
+ * page's layout* — the problem gets the full-width ink block, difficulty sits
+ * in the metadata card — not about the blocks themselves. A custom block can
+ * never join this set, which is why it is safe to keep here.
+ */
 export const SPECIAL_BLOCKS = new Set([
   "problem_summary",
   "why_interesting",
@@ -182,16 +179,15 @@ export function ProgressiveHints({
   );
 }
 
-export function Block({ blockKey, value }: { blockKey: string; value: unknown }) {
-  const meta = BLOCK_META[blockKey];
-  // Unknown block: skip it. The alternative is rendering raw JSON, which looks
-  // like a bug to the reader and teaches them nothing.
+export function Block({ meta, value }: { meta: BlockMeta | undefined; value: unknown }) {
+  // No metadata: skip it. Happens when a block was deleted after this
+  // challenge was made — the value is still stored, but nothing knows how to
+  // draw it any more, and raw JSON reads as a bug rather than as content.
   if (!meta) return null;
 
   let body: React.ReactNode = null;
   switch (meta.kind) {
     case "prose":
-    case "card":
       body = <div className={styles.blockBody}>{String(value)}</div>;
       break;
     case "chips":
@@ -232,10 +228,21 @@ export function Block({ blockKey, value }: { blockKey: string; value: unknown })
   );
 }
 
-export function isGated(blockKey: string): boolean {
-  return Boolean(BLOCK_META[blockKey]?.gated);
-}
-
-export function labelFor(blockKey: string): string {
-  return BLOCK_META[blockKey]?.label ?? blockKey;
+/**
+ * Index a challenge's blocks over the whole library.
+ *
+ * Two sources, deliberately. `library` is every block that exists, which is
+ * what names a block the challenge does not carry — the labels in a "added
+ * these sections" message, and the two core fields a pre-formats challenge
+ * only has in columns. `blockMeta` is what this challenge actually has, and
+ * wins where they overlap, because it was resolved alongside the content.
+ */
+export function indexBlocks(
+  library: BlockMeta[] | undefined,
+  blockMeta: BlockMeta[] | undefined,
+): Map<string, BlockMeta> {
+  const index = new Map<string, BlockMeta>();
+  for (const meta of library ?? []) index.set(meta.key, meta);
+  for (const meta of blockMeta ?? []) index.set(meta.key, meta);
+  return index;
 }
