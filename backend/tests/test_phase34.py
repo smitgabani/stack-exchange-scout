@@ -10,7 +10,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.core import ratelimit
 from app.core.db import async_session
@@ -215,3 +215,70 @@ def test_the_ceiling_is_generous_enough_for_a_person(
     limit, window = ratelimit._LIMITS["llm"]
     assert limit >= 20
     assert window >= 3600
+
+
+# --- 🔒 a fixture must not delete rows it did not create ---
+
+
+@pytest.mark.anyio
+async def test_the_suite_preserves_formats_it_did_not_create() -> None:
+    """The bug the user actually hit.
+
+    Two fixtures ran `delete(ChallengeFormat)` with no WHERE clause. While the
+    suite pointed at production that removed every format they had created, on
+    every run — and the same shape removed every saved prompt version.
+
+    This plants a row, runs the same teardown the fixtures use, and asserts it
+    survived. It fails if anyone reintroduces a table-wide delete.
+    """
+    from app.models.challenge_format import ChallengeFormat
+    from app.models.prompt_template import PromptTemplate
+    from tests.conftest import delete_rows_added_since, existing_ids
+
+    async with async_session() as session:
+        planted = ChallengeFormat(name="pytest-precious-format", blocks=[], is_default=False)
+        session.add(planted)
+        prompt = PromptTemplate(
+            version=9_999,
+            system_instruction="planted",
+            user_preamble="planted",
+            is_active=False,
+        )
+        session.add(prompt)
+        await session.commit()
+        await session.refresh(planted)
+        await session.refresh(prompt)
+        planted_id, prompt_id = planted.id, prompt.id
+
+    try:
+        # Exactly what the fixtures do: snapshot, then clean up "after a test".
+        fmt_before = await existing_ids(ChallengeFormat)
+        prompt_before = await existing_ids(PromptTemplate)
+
+        async with async_session() as session:
+            session.add(ChallengeFormat(name="pytest-throwaway", blocks=[], is_default=False))
+            await session.commit()
+
+        await delete_rows_added_since(ChallengeFormat, fmt_before)
+        await delete_rows_added_since(PromptTemplate, prompt_before)
+
+        async with async_session() as session:
+            assert await session.get(ChallengeFormat, planted_id) is not None, (
+                "a fixture deleted a format it did not create"
+            )
+            assert await session.get(PromptTemplate, prompt_id) is not None, (
+                "a fixture deleted a prompt version it did not create"
+            )
+            gone = (
+                await session.scalars(
+                    select(ChallengeFormat).where(ChallengeFormat.name == "pytest-throwaway")
+                )
+            ).all()
+            assert gone == [], "the fixture failed to clean up its own row"
+    finally:
+        async with async_session() as session:
+            await session.execute(
+                delete(ChallengeFormat).where(ChallengeFormat.id == planted_id)
+            )
+            await session.execute(delete(PromptTemplate).where(PromptTemplate.id == prompt_id))
+            await session.commit()

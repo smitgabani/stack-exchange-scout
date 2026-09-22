@@ -18,6 +18,7 @@ from app.models.challenge_format import ChallengeFormat
 from app.models.question import Question
 from app.schemas.profile import ProfileData
 from app.services import digest_service, format_service
+from tests.conftest import delete_rows_added_since, existing_ids
 
 SCRATCH = "https://stackoverflow.com/questions/pytest-reformat-"
 
@@ -57,6 +58,7 @@ class _TopUpProvider:
 @pytest.fixture
 async def existing_challenge():
     marker = uuid.uuid4().hex[:10]
+    formats_before = await existing_ids(ChallengeFormat)
     async with async_session() as session:
         question = Question(
             canonical_url=f"{SCRATCH}{marker}",
@@ -98,8 +100,9 @@ async def existing_challenge():
     async with async_session() as session:
         await session.execute(delete(Challenge).where(Challenge.id == ids[0]))
         await session.execute(delete(Question).where(Question.id == ids[1]))
-        await session.execute(delete(ChallengeFormat))
         await session.commit()
+    # Only the formats this test created — it used to wipe the table.
+    await delete_rows_added_since(ChallengeFormat, formats_before)
 
 
 async def _reformat(challenge_id, question_id, blocks: list[str], provider=None) -> dict:

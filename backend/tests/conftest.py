@@ -74,6 +74,30 @@ def migrate_test_database() -> None:
     command.upgrade(config, "head")
 
 
+async def existing_ids(model) -> set:
+    """The primary keys already in a table before a test runs."""
+    async with async_session() as session:
+        return set(await session.scalars(select(model.id)))
+
+
+async def delete_rows_added_since(model, before: set) -> None:
+    """Remove only what the test added, never what was already there.
+
+    `delete(Model)` with no WHERE is the shape that cost real data: fixtures
+    doing it wiped every challenge format and every saved prompt version out
+    of the live database on each run, because the suite used to point at
+    production. The local-database guard at the top of this file is the real
+    protection; this is the second layer, so a fixture is not one
+    misconfigured environment variable away from being destructive again.
+    """
+    async with async_session() as session:
+        statement = delete(model)
+        if before:
+            statement = statement.where(model.id.not_in(before))
+        await session.execute(statement)
+        await session.commit()
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)

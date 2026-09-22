@@ -11,19 +11,24 @@ Rows in `challenge_formats` are created and removed by the fixture.
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
 
 from app.core.db import async_session
 from app.models.challenge_format import ChallengeFormat
 from app.services import challenge_blocks, challenge_service, format_service
+from tests.conftest import delete_rows_added_since, existing_ids
 
 
 @pytest.fixture
 async def clean_formats():
+    """Remove the formats this test made, and only those.
+
+    This used to be `delete(ChallengeFormat)` with no WHERE. While the suite
+    ran against production that deleted every format the user had created,
+    on every run — which is exactly what they reported.
+    """
+    before = await existing_ids(ChallengeFormat)
     yield
-    async with async_session() as session:
-        await session.execute(delete(ChallengeFormat))
-        await session.commit()
+    await delete_rows_added_since(ChallengeFormat, before)
 
 
 def _block(key: str, kind: str, *, gated: bool = False) -> challenge_blocks.Block:
