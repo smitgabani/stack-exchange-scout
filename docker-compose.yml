@@ -1,0 +1,30 @@
+# Postgres for the test suite.
+#
+# The suite used to run against the same Supabase project production uses,
+# which cost four incidents in a day — scratch rows left in the real candidate
+# pool, shipped library blocks deleted by a fixture, a profile overwritten.
+# `tests/conftest.py` now refuses to start against anything that is not local.
+#
+#   docker compose up -d test-db
+#   cd backend && uv run pytest
+#
+# If you would rather not run Docker, any local Postgres 16 works:
+#   brew install postgresql@16 && brew services start postgresql@16
+#   createdb scout_test
+services:
+  test-db:
+    image: postgres:16
+    container_name: scout-test-db
+    environment:
+      POSTGRES_DB: scout_test
+      POSTGRES_HOST_AUTH_METHOD: trust
+    # 5433 so it cannot collide with a Postgres already running on 5432.
+    ports: ["5433:5432"]
+    # No volume on purpose: the suite is disposable, and a stale volume is one
+    # more thing that can disagree with the migrations.
+    tmpfs: ["/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

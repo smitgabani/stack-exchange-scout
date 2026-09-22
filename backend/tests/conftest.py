@@ -1,21 +1,43 @@
-"""Shared fixtures — and the guard that keeps the suite out of real data.
+"""Shared fixtures, and the guard that keeps the suite off the real database.
 
-`DATABASE_URL` points at the same Supabase project production uses. There is no
-separate test database, so these tests write to the live profile and the live
-credentials table. Several of them do exactly that by design: the profile tests
-PATCH topics, the settings tests store API keys.
+Tests used to run against the same Supabase project production uses, because
+there was no other database to run them against. Over one day that cost four
+incidents: twelve scratch questions left in the real candidate pool, nine
+shipped library blocks deleted by an over-broad fixture, and a profile
+overwritten with test values.
 
-Left unguarded, that is destructive in a way that is easy to miss. Over one
-day's work it silently replaced the user's topics with `Rust`, set their digest
-to every 9 days, switched their LLM provider to OpenAI, inflated the profile
-version past 130, and overwrote all three real API keys with
-`super-secret-value` — which then read as "could not be decrypted" and looked
-for hours like an encryption-key problem.
+They now run against Postgres on localhost. The important part is not the
+connection string — it is the check below, which aborts the run rather than
+touching anything remote. A guard that catches damage afterwards is worth
+much less than one that makes it impossible to start.
 
-So the whole suite runs inside a snapshot: the profile and credentials rows are
-copied out before the first test and restored exactly afterwards, whether the
-run passes, fails, or errors.
+`DATABASE_URL` is set here, before any app import, because `app.core.db`
+builds its engine at import time from whatever is set then.
 """
+
+import os
+
+# Overridden rather than defaulted: a DATABASE_URL already in the environment
+# or in backend/.env points at production, and setdefault would quietly use it.
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql+asyncpg://localhost:5432/scout_test"
+)
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+# pytest-anyio gives each test its own event loop, and a pooled asyncpg
+# connection cannot cross loops. Local connections are sub-millisecond, so the
+# suite gives up pooling for free.
+os.environ["DB_POOL"] = "null"
+
+_HOST_IS_LOCAL = any(
+    marker in TEST_DATABASE_URL for marker in ("localhost", "127.0.0.1", "@db:", "host.docker.internal")
+)
+if not _HOST_IS_LOCAL:
+    raise RuntimeError(
+        "Refusing to run the suite: DATABASE_URL is not a local database.\n"
+        f"  got: {TEST_DATABASE_URL}\n"
+        "These tests create, overwrite and delete rows. Point TEST_DATABASE_URL at a "
+        "local Postgres (see docker-compose.yml or `brew services start postgresql@16`)."
+    )
 
 from collections.abc import AsyncGenerator
 
@@ -29,7 +51,27 @@ from app.core.db import async_session
 from app.main import app
 from app.models.credential import Credential
 from app.models.profile import Profile
-from app.models.scout_definition import ScoutDefinition, ScoutInstance, ScoutRun
+from app.models.scout_definition import (
+    ScoutDefinition,
+    ScoutInstance,
+    ScoutRun,
+)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def migrate_test_database() -> None:
+    """Bring the local database up to head once per run.
+
+    Cheap because it is local, and it means a new checkout needs no setup step
+    that someone has to remember: start Postgres, run pytest.
+    """
+    from alembic.config import Config
+
+    from alembic import command
+
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+    command.upgrade(config, "head")
 
 
 @pytest.fixture

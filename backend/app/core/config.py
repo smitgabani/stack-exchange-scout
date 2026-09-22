@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     database_url: str
+    # "queue" pools connections and reuses them; "null" opens a fresh one per
+    # session. Production wants the pool — it saves ~290ms of TLS and auth per
+    # session. The test suite must not have it: pytest-anyio builds a new event
+    # loop per test, and a pooled asyncpg connection belongs to the loop that
+    # opened it, so reuse across loops raises "attached to a different loop".
+    # Set by tests/conftest.py; nothing else should change it.
+    db_pool: str = "queue"
     # Comma-separated list. Defaults to the Next.js dev server; the deployed
     # Vercel URL gets added here once M0-F2 exists.
     cors_origins: str = "http://localhost:3000"
