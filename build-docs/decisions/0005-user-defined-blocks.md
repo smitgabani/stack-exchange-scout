@@ -1,6 +1,6 @@
 # 0005 — User-Defined Blocks and Editable Block Instructions
 
-**Status:** Accepted
+**Status:** Accepted, amended 2026-09-22 (see *Amendment*)
 **Date:** 2026-09-21
 **Scope:** Amends the design stated in `challenge_blocks.py`'s module docstring ("the registry lives in code") and extends `prd.md` §17 and the formats work from M12.
 
@@ -78,3 +78,27 @@ This is what makes instructions safely editable after the fact. Rewording a bloc
 **Per-format instructions** (the same block worded differently in different formats). Genuinely more expressive, and rejected for now as premature: it moves the instruction into a format/block join, gives every format its own copy to maintain, and no concrete need for it has appeared. Revisit if one does.
 
 **Versioning custom blocks like `prompt_templates`.** Rejected in favour of per-generation provenance. Immutable block rows would make every edit a new version to activate, and the question that actually needs answering — "what produced *this* challenge?" — is answered better by recording what was sent than by reconstructing it from versions.
+
+---
+
+## Amendment, 2026-09-22 — the optional blocks move into the database
+
+**What prompted it.** The split this ADR drew — blocks in code, reworded only; blocks in the database, anything — was not where users expected it. Asked "how do I make this block a checklist or a diagram", the honest answer for fourteen of the fifteen built-ins was "you can't, and the picker you are looking for only appears under New block". That is a defensible implementation and an indefensible product.
+
+**What was actually load-bearing.** Six blocks are structural: `problem_summary`, `why_interesting`, `concepts`, `starting_direction` and `hints` are `NOT NULL` columns on `challenges`, `validate` demands them on every generation, and `email_service` reads them directly; `estimated_difficulty` is the column the difficulty badge reads. Delete `concepts` and every generation fails a NOT NULL insert.
+
+The other nine — `prerequisites`, `glossary`, `visualisation`, `approach_outline`, `common_pitfalls`, `self_check`, `time_estimate`, `learning_resources`, `solution_resources` — live only inside `content` JSONB. Nothing structural depends on them.
+
+**Decision.** The nine are seeded into the database by migration `c8a3f61b4e27` and removed from the code registry. `custom_blocks` is renamed `library_blocks`, because it no longer means "the ones the user made": it is the whole editable library, most of which shipped with the app. Editing and deleting them needed no new code — `update_block` already accepted a kind, so the layout change users were asking for came free.
+
+`challenge_blocks.BLOCKS` now holds exactly the six core blocks, and every one of them has `core=True`. `block_instructions` holds overrides for those six only; the rest are edited in place.
+
+**Consequences.**
+
+*A layout change can orphan stored content.* Moving a block from `checklist` to `diagram` changes what the model is asked to return, and challenges that already ran under the old layout hold the old shape. The renderer skips what it cannot draw, so they lose the block rather than breaking — the same failure mode as deleting one. The editor states it before the save, naming both shapes.
+
+*The catalogue's `custom` field became a misnomer* — a seeded block shipped with the app but is fully editable. Replaced by `editable`, with `custom` kept as an alias for one release, because Vercel and Fly do not deploy together.
+
+*Tests could no longer name a shipped optional block.* `challenge_blocks.resolve(["glossary"])` resolves nothing now. They construct the block they need instead, which is better: those tests are about how `validate` and `build_schema` treat a non-core block, not about any particular one.
+
+*A fixture that cleared the table became destructive.* `delete(LibraryBlock)` used to remove only test rows; after the seed it removes nine blocks from the user's real library. Caught in development, and it did happen once. The fixtures now delete only the keys they created, and `test_the_shipped_library_blocks_survive_the_suite` guards the cleanup itself — the same pattern as the scratch-row guard on questions.

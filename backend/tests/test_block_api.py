@@ -5,7 +5,7 @@ most easily got wrong at the edges are right: the challenge response carries
 enough metadata for a custom block to render, and a reworded instruction
 cannot arrive through the API in a shape validation would reject.
 
-Rows in `custom_blocks` and `block_instructions` are removed by the fixture.
+Rows in `library_blocks` and `block_instructions` are removed by the fixture.
 """
 
 import uuid
@@ -16,18 +16,25 @@ from sqlalchemy import delete
 
 from app.core.db import async_session
 from app.models.challenge import Challenge
-from app.models.custom_block import BlockInstruction, CustomBlock
+from app.models.library_block import BlockInstruction, LibraryBlock
 from app.models.question import Question
 from app.services import block_service, challenge_blocks
 
 SCRATCH = "https://stackoverflow.com/questions/pytest-blockapi-"
 
 
+# Keys these tests create. Named explicitly because `library_blocks` is no
+# longer a scratch table: since the optional blocks moved into it, a blanket
+# DELETE wipes nine blocks that shipped with the app — out of the user's live
+# library, not just the test's. Only what a test made is removed.
+TEST_KEYS = ("review_checklist", "further_reading", "last_resort")
+
+
 @pytest.fixture
 async def clean_blocks():
     yield
     async with async_session() as session:
-        await session.execute(delete(CustomBlock))
+        await session.execute(delete(LibraryBlock).where(LibraryBlock.key.in_(TEST_KEYS)))
         await session.execute(delete(BlockInstruction))
         await session.commit()
 
@@ -37,7 +44,7 @@ async def challenge_with_custom_block(clean_blocks):
     """A stored challenge whose content includes a user-defined block."""
     marker = uuid.uuid4().hex[:10]
     async with async_session() as session:
-        await block_service.create_custom(
+        await block_service.create_block(
             session,
             key="review_checklist",
             label="Before you ship",

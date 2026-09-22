@@ -308,7 +308,7 @@ async def blocks(db: AsyncSession = Depends(get_db)) -> dict:
     }
 
 
-class CustomBlockIn(BaseModel):
+class LibraryBlockIn(BaseModel):
     key: str = Field(min_length=3, max_length=40)
     label: str = Field(min_length=1, max_length=60)
     kind: str
@@ -317,7 +317,7 @@ class CustomBlockIn(BaseModel):
     gated: bool = False
 
 
-class CustomBlockEdit(BaseModel):
+class LibraryBlockEdit(BaseModel):
     """The key is absent on purpose — see `block_service.update_custom`."""
 
     label: str = Field(min_length=1, max_length=60)
@@ -337,14 +337,15 @@ def _custom_out(row) -> dict:
         "instruction": row.instruction,
         "gated": row.gated,
         "custom": True,
+        "editable": True,
     }
 
 
 @router.post("/blocks/custom", status_code=status.HTTP_201_CREATED)
-async def create_custom_block(body: CustomBlockIn, db: AsyncSession = Depends(get_db)) -> dict:
+async def create_custom_block(body: LibraryBlockIn, db: AsyncSession = Depends(get_db)) -> dict:
     """Define a block. Its schema comes from the kind, so none is accepted."""
     try:
-        row = await block_service.create_custom(
+        row = await block_service.create_block(
             db,
             key=body.key,
             label=body.label,
@@ -360,10 +361,10 @@ async def create_custom_block(body: CustomBlockIn, db: AsyncSession = Depends(ge
 
 @router.patch("/blocks/custom/{block_id}")
 async def update_custom_block(
-    block_id: int, body: CustomBlockEdit, db: AsyncSession = Depends(get_db)
+    block_id: int, body: LibraryBlockEdit, db: AsyncSession = Depends(get_db)
 ) -> dict:
     try:
-        row = await block_service.update_custom(
+        row = await block_service.update_block(
             db,
             block_id,
             label=body.label,
@@ -384,7 +385,7 @@ async def delete_custom_block(block_id: int, db: AsyncSession = Depends(get_db))
     """Challenges that already have this block's output keep it in `content`,
     but nothing resolves the key any more, so it stops being rendered.
     """
-    if not await block_service.delete_custom(db, block_id):
+    if not await block_service.delete_block(db, block_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such block")
 
 

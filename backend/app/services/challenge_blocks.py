@@ -14,13 +14,17 @@ the app would have no idea what the field meant. Here, adding a capability
 means adding a block and a renderer for its `kind` — the system never has to
 handle a shape it has never seen.
 
-This module is the *built-in* half of the library. Users may also reword any
-block's instruction and define blocks of their own, both stored in the database
-and merged over this registry by `block_service.resolve` (ADR 0005). That does
-not weaken the guarantee above, because a user-defined block picks a `kind`
-rather than writing a schema: its shape comes from `_SCHEMA_BY_KIND`, so it is
-still a shape the UI already knows how to draw. What lives in code is the
-structure; what lives in the database is the wording and the selection.
+What is left here is only what the app's own contract depends on: six blocks
+that are NOT NULL columns on `challenges`, that `validate` demands on every
+generation, and that the digest email reads directly. They can be reworded but
+not reshaped, and they cannot be removed.
+
+Every other block lives in `library_blocks`, where it can be edited, re-laid
+out or deleted like any block the user writes themselves — nothing structural
+depends on those, they exist only inside `content`. `block_service.resolve`
+merges the two. The guarantee above still holds either way, because a stored
+block picks a `kind` rather than writing a schema: its shape comes from
+`_SCHEMA_BY_KIND`, so it is still a shape the UI knows how to draw.
 """
 
 import copy
@@ -220,120 +224,11 @@ BLOCKS: tuple[Block, ...] = (
         schema=schema_for("rating"),
         instruction="Estimate difficulty from 1 to 5.",
     ),
-    # --- optional: understanding the problem ---
-    Block(
-        key="prerequisites",
-        label="You should know",
-        description="What to understand before attempting this.",
-        kind="chips",
-        schema=schema_for("chips"),
-        instruction=(
-            "List the prerequisite knowledge someone needs before attempting this, as short "
-            "topic names. Do not explain the solution."
-        ),
-    ),
-    Block(
-        key="glossary",
-        label="Terms",
-        description="Unfamiliar terms from the question, defined.",
-        kind="definition_list",
-        schema=schema_for("definition_list"),
-        instruction=(
-            "Define any jargon or library-specific terms appearing in the question that a "
-            "competent developer new to this area would not know. Define the term itself, not "
-            "its role in the fix."
-        ),
-    ),
-    Block(
-        key="visualisation",
-        label="Picture it",
-        description="A diagram of the situation, drawn as Mermaid.",
-        kind="diagram",
-        schema=schema_for("diagram"),
-        instruction=(
-            "Draw the situation as a Mermaid diagram — a flowchart, sequence diagram or state "
-            "diagram, whichever fits. Return only valid Mermaid source in the `mermaid` field, "
-            "with no markdown fences. Diagram the problem as described, never the fix."
-        ),
-    ),
-    # --- optional: attacking it ---
-    Block(
-        key="approach_outline",
-        label="How to approach it",
-        description="Ordered steps for investigating, not solving.",
-        kind="steps",
-        schema=schema_for("steps"),
-        instruction=(
-            "Outline an ordered investigation plan: what to check, measure or rule out, in "
-            "order. Describe how to find the cause, never what the cause is."
-        ),
-    ),
-    Block(
-        key="common_pitfalls",
-        label="Common pitfalls",
-        description="Mistakes people make on problems like this.",
-        kind="list",
-        schema=schema_for("list"),
-        instruction=(
-            "List mistakes people commonly make on problems of this kind. Keep them general to "
-            "the category of problem rather than specific to this bug's resolution."
-        ),
-    ),
-    Block(
-        key="self_check",
-        label="Check yourself",
-        description="How to know your solution is actually right.",
-        kind="checklist",
-        schema=schema_for("checklist"),
-        instruction=(
-            "List checks the user can run against their own solution to know whether it is "
-            "correct — properties it must satisfy, cases it must handle. Do not state what the "
-            "solution is."
-        ),
-    ),
-    Block(
-        key="time_estimate",
-        label="Time",
-        description="Roughly how long this should take.",
-        kind="stat",
-        schema=schema_for("stat"),
-        instruction=(
-            "Estimate how long this should take a competent developer, as a short phrase such "
-            "as '30-60 minutes', with one sentence of rationale."
-        ),
-    ),
-    # --- optional: resources ---
-    Block(
-        key="learning_resources",
-        label="Learn the concepts",
-        description="Documentation and guides for the underlying ideas.",
-        kind="resource_list",
-        has_urls=True,
-        schema=schema_for("resource_list"),
-        instruction=(
-            "Suggest documentation or guides that teach the underlying concepts. These must be "
-            "about the general topic, never about this specific question or its resolution. "
-            "Prefer official documentation. Give a real, complete URL you are confident exists; "
-            "if you are not confident a URL is real, omit that resource entirely."
-        ),
-    ),
-    Block(
-        key="solution_resources",
-        label="If you're stuck",
-        description="Material that addresses this specific problem. Hidden until every hint is revealed.",
-        kind="resource_list",
-        gated=True,
-        has_urls=True,
-        schema=schema_for("resource_list"),
-        instruction=(
-            "Suggest material that addresses this specific problem directly, for someone who "
-            "has given up solving it alone. Give a real, complete URL you are confident exists; "
-            "if you are not confident a URL is real, omit that resource entirely."
-        ),
-    ),
 )
 
 BY_KEY: dict[str, Block] = {block.key: block for block in BLOCKS}
+# Every block here is core now; the tuple is kept because the rest of the
+# pipeline asks "what must always be present" rather than "what is in code".
 CORE_KEYS: tuple[str, ...] = tuple(b.key for b in BLOCKS if b.core)
 # The format every challenge used before formats existed.
 LEGACY_KEYS: tuple[str, ...] = CORE_KEYS

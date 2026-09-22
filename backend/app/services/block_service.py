@@ -25,7 +25,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.custom_block import BlockInstruction, CustomBlock
+from app.models.library_block import BlockInstruction, LibraryBlock
 from app.services import challenge_blocks
 from app.services.challenge_blocks import Block
 
@@ -102,7 +102,7 @@ def _validate_kind(kind: str) -> str:
     return kind
 
 
-def to_block(row: CustomBlock) -> Block:
+def to_block(row: LibraryBlock) -> Block:
     """A stored row as the `Block` the pipeline expects.
 
     `column` stays None — the five columns on `challenges` predate the content
@@ -129,8 +129,8 @@ async def _overrides(db: AsyncSession) -> dict[str, str]:
     return {row.block_key: row.instruction for row in rows}
 
 
-async def _customs(db: AsyncSession) -> dict[str, Block]:
-    rows = await db.scalars(select(CustomBlock).order_by(CustomBlock.key))
+async def _library(db: AsyncSession) -> dict[str, Block]:
+    rows = await db.scalars(select(LibraryBlock).order_by(LibraryBlock.key))
     return {row.key: to_block(row) for row in rows}
 
 
@@ -144,11 +144,11 @@ async def resolve(db: AsyncSession, keys: list[str] | tuple[str, ...] | None) ->
     deleted still generates, an hour after the run that paid for the question.
     """
     overrides = await _overrides(db)
-    customs = await _customs(db)
+    library = await _library(db)
 
     chosen: list[str] = list(challenge_blocks.CORE_KEYS)
     for key in keys or ():
-        if key not in chosen and (key in challenge_blocks.BY_KEY or key in customs):
+        if key not in chosen and (key in challenge_blocks.BY_KEY or key in library):
             chosen.append(key)
 
     blocks: list[Block] = []
@@ -161,13 +161,13 @@ async def resolve(db: AsyncSession, keys: list[str] | tuple[str, ...] | None) ->
                 block = replace(block, instruction=overrides[key])
             blocks.append(block)
         else:
-            blocks.append(customs[key])
+            blocks.append(library[key])
     return blocks
 
 
 async def known_keys(db: AsyncSession) -> set[str]:
     """Every key a format may legally name, built-in or custom."""
-    rows = await db.scalars(select(CustomBlock.key))
+    rows = await db.scalars(select(LibraryBlock.key))
     return set(challenge_blocks.BY_KEY) | set(rows)
 
 
@@ -184,7 +184,7 @@ async def render_meta(db: AsyncSession) -> dict[str, dict[str, Any]]:
         block.key: {"key": block.key, "label": block.label, "kind": block.kind, "gated": block.gated}
         for block in challenge_blocks.BLOCKS
     }
-    rows = await db.scalars(select(CustomBlock).order_by(CustomBlock.key))
+    rows = await db.scalars(select(LibraryBlock).order_by(LibraryBlock.key))
     for row in rows:
         meta[row.key] = {
             "key": row.key,
@@ -225,7 +225,7 @@ async def catalogue(db: AsyncSession) -> list[dict[str, Any]]:
     to, so the editor can offer "reset" without having to know the defaults.
     """
     overrides = await _overrides(db)
-    rows = await db.scalars(select(CustomBlock).order_by(CustomBlock.key))
+    rows = await db.scalars(select(LibraryBlock).order_by(LibraryBlock.key))
 
     entries: list[dict[str, Any]] = [
         {
@@ -239,7 +239,10 @@ async def catalogue(db: AsyncSession) -> list[dict[str, Any]]:
             "core": block.core,
             "gated": block.gated,
             "has_urls": block.has_urls,
+            # Kept alongside `editable` for one release: the deployed frontend
+            # reads `custom`, and backend and frontend do not deploy together.
             "custom": False,
+            "editable": False,
             "instruction": overrides.get(block.key, block.instruction),
             "default_instruction": block.instruction,
             "is_overridden": block.key in overrides,
@@ -259,6 +262,7 @@ async def catalogue(db: AsyncSession) -> list[dict[str, Any]]:
             "gated": row.gated,
             "has_urls": challenge_blocks.kind_has_urls(row.kind),
             "custom": True,
+            "editable": True,
             "instruction": row.instruction,
             "default_instruction": None,
             "is_overridden": False,
@@ -271,7 +275,7 @@ async def catalogue(db: AsyncSession) -> list[dict[str, Any]]:
 # --- custom blocks -------------------------------------------------------
 
 
-async def create_custom(
+async def create_block(
     db: AsyncSession,
     *,
     key: str,
@@ -280,7 +284,7 @@ async def create_custom(
     instruction: str,
     description: str | None = None,
     gated: bool = False,
-) -> CustomBlock:
+) -> LibraryBlock:
     key = _validate_key(key)
     kind = _validate_kind(kind)
     instruction = _validate_instruction(instruction)
@@ -291,11 +295,11 @@ async def create_custom(
     if len(label) > 60:
         raise BlockError("That label is too long.")
 
-    existing = await db.scalar(select(CustomBlock).where(CustomBlock.key == key))
+    existing = await db.scalar(select(LibraryBlock).where(LibraryBlock.key == key))
     if existing is not None:
         raise BlockError(f"A block with the key “{key}” already exists.")
 
-    row = CustomBlock(
+    row = LibraryBlock(
         key=key,
         label=label,
         description=(description or "").strip() or None,
@@ -310,7 +314,7 @@ async def create_custom(
     return row
 
 
-async def update_custom(
+async def update_block(
     db: AsyncSession,
     block_id: int,
     *,
@@ -319,14 +323,14 @@ async def update_custom(
     instruction: str,
     description: str | None = None,
     gated: bool = False,
-) -> CustomBlock | None:
+) -> LibraryBlock | None:
     """Edit a custom block. The key is deliberately not editable.
 
     Changing it would orphan the values already stored under the old key in
     every `challenges.content` that has one — they would stop rendering with
     no indication why.
     """
-    row = await db.get(CustomBlock, block_id)
+    row = await db.get(LibraryBlock, block_id)
     if row is None:
         return None
 
@@ -346,14 +350,14 @@ async def update_custom(
     return row
 
 
-async def delete_custom(db: AsyncSession, block_id: int) -> bool:
+async def delete_block(db: AsyncSession, block_id: int) -> bool:
     """Remove a custom block. Challenges that already have its output keep it.
 
     The value stays in `challenges.content`, but nothing resolves the key any
     more, so it stops being rendered — the same thing that happens to a block
     deleted from the code registry.
     """
-    row = await db.get(CustomBlock, block_id)
+    row = await db.get(LibraryBlock, block_id)
     if row is None:
         return False
     await db.delete(row)
@@ -366,7 +370,7 @@ async def delete_custom(db: AsyncSession, block_id: int) -> bool:
 
 
 async def set_instruction(db: AsyncSession, block_key: str, instruction: str) -> str:
-    """Reword a built-in block. Custom blocks are edited through `update_custom`."""
+    """Reword a built-in block. Custom blocks are edited through `update_block`."""
     if block_key not in challenge_blocks.BY_KEY:
         raise BlockError(f"“{block_key}” is not a built-in block.")
     instruction = _validate_instruction(instruction)

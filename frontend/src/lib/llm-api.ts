@@ -91,8 +91,11 @@ export type BlockMeta = {
   core: boolean;
   gated: boolean;
   has_urls: boolean;
-  /** True when the user defined it, which decides which endpoints apply. */
+  /** Deprecated alias for `editable`, kept for one release. */
   custom: boolean;
+  /** Whether this block lives in `library_blocks` — editable and deletable.
+   *  False for the six core blocks, which are columns on `challenges`. */
+  editable: boolean;
   /** What it currently asks the model for. */
   instruction: string;
   /** What "reset" would restore. Null for a custom block — it has no default. */
