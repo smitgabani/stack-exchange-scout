@@ -162,7 +162,13 @@ export default function ScoutPage() {
                             </td>
                             <td>
                               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                {instance.usable === false ? (
+                                {/* Forget only applies to a Scout: delete_instance's
+                                    research-task branch never calls Yutori or checks
+                                    ownership, so it already handles usable === false
+                                    for one correctly and for free. Routing it through
+                                    Forget too would show "keeps running and billing"
+                                    for a task that is already finished and never was. */}
+                                {instance.usable === false && instance.kind === "scout" ? (
                                   <>
                                     <button
                                       type="button"
