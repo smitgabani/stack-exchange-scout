@@ -31,6 +31,16 @@ from app.services import (
     job_workers,  # noqa: F401
 )
 
+# Without this, nothing the application logs is ever seen. Uvicorn configures
+# its own loggers and leaves the root at WARNING, so every logger.info in this
+# codebase — enrichment counts, prompt activations, job failures — was being
+# dropped. Found when the request-timing line below produced no output while
+# its Server-Timing header worked.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
 logger = logging.getLogger("app.request")
 
 
