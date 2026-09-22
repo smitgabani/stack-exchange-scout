@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Archivo, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthGate } from "./auth-gate";
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Providers>
           <AuthGate>{children}</AuthGate>
         </Providers>
+        <SpeedInsights />
       </body>
     </html>
   );
