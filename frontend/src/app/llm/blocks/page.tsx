@@ -139,6 +139,13 @@ export default function BlocksPage() {
   const kinds = data?.custom_kinds ?? [];
   const limit = data?.max_instruction_chars ?? 1200;
 
+  // Vercel and Fly deploy separately, so this page routinely runs against a
+  // backend older than itself. Said plainly, because the failure is otherwise
+  // silent and misleading: an empty layout picker and a page of blank prompt
+  // boxes look like the feature is broken rather than absent. `custom_kinds`
+  // is the marker — it arrived with the endpoints this page needs.
+  const backendTooOld = Boolean(data) && data?.custom_kinds === undefined;
+
   function instructionFor(block: BlockMeta): string {
     return edits[block.key] ?? block.instruction;
   }
@@ -156,13 +163,25 @@ export default function BlocksPage() {
             </div>
           </div>
           <div className={ws.actions}>
-            <button className={ws.primary} onClick={() => setDraft({ ...EMPTY })}>
+            <button
+              className={ws.primary}
+              onClick={() => setDraft({ ...EMPTY })}
+              disabled={backendTooOld}
+            >
               New block
             </button>
             <InfoButton text="Defines a new block: a question put to the model and a layout for its answer. Nothing is saved until you press Save block, and no challenge uses it until you add it to a format." />
           </div>
         </div>
         {message && <div className={ws.notice}>{message}</div>}
+        {backendTooOld && (
+          <div className={ws.alert}>
+            <strong>This page needs a newer backend than the one deployed.</strong> The block
+            library is being served by an older API that does not know about editable instructions
+            or custom blocks, so the layouts and the current prompts below are empty. Deploy the
+            backend and reload.
+          </div>
+        )}
       </div>
 
       {draft && (
@@ -366,6 +385,12 @@ export default function BlocksPage() {
                     setEdits((current) => ({ ...current, [block.key]: e.target.value }))
                   }
                 />
+
+                {block.is_overridden && block.default_instruction && (
+                  <div className={ws.hint}>
+                    <strong>Ships as:</strong> {block.default_instruction}
+                  </div>
+                )}
 
                 <div className={ws.actions}>
                   <button
