@@ -70,6 +70,119 @@ For the first version, the architecture should remain simple enough to run as a 
 
 ## 2.1 Architecture diagram
 
+This is the system as built: every box names the module that implements it, and
+each one links to that file on GitHub. Groups follow responsibility rather than
+folder layout — `llm.py` appears twice because the API route and the provider
+client are separate concerns that happen to share a filename.
+
+```mermaid
+flowchart TD
+
+subgraph group_interface["User interface"]
+  node_frontend["App screens"]
+  node_llm_ui["LLM controls"]
+end
+
+subgraph group_discovery["Question discovery"]
+  node_scout_api["Scout API<br/>[scout.py]"]
+  node_scout_service["Scout service<br/>[scout_service.py]"]
+  node_query_generator["Query generation<br/>[query_generator.py]"]
+  node_yutori["Yutori<br/>[yutori.py]"]
+  node_yutori_service["Yutori service"]
+  node_webhook_api["Webhook endpoint<br/>[webhooks.py]"]
+  node_ingest["Candidate ingestion<br/>[ingest_service.py]"]
+  node_stackexchange["Stack Exchange<br/>[stackexchange.py]"]
+end
+
+subgraph group_content["Question to challenge"]
+  node_profile["Profile settings<br/>[profile_service.py]"]
+  node_ranking["Question scoring<br/>[ranking_service.py]"]
+  node_challenge["Challenge creation"]
+  node_llm_api["LLM API<br/>[llm.py]"]
+  node_llm_provider["LLM providers<br/>[llm.py]"]
+  node_digest["Digest delivery<br/>[digest_service.py]"]
+  node_email["Email service<br/>[email_service.py]"]
+end
+
+subgraph group_runtime["Application runtime"]
+  node_api_app["FastAPI app<br/>[main.py]"]
+  node_webhook_events[("Webhook inbox<br/>[webhook_event.py]")]
+  node_questions[("Question records<br/>[question.py]")]
+  node_job_service["Job processing<br/>[job_service.py]"]
+end
+
+node_user(("User"))
+
+node_user -->|"uses"| node_frontend
+node_frontend -->|"triggers discovery"| node_scout_api
+node_frontend -->|"configures generation"| node_llm_api
+node_api_app -->|"mounts routes"| node_scout_api
+node_api_app -->|"mounts routes"| node_webhook_api
+node_api_app -->|"mounts routes"| node_llm_api
+node_api_app -->|"recovers jobs"| node_job_service
+node_scout_api -->|"dispatches"| node_scout_service
+node_scout_service -->|"builds query"| node_query_generator
+node_scout_service -->|"starts or syncs"| node_yutori
+node_yutori -.->|"sends updates"| node_webhook_api
+node_webhook_api -->|"claims event"| node_ingest
+node_ingest -->|"stores event"| node_webhook_events
+node_ingest -->|"creates pending rows"| node_questions
+node_ingest -->|"parses updates"| node_yutori_service
+node_stackexchange -.->|"verifies questions"| node_questions
+node_profile -->|"supplies preferences"| node_ranking
+node_questions -->|"scores candidates"| node_ranking
+node_frontend -->|"requests challenge"| node_challenge
+node_frontend -->|"requests digest"| node_digest
+node_llm_ui -->|"manages settings"| node_llm_api
+node_llm_api -->|"tests generation"| node_llm_provider
+node_challenge -->|"generates writeup"| node_llm_provider
+node_digest -->|"sends digest"| node_email
+
+click node_frontend "https://github.com/smitgabani/stack-exchange-scout/tree/main/frontend/src/app"
+click node_llm_ui "https://github.com/smitgabani/stack-exchange-scout/tree/main/frontend/src/app/llm"
+click node_api_app "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/main.py"
+click node_scout_api "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/api/scout.py"
+click node_scout_service "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/scout_service.py"
+click node_query_generator "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/query_generator.py"
+click node_yutori "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/integrations/yutori.py"
+click node_webhook_api "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/api/webhooks.py"
+click node_ingest "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/ingest_service.py"
+click node_webhook_events "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/models/webhook_event.py"
+click node_questions "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/models/question.py"
+click node_stackexchange "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/integrations/stackexchange.py"
+click node_profile "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/profile_service.py"
+click node_ranking "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/ranking_service.py"
+click node_challenge "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/challenge_service.py"
+click node_llm_api "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/api/llm.py"
+click node_llm_provider "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/integrations/llm.py"
+click node_digest "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/digest_service.py"
+click node_email "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/email_service.py"
+click node_job_service "https://github.com/smitgabani/stack-exchange-scout/blob/main/backend/app/services/job_service.py"
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_frontend,node_llm_ui,node_user toneBlue
+class node_scout_api,node_scout_service,node_query_generator,node_yutori,node_yutori_service,node_webhook_api,node_ingest,node_stackexchange toneAmber
+class node_profile,node_ranking,node_challenge,node_llm_api,node_llm_provider,node_digest,node_email toneMint
+class node_api_app,node_webhook_events,node_questions,node_job_service toneRose
+```
+
+Two edges are dashed because they are inbound from outside the app rather than
+calls the app makes: Yutori pushes webhook updates, and Stack Exchange is
+consulted to verify a question before it becomes a candidate.
+
+<details>
+<summary>Original MVP sketch (superseded — kept for reference)</summary>
+
+Drawn before implementation, so its service names are the planned ones
+(Preference Service, Candidate Service, Digest Scheduler) rather than the
+modules that exist today.
+
 ```text
                          ┌───────────────────────┐
                          │        USER           │
@@ -171,6 +284,8 @@ For the first version, the architecture should remain simple enough to run as a 
                                      ▼
                                   USER
 ```
+
+</details>
 
 ---
 
