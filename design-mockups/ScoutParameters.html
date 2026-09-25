@@ -1,0 +1,839 @@
+<title>Scout Parameter Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+  /* The app forces a light theme (globals.css), so this mockup does too —
+     a deliberate single theme, painted explicitly so it holds on any host ground. */
+  :root{
+    --ink:#181d26; --primary-active:#0d1218; --body-text:#333840; --muted:#5a5f68;
+    --hairline:#dddddd; --border-strong:#9297a0; --canvas:#ffffff;
+    --surface-soft:#f8fafc; --surface-strong:#e0e2e6;
+    --coral:#aa2d00; --cream:#f5e9d4; --mint:#a8d8c4; --forest:#0a2e0e;
+    --link:#1b61c9; --success:#006400; --on-primary:#ffffff;
+    --sans:'Archivo',-apple-system,'Helvetica Neue',Arial,sans-serif;
+    --mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    color-scheme:light;
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  body,h3,h4,p,dl,dd,pre{margin:0}
+  body{background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding-inline:16px}
+  button,input,select,textarea{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--link);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  .shell{max-width:1180px;margin:0 auto;padding-block:20px 96px;display:flex;flex-direction:column;gap:28px}
+
+  /* mockup banner */
+  .mockbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;font-size:13px;color:var(--muted);border-bottom:1px solid var(--hairline);padding-bottom:14px}
+  .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--hairline);border-radius:999px;padding:2px 10px;font-size:12.5px;color:var(--body-text);background:var(--surface-soft);white-space:nowrap}
+  .chip.new{background:var(--mint);border-color:transparent;color:var(--forest)}
+  .chip.warn{background:var(--cream);border-color:transparent;color:var(--coral)}
+
+  /* app nav */
+  .nav{display:flex;align-items:center;gap:28px;flex-wrap:wrap}
+  .wordmark{display:flex;align-items:center;gap:10px;font-weight:500}
+  .badge{width:28px;height:28px;border-radius:8px;background:var(--ink)}
+  .navlinks{display:flex;gap:22px;font-size:14px;color:var(--muted);flex-wrap:wrap}
+  .navlinks .on{color:var(--ink);font-weight:500}
+
+  .sectionTitle{font-size:32px;font-weight:400;line-height:1.2;text-wrap:balance}
+  .sub{color:var(--muted);font-size:14px;margin-top:4px}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--hairline);overflow-x:auto;scrollbar-width:none}
+  .tab{appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font-size:14.5px;color:var(--muted);cursor:pointer;white-space:nowrap;display:flex;gap:8px;align-items:center}
+  .tab[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+  .tab[disabled]{cursor:default;opacity:.55}
+
+  .crumb{font-size:13.5px;color:var(--muted)}
+  .crumb a{color:var(--link);text-decoration:none}
+  .headrow{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between}
+  .h2{font-size:24px;font-weight:400}
+
+  .seg{display:inline-flex;background:var(--surface-strong);border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+  .seg button{appearance:none;border:0;background:none;border-radius:999px;padding:6px 14px;font-size:14px;color:var(--body-text);cursor:pointer;white-space:nowrap}
+  .seg button.on{background:var(--canvas);color:var(--ink);font-weight:500;box-shadow:0 1px 2px rgba(24,29,38,.12)}
+
+  .modeRow{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center}
+  .label{font-size:13px;font-weight:500;color:var(--body-text);letter-spacing:.02em}
+  .hint{font-size:13.5px;color:var(--muted);max-width:62ch}
+
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:28px;align-items:start}
+  @media (max-width:980px){.layout{grid-template-columns:minmax(0,1fr)}}
+
+  .form{display:flex;flex-direction:column;gap:0;border:1px solid var(--hairline);border-radius:12px}
+  .group{display:grid;grid-template-columns:170px minmax(0,1fr);gap:12px 24px;padding:22px 24px;border-top:1px solid var(--hairline)}
+  .group:first-child{border-top:0}
+  @media (max-width:640px){.group{grid-template-columns:minmax(0,1fr);padding:18px 16px}}
+  .gname{display:flex;flex-direction:column;gap:6px}
+  .gname h3{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--ink)}
+  .gname .api{font-family:var(--mono);font-size:11.5px;color:var(--muted);word-break:break-word}
+  .gbody{display:flex;flex-direction:column;gap:12px;min-width:0}
+
+  .input,.select,.textarea{width:100%;border:1px solid var(--border-strong);border-radius:10px;padding:8px 12px;background:var(--canvas);font-size:14.5px}
+  .input:disabled,.select:disabled{background:var(--surface-soft);color:var(--muted);border-color:var(--hairline)}
+  .textarea{font-family:var(--mono);font-size:12.5px;line-height:1.55;min-height:220px;resize:vertical}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .row > .input,.row > .select{flex:1 1 180px;width:auto}
+  .num{max-width:110px;flex:0 0 110px!important}
+
+  .pills{display:flex;flex-wrap:wrap;gap:6px}
+  .pill{appearance:none;border:1px solid var(--hairline);background:var(--canvas);border-radius:999px;padding:6px 13px;font-size:13.5px;cursor:pointer;white-space:nowrap}
+  .pill.on{background:var(--ink);border-color:var(--ink);color:var(--on-primary)}
+
+  .radio{display:flex;flex-wrap:wrap;gap:8px 20px}
+  .radio label,.check{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;cursor:pointer}
+  input[type=radio],input[type=checkbox]{accent-color:var(--ink);width:16px;height:16px}
+
+  .fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 16px}
+  .fields .check{font-family:var(--mono);font-size:13px}
+  .fields .type{color:var(--muted);font-size:11.5px}
+
+  .cost{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;font-variant-numeric:tabular-nums}
+  .cost strong{font-weight:500;font-size:18px}
+  .cost.hot strong{color:var(--coral)}
+
+  .locked{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-family:var(--mono);font-size:12.5px;color:var(--body-text);background:var(--surface-soft);border:1px dashed var(--border-strong);border-radius:10px;padding:8px 12px;word-break:break-all}
+
+  .banner{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between;background:var(--cream);border-radius:12px;padding:16px 20px}
+  .banner p{font-size:14px;color:var(--ink)}
+  .banner .diff{font-family:var(--mono);font-size:12.5px;color:var(--coral)}
+  .error{color:var(--coral);font-size:13.5px}
+  .ok{color:var(--success);font-size:13.5px}
+
+  .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;padding:18px 24px;border-top:1px solid var(--hairline);background:var(--surface-soft);border-radius:0 0 12px 12px}
+  .btn{appearance:none;border:1px solid var(--ink);background:var(--canvas);color:var(--ink);border-radius:999px;padding:8px 18px;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap}
+  .btn.primary{background:var(--ink);color:var(--on-primary)}
+  .btn.primary:active{background:var(--primary-active)}
+  .btn.danger{border-color:var(--coral);color:var(--coral)}
+  .btn.ghost{border-color:transparent;background:none;color:var(--link);padding-inline:6px}
+  .btn:disabled{opacity:.4;cursor:default}
+  .btn.small{padding:5px 12px;font-size:13px}
+
+  .side{display:flex;flex-direction:column;gap:16px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}
+  @media (max-width:980px){.side{position:static}}
+  .card{border:1px solid var(--hairline);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;min-width:0}
+  .cardTitle{font-size:15px;font-weight:500}
+  .code{font-family:var(--mono);font-size:12px;line-height:1.55;background:var(--surface-soft);border:1px solid var(--hairline);border-radius:10px;padding:12px 14px;overflow:auto;max-height:420px;white-space:pre;color:var(--body-text)}
+  .code .k{color:var(--ink);font-weight:500}
+  .code .s{color:#1a3866}
+  .code .n{color:var(--coral)}
+
+  .tagOnly{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--forest);background:var(--mint);border-radius:999px;padding:1px 8px;width:max-content}
+
+  .subs{display:flex;flex-wrap:wrap;gap:6px}
+  .sub-chip{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--hairline);border-radius:999px;padding:3px 6px 3px 12px;font-size:13.5px}
+  .sub-chip button{border:0;background:var(--surface-strong);border-radius:999px;width:20px;height:20px;cursor:pointer;line-height:1}
+
+  .stub{border:1px dashed var(--border-strong);border-radius:12px;padding:32px;color:var(--muted);text-align:center}
+
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-top:1px solid var(--hairline);white-space:nowrap}
+  th{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:0}
+  .tablewrap{overflow-x:auto}
+  .tabnum{font-variant-numeric:tabular-nums}
+
+  .dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px 24px}
+  .dl dt{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .dl dd{font-size:14.5px;font-variant-numeric:tabular-nums;margin:2px 0 0}
+  .status{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:999px;background:var(--success)}
+
+  /* dialog + toast */
+  .scrim{position:fixed;inset:0;background:rgba(24,29,38,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+  .dialog{background:var(--canvas);border-radius:12px;max-width:460px;width:100%;padding:24px;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px rgba(24,29,38,.25)}
+  .dialog h4{font-size:18px;font-weight:500}
+  .dialog p{font-size:14.5px;color:var(--body-text)}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 24px);background:var(--ink);color:var(--on-primary);padding:10px 18px;border-radius:999px;font-size:14px;z-index:11;max-width:calc(100% - 32px)}
+</style>
+
+<div class="shell">
+  <div class="mockbar">
+    <span>Mockup of the proposed <strong>Yutori task settings editor</strong>. Example data, nothing is saved or sent.</span>
+    <span class="chip">See build-docs/featurelist.md §1</span>
+  </div>
+
+  <header class="nav">
+    <div class="wordmark"><span class="badge" aria-hidden="true"></span>Stack Exchange Scout</div>
+    <nav class="navlinks" aria-label="App">
+      <span>Dashboard</span><span>Topics</span><span>Questions</span><span>Challenges</span><span>LLM</span><span class="on">Yutori</span>
+    </nav>
+  </header>
+
+  <div>
+    <div class="sectionTitle">Yutori</div>
+    <div class="sub">Discovery: how questions get found, what it costs, and which key paid for it.</div>
+  </div>
+
+  <nav class="tabs" aria-label="Yutori sections">
+    <button class="tab" data-screen="scout" aria-current="page">Scouts</button>
+    <button class="tab" data-screen="monitors">Monitors</button>
+    <button class="tab" disabled title="Unchanged, not part of this mockup">Runs</button>
+    <button class="tab" disabled title="Unchanged, not part of this mockup">Accounts</button>
+    <button class="tab" data-screen="defaults">Defaults <span class="chip new">New</span></button>
+  </nav>
+
+  <!-- ============ SCREEN: scout detail ============ -->
+  <section id="screen-scout" class="screen" style="display:flex;flex-direction:column;gap:24px">
+    <div class="headrow">
+      <div>
+        <div class="crumb"><a href="#screen-scout">Scouts</a> / My interests</div>
+        <div class="h2">My interests</div>
+      </div>
+      <div class="modeRow">
+        <span class="label" id="mode-label">How it runs</span>
+        <div class="seg" role="group" aria-labelledby="mode-label">
+          <button id="mode-research" type="button">Research task</button>
+          <button id="mode-scout" type="button" class="on">Scout (monitor)</button>
+        </div>
+      </div>
+    </div>
+    <p class="hint" id="mode-hint"></p>
+
+    <nav class="tabs" aria-label="Scout sections">
+      <button class="tab" data-sub="query">Query</button>
+      <button class="tab" data-sub="params" aria-current="page">Parameters <span class="chip new">New</span></button>
+      <button class="tab" data-sub="runs">Runs (4)</button>
+      <button class="tab" data-sub="settings">Settings</button>
+    </nav>
+
+    <div id="sub-query" hidden>
+      <div class="card">
+        <div class="cardTitle">What gets sent to Yutori as the query</div>
+        <p class="hint">Same as today. Built from your topics using the query template, which can now be edited on <em>Yutori → Defaults</em>.</p>
+        <pre class="code" id="query-full"></pre>
+      </div>
+    </div>
+    <div id="sub-runs" hidden><div class="stub">Runs tab is unchanged. Each run would also gain a "Sent with" block (F8).</div></div>
+    <div id="sub-settings" hidden><div class="stub">Settings tab is unchanged (status, archive, delete).</div></div>
+
+    <div id="sub-params" style="display:flex;flex-direction:column;gap:20px">
+      <div class="banner" id="drift" hidden>
+        <p><strong>Your live Scout is using older settings.</strong><br><span class="diff" id="drift-list"></span></p>
+        <div class="row">
+          <button class="btn small" id="recreate-btn" hidden>Recreate…</button>
+          <button class="btn primary small" id="apply-live">Apply to live Scout · free</button>
+        </div>
+      </div>
+
+      <div class="layout">
+        <form class="form" id="params-form" novalidate>
+          <!-- Schedule -->
+          <div class="group scout-only">
+            <div class="gname"><h3>Schedule</h3><span class="api">output_interval<br>start_timestamp</span><span class="tagOnly">Scout only</span></div>
+            <div class="gbody">
+              <span class="label">How often</span>
+              <div class="pills" id="interval-pills" role="group" aria-label="How often"></div>
+              <div class="row" id="custom-row" hidden>
+                <input class="input num" id="custom-num" type="number" min="1" value="12" aria-label="Custom interval amount">
+                <select class="select num" id="custom-unit" aria-label="Custom interval unit">
+                  <option value="60">minutes</option><option value="3600" selected>hours</option><option value="86400">days</option>
+                </select>
+              </div>
+              <div class="error" id="interval-error" hidden></div>
+              <div class="cost" id="cost"></div>
+
+              <span class="label">Starts</span>
+              <div class="radio">
+                <label><input type="radio" name="start" id="start-now" value="now" checked> Now</label>
+                <label><input type="radio" name="start" id="start-at" value="at"> At a time</label>
+              </div>
+              <div class="row">
+                <input class="input" type="datetime-local" id="start-time" value="2026-09-25T09:00" disabled aria-label="Start time">
+              </div>
+              <p class="hint">Only takes effect when the Scout is created. Yutori can't change the start time on a live Scout, so changing it later means recreating it (a new paid run).</p>
+            </div>
+          </div>
+
+          <!-- Where you are -->
+          <div class="group">
+            <div class="gname"><h3>Where you are</h3><span class="api">user_timezone<br>user_location</span></div>
+            <div class="gbody">
+              <label class="label" for="tz">Timezone</label>
+              <select class="select" id="tz">
+                <option>America/Toronto</option><option>America/New_York</option><option>America/Los_Angeles</option>
+                <option>Europe/London</option><option>Europe/Berlin</option><option>Asia/Kolkata</option><option>Asia/Tokyo</option><option>UTC</option>
+              </select>
+              <p class="hint">Yutori reads "recent questions" in this timezone. Today nothing is sent, so it assumes Los Angeles.</p>
+              <label class="label" for="loc">Location</label>
+              <input class="input" id="loc" value="Toronto, ON, Canada" placeholder="City, Region, Country">
+              <p class="hint">Optional. Leave blank to use Yutori's default (San Francisco, CA, US).</p>
+            </div>
+          </div>
+
+          <!-- Visibility -->
+          <div class="group scout-only">
+            <div class="gname"><h3>Visibility</h3><span class="api">is_public</span><span class="tagOnly">Scout only</span></div>
+            <div class="gbody">
+              <div class="seg" role="group" aria-label="Visibility">
+                <button type="button" id="vis-private" class="on">Private</button>
+                <button type="button" id="vis-public">Public</button>
+              </div>
+              <p class="hint" id="vis-hint">Only your API key can read this Scout's reports.</p>
+            </div>
+          </div>
+
+          <!-- Email -->
+          <div class="group">
+            <div class="gname"><h3>Email from Yutori</h3><span class="api">skip_email<br><span class="scout-only-inline">email-settings</span></span></div>
+            <div class="gbody">
+              <label class="check"><input type="checkbox" id="email"> Also email me from Yutori</label>
+              <p class="hint">Off by default. This app already sends its own digest, so Yutori's email would be a duplicate.</p>
+              <div class="scout-only" style="display:flex;flex-direction:column;gap:8px">
+                <span class="label">Subscribers <span class="tagOnly" style="margin-left:6px">Scout only</span></span>
+                <div class="subs" id="subs"></div>
+                <div class="row">
+                  <input class="input" id="sub-new" type="email" placeholder="name@example.com" aria-label="Add subscriber email">
+                  <button class="btn small" type="button" id="sub-add">Add</button>
+                </div>
+                <div class="error" id="sub-error" hidden></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Output format -->
+          <div class="group">
+            <div class="gname"><h3>Output format</h3><span class="api">output_schema<br>(was task_spec)</span></div>
+            <div class="gbody">
+              <div class="row" style="justify-content:space-between">
+                <div class="seg" role="group" aria-label="Output format editor">
+                  <button type="button" id="schema-fields" class="on">Fields</button>
+                  <button type="button" id="schema-raw">Raw JSON</button>
+                </div>
+                <button class="btn ghost small" type="button" id="schema-reset">Reset to default</button>
+              </div>
+              <div id="schema-fields-pane">
+                <p class="hint" style="margin-bottom:10px">What Yutori should report for each question it finds. <code>url</code> is always required because the app ingests questions by URL.</p>
+                <div class="fields" id="field-list"></div>
+              </div>
+              <div id="schema-raw-pane" hidden>
+                <textarea class="textarea" id="schema-text" spellcheck="false" aria-label="Output schema JSON"></textarea>
+              </div>
+              <div class="error" id="schema-error" hidden></div>
+            </div>
+          </div>
+
+          <!-- Delivery -->
+          <div class="group">
+            <div class="gname"><h3>Delivery</h3><span class="api">webhook_url<br>webhook_format</span></div>
+            <div class="gbody">
+              <div class="locked"><span aria-hidden="true">🔒</span> https://backend-soft-headland-5023.fly.dev/webhooks/yutori?token=•••••••• · format: scout</div>
+              <p class="hint">Can't be edited. Results must come back to this app to become questions, and Yutori sends to only one webhook.</p>
+            </div>
+          </div>
+
+          <div class="actions">
+            <span class="hint" id="dirty-hint" style="margin-right:auto;align-self:center"></span>
+            <button class="btn ghost" type="button" id="reset-defaults">Reset to defaults</button>
+            <button class="btn" type="button" id="discard" disabled>Discard</button>
+            <button class="btn primary" type="submit" id="save" disabled>Save</button>
+          </div>
+        </form>
+
+        <aside class="side">
+          <div class="card">
+            <div class="cardTitle">What gets sent to Yutori</div>
+            <p class="hint" id="endpoint"></p>
+            <pre class="code" id="payload"></pre>
+          </div>
+          <div class="card">
+            <div class="cardTitle">Cost</div>
+            <div class="cost" id="cost-side"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: defaults ============ -->
+  <section id="screen-defaults" class="screen" hidden style="flex-direction:column;gap:24px">
+    <div>
+      <div class="h2">Defaults</div>
+      <p class="hint">What every scout starts from. A scout can override any field on its Parameters tab, and "Reset" there brings back these values.</p>
+    </div>
+
+    <div class="layout">
+      <div class="card" style="gap:14px">
+        <div class="row" style="justify-content:space-between">
+          <div class="cardTitle">Query template</div>
+          <span class="chip" id="tpl-version">v3 · active</span>
+        </div>
+        <p class="hint">The text Yutori receives, with your topics filled in. Works like the LLM prompt editor: every save is a new version, and older versions can be switched back to.</p>
+        <textarea class="textarea" id="tpl" spellcheck="false" style="min-height:360px" aria-label="Query template"></textarea>
+        <div class="row" style="justify-content:space-between">
+          <span class="hint">Placeholders: <code>{topics}</code> <code>{preferred_concepts}</code> <code>{excluded_concepts}</code> <code>{difficulty_min}</code> <code>{difficulty_max}</code></span>
+          <span class="hint tabnum" id="tpl-count"></span>
+        </div>
+        <div class="error" id="tpl-error" hidden></div>
+        <div class="row" style="justify-content:flex-end">
+          <button class="btn ghost" type="button" id="tpl-reset">Reset to built-in</button>
+          <button class="btn" type="button" id="tpl-preview-btn">Preview with my topics</button>
+          <button class="btn primary" type="button" id="tpl-save" disabled>Save as v4</button>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Version</th><th>Saved</th><th>Note</th><th></th></tr></thead>
+            <tbody id="tpl-versions"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="card">
+          <div class="cardTitle">Preview</div>
+          <p class="hint">Free. Filled with your current topics (example data).</p>
+          <pre class="code" id="tpl-preview" style="white-space:pre-wrap"></pre>
+        </div>
+        <div class="card">
+          <div class="cardTitle">Default settings</div>
+          <dl class="dl" style="grid-template-columns:1fr 1fr">
+            <div><dt>How often</dt><dd>30 days</dd></div>
+            <div><dt>Starts</dt><dd>Now</dd></div>
+            <div><dt>Timezone</dt><dd>America/Toronto</dd></div>
+            <div><dt>Location</dt><dd>Yutori default</dd></div>
+            <div><dt>Visibility</dt><dd>Private</dd></div>
+            <div><dt>Yutori email</dt><dd>Off</dd></div>
+            <div><dt>Output format</dt><dd>10 fields</dd></div>
+            <div><dt>Delivery</dt><dd>This app 🔒</dd></div>
+          </dl>
+          <p class="hint">Edited with the same form as a scout's Parameters tab.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ SCREEN: monitors ============ -->
+  <section id="screen-monitors" class="screen" hidden style="flex-direction:column;gap:24px">
+    <div>
+      <div class="h2">Monitors</div>
+      <p class="hint">Live Scouts at Yutori, with the settings Yutori currently reports rather than what's saved here.</p>
+    </div>
+
+    <div class="card" style="gap:16px">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div class="cardTitle">My interests</div>
+          <div class="hint">Scout · created Sep 21, 2026 · key "Personal"</div>
+        </div>
+        <span class="status" id="mon-status"><span class="dot"></span> active</span>
+      </div>
+      <dl class="dl">
+        <div><dt>How often</dt><dd>Every 30 days</dd></div>
+        <div><dt>Next run</dt><dd>Oct 21, 09:00 EDT</dd></div>
+        <div><dt>Updates</dt><dd>12 · last Sep 24</dd></div>
+        <div><dt>Timezone</dt><dd>America/Los_Angeles</dd></div>
+        <div><dt>Visibility</dt><dd>Private</dd></div>
+        <div><dt>Yutori email</dt><dd>Off</dd></div>
+        <div><dt>Output format</dt><dd>Custom schema (10 fields)</dd></div>
+        <div><dt>Rejection</dt><dd>None</dd></div>
+      </dl>
+      <div class="banner" style="padding:12px 16px">
+        <p><strong>Differs from saved settings:</strong> <span class="diff">interval 30 days → daily · timezone LA → Toronto</span></p>
+        <button class="btn small" type="button" data-goto="scout">Review on Parameters</button>
+      </div>
+      <div class="row">
+        <button class="btn small" type="button" data-goto="scout">Edit settings</button>
+        <button class="btn small" type="button" id="mon-restart">Restart</button>
+        <button class="btn small danger" type="button" id="mon-done">Mark done…</button>
+        <button class="btn small danger" type="button" id="mon-delete">Delete…</button>
+        <span class="hint" style="margin-left:auto">Yutori's API has no pause. Mark done is the only way to stop it.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="cardTitle">Older Scouts from earlier runs</div>
+        <span class="chip warn">Still running and billing</span>
+      </div>
+      <p class="hint">Each Scout-mode run currently creates a new Scout and never stops the previous one (featurelist §1.3 #1). Showing them here makes that visible.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Created</th><th>How often</th><th>Status</th><th>Next run</th><th></th></tr></thead>
+          <tbody>
+            <tr><td class="tabnum">Sep 18, 2026</td><td>30 days</td><td>active</td><td class="tabnum">Oct 18</td><td><button class="btn small danger mark-old" type="button">Mark done…</button></td></tr>
+            <tr><td class="tabnum">Sep 12, 2026</td><td>30 days</td><td>active</td><td class="tabnum">Oct 12</td><td><button class="btn small danger mark-old" type="button">Mark done…</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="scrim" id="dlg" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+    <h4 id="dlg-title"></h4>
+    <p id="dlg-body"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn" type="button" id="dlg-cancel">Cancel</button>
+      <button class="btn primary" type="button" id="dlg-ok"></button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const RUN_COST = 0.35, MONTH = 30 * 86400;
+
+  const PRESETS = [
+    ["30 min", 1800], ["1 hour", 3600], ["6 hours", 21600], ["Daily", 86400],
+    ["Weekly", 604800], ["30 days", 2592000], ["Custom…", "custom"],
+  ];
+  const FIELDS = [
+    ["url", "string", true], ["title", "string"], ["question_id", "string"], ["tags", "string[]"],
+    ["created_at", "string"], ["answer_count", "integer"], ["has_accepted_answer", "boolean"],
+    ["problem_summary", "string"], ["difficulty", "integer"], ["interesting_reason", "string"],
+  ];
+  const JSON_TYPE = { string: { type: "string" }, integer: { type: "integer" }, boolean: { type: "boolean" },
+    "string[]": { type: "array", items: { type: "string" } } };
+
+  const TEMPLATE = `Monitor Stack Overflow for newly posted or recently active
+questions that match my current technical interests.
+
+Current topics:
+{topics}
+
+Preferred concepts:
+{preferred_concepts}
+
+Avoid:
+{excluded_concepts}
+
+Prefer:
+- questions rated {difficulty_min}-{difficulty_max} out of 5 for difficulty
+- genuine debugging or reasoning problems
+- questions with enough information to investigate
+- questions with few existing answers
+- questions without a clearly complete accepted solution
+- recent questions
+
+Avoid:
+- homework
+- trivial syntax questions
+- installation-only questions
+- duplicates
+- closed questions
+- opinion-only questions
+
+Do not solve the questions.
+
+Return only candidate questions and structured metadata.`;
+  const SAMPLE = {
+    topics: "- Rust (weight 75/100)\n- Python asyncio (weight 60/100)\n- PostgreSQL (weight 40/100)",
+    preferred_concepts: "- concurrency\n- query planning",
+    excluded_concepts: "- GUI frameworks",
+    difficulty_min: "3", difficulty_max: "5",
+  };
+  const render = (t) => t.replace(/\{(\w+)\}/g, (m, k) => (k in SAMPLE ? SAMPLE[k] : m));
+  const QUERY = render(TEMPLATE);
+
+  const DEFAULTS = { interval: 2592000, custom: false, customNum: 12, customUnit: 3600, start: "now",
+    startAt: "2026-09-25T09:00", tz: "America/Toronto", loc: "", isPublic: false, email: false,
+    subs: [], fields: FIELDS.map((f) => f[0]), schemaMode: "fields", raw: null };
+  // What's already saved for this scout (example): daily, Toronto.
+  const SAVED = { ...DEFAULTS, interval: 86400, loc: "Toronto, ON, Canada", subs: ["you@example.com"] };
+  // What Yutori reports for the live Scout.
+  const LIVE = { interval: 2592000, tz: "America/Los_Angeles", isPublic: false, email: false, start: "now" };
+
+  let mode = "scout";
+  let saved = structuredClone(SAVED);
+  let s = structuredClone(SAVED);
+
+  // ---------- helpers ----------
+  const fmtInterval = (sec) => {
+    if (sec % 86400 === 0) { const d = sec / 86400; return d === 1 ? "daily" : `${d} days`; }
+    if (sec % 3600 === 0) { const h = sec / 3600; return h === 1 ? "1 hour" : `${h} hours`; }
+    return `${Math.round(sec / 60)} min`;
+  };
+  const money = (n) => n >= 100 ? `$${Math.round(n).toLocaleString()}` : `$${n.toFixed(2)}`;
+  const intervalSec = () => s.custom ? s.customNum * s.customUnit : s.interval;
+
+  function tzOffsetMs(ms, tz) {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric",
+      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(ms));
+    const v = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    return Date.UTC(+v.year, +v.month - 1, +v.day, +v.hour, +v.minute, +v.second) - ms;
+  }
+  function zonedToUnix(local, tz) {
+    const [d, t] = local.split("T"); const [y, m, dd] = d.split("-").map(Number); const [hh, mi] = t.split(":").map(Number);
+    const guess = Date.UTC(y, m - 1, dd, hh, mi);
+    try { return Math.round((guess - tzOffsetMs(guess, tz)) / 1000); } catch { return Math.round(guess / 1000); }
+  }
+
+  function buildSchema() {
+    const props = {};
+    FIELDS.forEach(([name, type]) => { if (s.fields.includes(name)) props[name] = JSON_TYPE[type]; });
+    return { type: "object", properties: { questions: { type: "array",
+      items: { type: "object", properties: props, required: ["url"] } } }, required: ["questions"] };
+  }
+  function currentSchema() {
+    if (s.schemaMode === "raw" && s.raw !== null) { try { return JSON.parse(s.raw); } catch { return null; } }
+    return buildSchema();
+  }
+  function schemaProblem() {
+    if (s.schemaMode !== "raw" || s.raw === null) return "";
+    let obj; try { obj = JSON.parse(s.raw); } catch (e) { return `Not valid JSON: ${e.message}`; }
+    const items = obj?.properties?.questions?.items;
+    if (obj?.properties?.questions?.type !== "array" || !items) return "The schema must have a \"questions\" array. The app reads results from there.";
+    if (!(items.required || []).includes("url")) return "Each question must require \"url\". Without it the app can't ingest the result.";
+    return "";
+  }
+  function intervalProblem() {
+    if (mode !== "scout") return "";
+    const sec = intervalSec();
+    if (!Number.isFinite(sec) || sec < 1800) return "Yutori's minimum is 30 minutes.";
+    return "";
+  }
+
+  function payload() {
+    const p = { query: QUERY.slice(0, 58) + `… (${QUERY.length} chars)` };
+    if (mode === "scout") {
+      p.output_interval = intervalSec();
+      p.start_timestamp = s.start === "now" ? 0 : zonedToUnix(s.startAt, s.tz);
+    }
+    p.user_timezone = s.tz;
+    if (s.loc.trim()) p.user_location = s.loc.trim();
+    if (mode === "scout") p.is_public = s.isPublic;
+    p.skip_email = !s.email;
+    p.webhook_url = "https://backend-soft-headland-5023.fly.dev/webhooks/yutori?token=••••";
+    p.webhook_format = "scout";
+    p.output_schema = currentSchema() ?? "⚠ invalid — fix the JSON";
+    return p;
+  }
+  function highlight(obj) {
+    const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    return esc(JSON.stringify(obj, null, 2))
+      .replace(/"([^"]+)":/g, '<span class="k">"$1"</span>:')
+      .replace(/: "([^"]*)"/g, ': <span class="s">"$1"</span>')
+      .replace(/: (-?\d+|true|false)/g, ': <span class="n">$1</span>');
+  }
+
+  // ---------- render ----------
+  function renderPills() {
+    const wrap = $("interval-pills"); wrap.innerHTML = "";
+    PRESETS.forEach(([label, val]) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "pill"; b.textContent = label;
+      const on = val === "custom" ? s.custom : !s.custom && s.interval === val;
+      b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+      b.onclick = () => { if (val === "custom") s.custom = true; else { s.custom = false; s.interval = val; } update(); };
+      wrap.appendChild(b);
+    });
+  }
+  function renderFields() {
+    const wrap = $("field-list"); wrap.innerHTML = "";
+    FIELDS.forEach(([name, type, req]) => {
+      const l = document.createElement("label"); l.className = "check";
+      const c = document.createElement("input"); c.type = "checkbox"; c.id = `f-${name}`;
+      c.checked = s.fields.includes(name); c.disabled = !!req;
+      c.onchange = () => { s.fields = c.checked ? [...s.fields, name] : s.fields.filter((f) => f !== name); update(); };
+      l.append(c, document.createTextNode(` ${name} `));
+      const t = document.createElement("span"); t.className = "type"; t.textContent = req ? `${type} · required` : type;
+      l.append(t); wrap.appendChild(l);
+    });
+  }
+  function renderSubs() {
+    const wrap = $("subs"); wrap.innerHTML = "";
+    if (!s.subs.length) { wrap.innerHTML = '<span class="hint">No subscribers.</span>'; return; }
+    s.subs.forEach((e) => {
+      const c = document.createElement("span"); c.className = "sub-chip"; c.textContent = e;
+      const x = document.createElement("button"); x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", `Remove ${e}`);
+      x.onclick = () => { s.subs = s.subs.filter((v) => v !== e); update(); };
+      c.appendChild(x); wrap.appendChild(c);
+    });
+  }
+  function costHTML() {
+    if (mode === "research") return `<strong>${money(RUN_COST)}</strong><span class="hint">per run, charged when you press Run. Nothing recurs.</span>`;
+    const sec = intervalSec(); if (!(sec >= 1800)) return '<span class="hint">Set a valid interval to see the cost.</span>';
+    const runs = MONTH / sec, cost = runs * RUN_COST;
+    return `<strong>≈ ${money(cost)} / month</strong><span class="hint tabnum">≈ ${runs >= 10 ? Math.round(runs).toLocaleString() : runs.toFixed(1)} runs × ${money(RUN_COST)} · plus ${money(RUN_COST)} for the first run on create</span>`;
+  }
+  const snapshot = (x) => JSON.stringify({ ...x, customNum: +x.customNum });
+  function driftList() {
+    if (mode !== "scout") return [];
+    const d = [];
+    if (saved.custom ? saved.customNum * saved.customUnit !== LIVE.interval : saved.interval !== LIVE.interval)
+      d.push(`interval ${fmtInterval(LIVE.interval)} → ${fmtInterval(saved.custom ? saved.customNum * saved.customUnit : saved.interval)}`);
+    if (saved.tz !== LIVE.tz) d.push(`timezone ${LIVE.tz} → ${saved.tz}`);
+    if (saved.isPublic !== LIVE.isPublic) d.push(`visibility → ${saved.isPublic ? "public" : "private"}`);
+    if (saved.email !== LIVE.email) d.push(`Yutori email → ${saved.email ? "on" : "off"}`);
+    if (saved.start !== LIVE.start) d.push("start time changed (needs recreate)");
+    return d;
+  }
+
+  function update() {
+    const scout = mode === "scout";
+    $("mode-scout").classList.toggle("on", scout); $("mode-research").classList.toggle("on", !scout);
+    $("mode-hint").textContent = scout
+      ? "Scout: a monitor that keeps running on its own schedule and bills each time it runs, without you pressing anything."
+      : "Research task: one-off. Runs when you press Run and leaves nothing behind at Yutori.";
+    document.querySelectorAll(".scout-only").forEach((el) => (el.hidden = !scout));
+    document.querySelectorAll(".scout-only-inline").forEach((el) => (el.hidden = !scout));
+
+    renderPills(); renderFields(); renderSubs();
+    $("custom-row").hidden = !s.custom;
+    $("custom-num").value = s.customNum; $("custom-unit").value = String(s.customUnit);
+    const ip = intervalProblem(); $("interval-error").hidden = !ip; $("interval-error").textContent = ip;
+
+    $("start-now").checked = s.start === "now"; $("start-at").checked = s.start === "at";
+    $("start-time").disabled = s.start !== "at"; $("start-time").value = s.startAt;
+    $("tz").value = s.tz; $("loc").value = s.loc; $("email").checked = s.email;
+    $("vis-private").classList.toggle("on", !s.isPublic); $("vis-public").classList.toggle("on", s.isPublic);
+    $("vis-hint").textContent = s.isPublic
+      ? "Anyone with this Scout's ID can read its reports, and they include your interests."
+      : "Only your API key can read this Scout's reports.";
+
+    $("schema-fields").classList.toggle("on", s.schemaMode === "fields");
+    $("schema-raw").classList.toggle("on", s.schemaMode === "raw");
+    $("schema-fields-pane").hidden = s.schemaMode !== "fields"; $("schema-raw-pane").hidden = s.schemaMode !== "raw";
+    if (s.schemaMode === "raw" && document.activeElement !== $("schema-text"))
+      $("schema-text").value = s.raw ?? JSON.stringify(buildSchema(), null, 2);
+    const sp = schemaProblem(); $("schema-error").hidden = !sp; $("schema-error").textContent = sp;
+
+    $("cost").innerHTML = scout ? costHTML() : ""; $("cost-side").innerHTML = costHTML();
+    $("cost").classList.toggle("hot", scout && intervalSec() < 86400);
+    $("cost-side").classList.toggle("hot", scout && intervalSec() < 86400);
+
+    $("endpoint").innerHTML = scout
+      ? "<code>POST /v1/scouting/tasks</code> when the scout runs in Scout mode. Every field except start time can also be updated for free with <code>PATCH</code>."
+      : "<code>POST /v1/research/tasks</code> each time you press Run.";
+    $("payload").innerHTML = highlight(payload());
+    $("query-full").textContent = QUERY;
+
+    const dirty = snapshot(s) !== snapshot(saved);
+    const invalid = !!(ip || sp);
+    $("save").disabled = !dirty || invalid; $("discard").disabled = !dirty;
+    $("dirty-hint").textContent = invalid ? "Fix the errors above to save." : dirty ? "Unsaved changes" : "Saved · used on the next run";
+
+    const drift = driftList();
+    $("drift").hidden = !drift.length;
+    $("drift-list").textContent = drift.join(" · ");
+    $("recreate-btn").hidden = !drift.some((d) => d.startsWith("start"));
+  }
+
+  // ---------- dialog / toast ----------
+  let onOk = null, onCancel = null;
+  function ask(title, body, okLabel, ok, cancel) {
+    $("dlg-title").textContent = title; $("dlg-body").textContent = body; $("dlg-ok").textContent = okLabel;
+    onOk = ok; onCancel = cancel || null; $("dlg").hidden = false; $("dlg-ok").focus();
+  }
+  const close = () => { $("dlg").hidden = true; };
+  $("dlg-ok").onclick = () => { close(); onOk && onOk(); };
+  $("dlg-cancel").onclick = () => { close(); onCancel && onCancel(); };
+  $("dlg").addEventListener("keydown", (e) => { if (e.key === "Escape") $("dlg-cancel").click(); });
+  let toastT;
+  function toast(msg) { $("toast").textContent = msg; $("toast").hidden = false; clearTimeout(toastT); toastT = setTimeout(() => ($("toast").hidden = true), 2600); }
+
+  // ---------- wiring: scout form ----------
+  $("mode-scout").onclick = () => { mode = "scout"; update(); };
+  $("mode-research").onclick = () => { mode = "research"; update(); };
+  $("custom-num").oninput = (e) => { s.customNum = Number(e.target.value); update(); };
+  $("custom-unit").onchange = (e) => { s.customUnit = Number(e.target.value); update(); };
+  $("start-now").onchange = () => { s.start = "now"; update(); };
+  $("start-at").onchange = () => { s.start = "at"; update(); };
+  $("start-time").onchange = (e) => { s.startAt = e.target.value || s.startAt; update(); };
+  $("tz").onchange = (e) => { s.tz = e.target.value; update(); };
+  $("loc").oninput = (e) => { s.loc = e.target.value; update(); };
+  $("email").onchange = (e) => { s.email = e.target.checked; update(); };
+  $("vis-private").onclick = () => { s.isPublic = false; update(); };
+  $("vis-public").onclick = () => {
+    if (s.isPublic) return;
+    ask("Make this Scout public?",
+      "Anyone who has this Scout's ID will be able to read its reports without an API key. The query includes your topics and interests.",
+      "Make public", () => { s.isPublic = true; update(); });
+  };
+  $("sub-add").onclick = () => {
+    const v = $("sub-new").value.trim(); const bad = !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    $("sub-error").hidden = !bad; $("sub-error").textContent = bad ? "Enter an email address like name@example.com." : "";
+    if (bad) return; if (!s.subs.includes(v)) s.subs = [...s.subs, v]; $("sub-new").value = ""; update();
+  };
+  $("sub-new").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("sub-add").click(); } });
+  $("schema-fields").onclick = () => {
+    if (s.schemaMode === "raw" && schemaProblem()) { toast("Fix the JSON first, or use Reset to default."); return; }
+    s.schemaMode = "fields"; s.raw = null; update();
+  };
+  $("schema-raw").onclick = () => { s.schemaMode = "raw"; s.raw = JSON.stringify(buildSchema(), null, 2); update(); };
+  $("schema-text").oninput = (e) => { s.raw = e.target.value; update(); };
+  $("schema-reset").onclick = () => { s.fields = [...DEFAULTS.fields]; s.raw = s.schemaMode === "raw" ? JSON.stringify(buildSchema(), null, 2) : null; $("schema-text").value = s.raw ?? ""; update(); };
+  $("reset-defaults").onclick = () => { s = structuredClone(DEFAULTS); $("schema-text").value = ""; update(); toast("Reset to defaults. Save to keep it."); };
+  $("discard").onclick = () => { s = structuredClone(saved); $("schema-text").value = ""; update(); };
+  $("params-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const commit = () => { saved = structuredClone(s); update(); toast("Saved. The next run will use these settings."); };
+    if (mode === "scout" && intervalSec() < 86400) {
+      const runs = Math.round(MONTH / intervalSec());
+      ask("Run this often?", `Every ${fmtInterval(intervalSec())} is about ${runs.toLocaleString()} runs a month, roughly ${money(runs * RUN_COST)}, billed automatically.`, "Save anyway", commit);
+    } else commit();
+  });
+  $("apply-live").onclick = () => {
+    Object.assign(LIVE, { interval: saved.custom ? saved.customNum * saved.customUnit : saved.interval, tz: saved.tz, isPublic: saved.isPublic, email: saved.email });
+    update(); toast("Applied to the live Scout. Free, no run triggered.");
+  };
+  $("recreate-btn").onclick = () => ask("Recreate the live Scout?",
+    "Yutori can't change the start time of an existing Scout. This marks the current one done and creates a new one, which starts a paid run ($0.35).",
+    "Recreate · $0.35", () => { LIVE.start = saved.start; update(); toast("Recreated. New Scout starts at the chosen time."); });
+
+  // ---------- screens & sub-tabs ----------
+  function showScreen(name) {
+    document.querySelectorAll(".screen").forEach((el) => { const on = el.id === `screen-${name}`; el.hidden = !on; el.style.display = on ? "flex" : ""; });
+    document.querySelectorAll("[data-screen]").forEach((b) => { if (b.dataset.screen === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+    window.scrollTo({ top: 0 });
+  }
+  document.querySelectorAll("[data-screen]").forEach((b) => (b.onclick = () => showScreen(b.dataset.screen)));
+  document.querySelectorAll("[data-goto]").forEach((b) => (b.onclick = () => { showScreen(b.dataset.goto); showSub("params"); }));
+  function showSub(name) {
+    ["query", "params", "runs", "settings"].forEach((n) => ($(`sub-${n}`).hidden = n !== name));
+    $("sub-params").style.display = name === "params" ? "flex" : "none";
+    document.querySelectorAll("[data-sub]").forEach((b) => { if (b.dataset.sub === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  }
+  document.querySelectorAll("[data-sub]").forEach((b) => (b.onclick = () => showSub(b.dataset.sub)));
+
+  // ---------- monitors ----------
+  $("mon-restart").onclick = () => toast("Restarted. Yutori resumes the schedule; this doesn't trigger a run.");
+  $("mon-done").onclick = () => ask("Mark this Scout done?", "Yutori archives it and it stops running. This can't be undone. The scout here keeps its history and can create a new Scout later.", "Mark done", () => { $("mon-status").innerHTML = '<span class="dot" style="background:var(--muted)"></span> done'; toast("Marked done."); });
+  $("mon-delete").onclick = () => ask("Delete this Scout at Yutori?", "Removes it and its reports from Yutori. Questions already ingested here are kept.", "Delete", () => toast("Deleted at Yutori."));
+  document.querySelectorAll(".mark-old").forEach((b) => (b.onclick = () => ask("Stop this older Scout?", "It's still running every 30 days and billing $0.35 each time. Marking it done stops it.", "Mark done", () => { b.closest("tr").querySelector("td:nth-child(3)").textContent = "done"; b.disabled = true; toast("Marked done."); })));
+
+  // ---------- defaults: query template ----------
+  const versions = [
+    { v: 3, when: "Sep 22, 2026", note: "Ask for questions under 2 days old", active: true },
+    { v: 2, when: "Sep 19, 2026", note: "Drop “installation-only”", active: false },
+    { v: 1, when: "Sep 17, 2026", note: "Built-in template", active: false },
+  ];
+  let tplSaved = TEMPLATE;
+  function renderVersions() {
+    $("tpl-versions").innerHTML = "";
+    versions.forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td class="tabnum">v${r.v}</td><td class="tabnum">${r.when}</td><td>${r.note}</td><td></td>`;
+      const td = tr.lastChild;
+      if (r.active) td.innerHTML = '<span class="chip new">Active</span>';
+      else { const b = document.createElement("button"); b.className = "btn small"; b.type = "button"; b.textContent = "Activate";
+        b.onclick = () => { versions.forEach((x) => (x.active = x === r)); $("tpl-version").textContent = `v${r.v} · active`; renderVersions(); toast(`v${r.v} is now active.`); };
+        td.appendChild(b); }
+      $("tpl-versions").appendChild(tr);
+    });
+  }
+  function updateTpl() {
+    const t = $("tpl").value;
+    const unknown = [...t.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).filter((k) => !(k in SAMPLE));
+    const err = !t.trim() ? "The template can't be empty." : unknown.length ? `Unknown placeholder: {${[...new Set(unknown)].join("}, {")}}` : t.length > 4000 ? "Too long. The limit is 4,000 characters." : "";
+    $("tpl-error").hidden = !err; $("tpl-error").textContent = err;
+    $("tpl-count").textContent = `${t.length.toLocaleString()} / 4,000`;
+    $("tpl-save").disabled = !!err || t === tplSaved;
+    $("tpl-save").textContent = `Save as v${Math.max(...versions.map((x) => x.v)) + 1}`;
+  }
+  $("tpl").value = TEMPLATE; $("tpl-preview").textContent = render(TEMPLATE);
+  $("tpl").oninput = updateTpl;
+  $("tpl-preview-btn").onclick = () => { $("tpl-preview").textContent = render($("tpl").value); toast("Preview updated. Free, nothing sent."); };
+  $("tpl-reset").onclick = () => { $("tpl").value = TEMPLATE; updateTpl(); $("tpl-preview").textContent = render(TEMPLATE); };
+  $("tpl-save").onclick = () => {
+    const v = Math.max(...versions.map((x) => x.v)) + 1;
+    versions.forEach((x) => (x.active = false)); versions.unshift({ v, when: "Sep 24, 2026", note: "Edited in mockup", active: true });
+    tplSaved = $("tpl").value; $("tpl-version").textContent = `v${v} · active`; renderVersions(); updateTpl(); toast(`Saved as v${v}. Used by the next run.`);
+  };
+
+  renderVersions(); updateTpl(); update();
+})();
+</script>
