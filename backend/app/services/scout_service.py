@@ -306,6 +306,8 @@ async def sync(
                 query=query,
                 webhook_url=settings.yutori_webhook_url,
                 output_interval_seconds=interval_seconds,
+                # The legacy path re-asserts privacy on every push.
+                is_public=False,
             )
             action = "updated"
     except YutoriForbidden:
@@ -772,6 +774,7 @@ async def _begin_run(
         query=query,
         webhook_url=settings.yutori_webhook_url,
         output_interval_seconds=interval,
+        is_public=False,
     )
     try:
         await client.mark_done(scout.external_scout_id)

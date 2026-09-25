@@ -1,0 +1,99 @@
+/* The Parameters form: one row per group of Yutori settings. Everything else
+   (inputs, pills, buttons) comes from workspace.module.css. */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
+  gap: 22px;
+  align-items: start;
+}
+
+.form {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.group {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 12px 22px;
+  padding: 20px 22px;
+  border-top: 1px solid var(--hairline);
+}
+.group:first-child { border-top: none; }
+
+.groupName { display: flex; flex-direction: column; gap: 6px; }
+.groupTitle {
+  font-size: 12px; font-weight: 500; color: var(--ink);
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.api { font-family: var(--font-geist-mono), monospace; font-size: 11.5px; color: var(--muted); word-break: break-word; }
+.groupBody { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.row > input, .row > select { flex: 1 1 160px; width: auto; }
+.narrow { flex: 0 0 110px !important; }
+
+.override {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--forest);
+  background: var(--mint); border-radius: 9999px; padding: 1px 4px 1px 10px;
+  width: max-content;
+}
+.override button {
+  border: none; background: var(--canvas); border-radius: 9999px;
+  font-size: 11.5px; padding: 1px 8px; cursor: pointer; color: var(--ink);
+}
+
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.check input { accent-color: var(--ink); width: 16px; height: 16px; }
+
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 16px; }
+.fields .check { font-family: var(--font-geist-mono), monospace; font-size: 13px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--hairline); border-radius: 9999px;
+  padding: 3px 6px 3px 12px; font-size: 13px;
+}
+.chip button {
+  border: none; background: var(--surface-strong); border-radius: 9999px;
+  width: 20px; height: 20px; cursor: pointer; line-height: 1;
+}
+
+.locked {
+  font-family: var(--font-geist-mono), monospace; font-size: 12.5px; color: var(--body-text);
+  background: var(--surface-soft); border: 1px dashed var(--border-strong);
+  border-radius: 10px; padding: 8px 12px; word-break: break-all;
+}
+
+.cost { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.cost strong { font-size: 18px; font-weight: 500; color: var(--ink); }
+.cost.hot strong { color: var(--coral); }
+
+.error { color: var(--coral); font-size: 13px; }
+
+.footer {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-end;
+  padding: 16px 22px; border-top: 1px solid var(--hairline);
+  background: var(--surface-soft); border-radius: 0 0 12px 12px;
+}
+.footer .hint { margin-right: auto; }
+
+.side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 16px; }
+.payload {
+  font-family: var(--font-geist-mono), monospace; font-size: 12px; line-height: 1.55;
+  background: var(--surface-soft); border: 1px solid var(--hairline); border-radius: 10px;
+  padding: 12px 14px; overflow: auto; max-height: 440px; white-space: pre; color: var(--body-text);
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; }
+}
+@media (max-width: 640px) {
+  .group { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+}

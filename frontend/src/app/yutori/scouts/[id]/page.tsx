@@ -7,9 +7,11 @@ import { useState } from "react";
 import { ConfirmDialog } from "../../../confirm-dialog";
 import { InfoButton } from "../../../info-button";
 import { LiveMonitorDialog } from "../../../live-monitor-dialog";
+import { ParametersForm } from "../../parameters-form";
 import {
   type Definition,
   type LiveMonitorConflict,
+  type YutoriSettings,
   MODE_LABEL,
   type RunMode,
   defaultMode,
@@ -23,7 +25,7 @@ import {
 } from "@/lib/scout-api";
 import styles from "../../../workspace.module.css";
 
-type Tab = "query" | "runs" | "settings";
+type Tab = "query" | "parameters" | "runs" | "settings";
 
 export default function DefinitionPage() {
   const params = useParams<{ id: string }>();
@@ -140,17 +142,52 @@ export default function DefinitionPage() {
 
       {message && <div className={styles.notice}>{message}</div>}
 
+      {/* How it runs decides which Parameters form applies, so it sits above
+          the tabs rather than inside one. Saved with the page's Save. */}
+      <div className={styles.field}>
+        <span className={styles.label}>How it runs</span>
+        <div className={styles.seg}>
+          {(["research", "scout"] as RunMode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`${styles.segItem} ${currentMode === m ? styles.on : ""}`}
+              // Only the key being changed: the backend merges config, so the
+              // Yutori settings saved from the Parameters tab are left alone.
+              onClick={() => edit({ config: { default_mode: m } })}
+            >
+              {MODE_LABEL[m]}
+            </button>
+          ))}
+        </div>
+        <p className={styles.hint}>
+          {currentMode === "research"
+            ? "One-shot. Runs when you ask and leaves nothing behind at Yutori."
+            : "Creates a monitor that keeps running on its own interval — the only kind that bills without you pressing anything."}
+        </p>
+      </div>
+
       <div className={styles.seg}>
-        {(["query", "runs", "settings"] as Tab[]).map((t) => (
+        {(["query", "parameters", "runs", "settings"] as Tab[]).map((t) => (
           <button
             key={t}
             className={`${styles.segItem} ${tab === t ? styles.on : ""}`}
             onClick={() => setTab(t)}
           >
-            {t === "query" ? "Query" : t === "runs" ? `Runs (${runs.length})` : "Settings"}
+            {t === "query"
+              ? "Query"
+              : t === "parameters"
+                ? "Parameters"
+                : t === "runs"
+                  ? `Runs (${runs.length})`
+                  : "Settings"}
           </button>
         ))}
       </div>
+
+      {tab === "parameters" && (
+        <ScoutParameters definitionId={params.id} mode={currentMode} onSaved={refresh} />
+      )}
 
       {tab === "query" && (
         <div className={styles.grid2}>
@@ -178,28 +215,6 @@ export default function DefinitionPage() {
                 value={value("name") ?? ""}
                 onChange={(e) => edit({ name: e.target.value })}
               />
-            </div>
-            <div className={styles.field}>
-              <span className={styles.label}>How it runs</span>
-              <div className={styles.seg}>
-                {(["research", "scout"] as RunMode[]).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    className={`${styles.segItem} ${currentMode === m ? styles.on : ""}`}
-                    onClick={() =>
-                      edit({ config: { ...(value("config") ?? {}), default_mode: m } })
-                    }
-                  >
-                    {MODE_LABEL[m]}
-                  </button>
-                ))}
-              </div>
-              <p className={styles.hint}>
-                {currentMode === "research"
-                  ? "One-shot. Runs when you ask and leaves nothing behind at Yutori."
-                  : "Creates a monitor that keeps running on its own interval — the only kind that bills without you pressing anything."}
-              </p>
             </div>
             {value("query_source") === "freeform" ? (
               <div className={styles.field}>
@@ -397,5 +412,66 @@ export default function DefinitionPage() {
         onConfirm={() => { setAsking(null); remove.mutate(); }}
       />
     </main>
+  );
+}
+
+/**
+ * The Parameters tab: this scout's Yutori settings, with a free preview of
+ * the exact request. Loads its own data so the rest of the page doesn't wait.
+ */
+function ScoutParameters({
+  definitionId,
+  mode,
+  onSaved,
+}: {
+  definitionId: string;
+  mode: RunMode;
+  onSaved: () => Promise<void>;
+}) {
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["definition-settings", definitionId],
+    queryFn: () => scoutApi.getSettings(definitionId),
+  });
+
+  const after = async (text: string) => {
+    setMessage(text);
+    await queryClient.invalidateQueries({ queryKey: ["definition-settings", definitionId] });
+    await onSaved();
+  };
+  const save = useMutation({
+    mutationFn: (values: YutoriSettings) => scoutApi.putSettings(definitionId, values),
+    onSuccess: () => after("Saved. Nothing was sent to Yutori — the next run uses these settings."),
+    onError: (e: Error) => setMessage(e.message),
+  });
+  const reset = useMutation({
+    mutationFn: () => scoutApi.resetSettings(definitionId),
+    onSuccess: () => after("Back to the defaults."),
+    onError: (e: Error) => setMessage(e.message),
+  });
+
+  if (isLoading) return <div className={styles.empty}>Loading settings…</div>;
+  if (error || !data) return <div className={styles.alert}>{(error as Error)?.message ?? "Couldn't load settings."}</div>;
+
+  return (
+    <>
+      {message && <div className={styles.notice}>{message}</div>}
+      <ParametersForm
+        variant="scout"
+        mode={mode}
+        base={data.defaults}
+        saved={data.overrides}
+        defaultSchema={data.default_output_schema}
+        yutoriDefaultTimezone={data.yutori_default_timezone}
+        runCost={data.run_cost_usd}
+        initialPreview={data.preview}
+        previewFor={(draft) => scoutApi.previewSettings(definitionId, draft)}
+        scopeKey={definitionId}
+        saving={save.isPending || reset.isPending}
+        onSave={(values) => save.mutate(values)}
+        onResetAll={() => reset.mutate()}
+      />
+    </>
   );
 }

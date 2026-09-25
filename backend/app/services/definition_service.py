@@ -24,7 +24,7 @@ from app.models.scout_definition import ScoutDefinition, ScoutInstance, ScoutRun
 from app.models.webhook_event import WebhookEvent
 from app.repositories import credential_repository
 from app.schemas.profile import ProfileData
-from app.services import ingest_service, query_generator, scout_service
+from app.services import ingest_service, query_generator, scout_service, task_settings
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,79 @@ async def _stop_monitor(client, instance: ScoutInstance) -> str | None:
     return None
 
 
+async def yutori_defaults(db: AsyncSession) -> dict[str, Any]:
+    """The settings every scout starts from."""
+    return task_settings.built_in_defaults()
+
+
+def yutori_overrides(definition: ScoutDefinition) -> dict[str, Any]:
+    return dict((definition.config or {}).get("yutori") or {})
+
+
+async def effective_settings(
+    db: AsyncSession, definition: ScoutDefinition, overrides: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """What this scout would send: defaults, with its overrides on top.
+
+    `overrides` replaces the stored ones — used to preview a draft for free.
+    """
+    return task_settings.effective(
+        await yutori_defaults(db),
+        yutori_overrides(definition) if overrides is None else overrides,
+    )
+
+
+async def set_yutori_overrides(
+    db: AsyncSession, definition: ScoutDefinition, overrides: dict[str, Any] | None
+) -> ScoutDefinition:
+    """Store a scout's overrides; None or empty clears them (back to defaults)."""
+    config = dict(definition.config or {})
+    if overrides:
+        config["yutori"] = overrides
+    else:
+        config.pop("yutori", None)
+    definition.config = config
+    await db.commit()
+    await db.refresh(definition)
+    return definition
+
+
+async def settings_view(
+    db: AsyncSession,
+    definition: ScoutDefinition,
+    profile_data: ProfileData,
+    *,
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Everything the Parameters tab needs, including the free preview.
+
+    The preview is built by the same function a run uses, so what is shown is
+    what would be sent — with the webhook secret masked.
+    """
+    defaults = await yutori_defaults(db)
+    stored = yutori_overrides(definition) if overrides is None else overrides
+    eff = task_settings.effective(defaults, stored)
+    query = render_query(definition, profile_data)
+    webhook = settings.yutori_webhook_url if settings.public_base_url else None
+    return {
+        "defaults": defaults,
+        "overrides": stored,
+        "effective": eff,
+        "preview": {
+            "research": task_settings.mask(
+                task_settings.build_payload("research_task", query, eff, webhook)
+            ),
+            "scout": task_settings.mask(
+                task_settings.build_payload("scout", query, eff, webhook)
+            ),
+        },
+        "cost": {
+            "per_run": settings.yutori_run_cost_usd,
+            "monthly": task_settings.monthly_cost(eff.get("output_interval_seconds")),
+        },
+    }
+
+
 async def list_definitions(
     db: AsyncSession, *, include_archived: bool = False
 ) -> list[ScoutDefinition]:
@@ -184,9 +257,13 @@ async def create_definition(
 async def update_definition(
     db: AsyncSession, definition: ScoutDefinition, changes: dict[str, Any]
 ) -> ScoutDefinition:
-    for column in ("name", "notes", "query_source", "query_text", "config", "status"):
+    for column in ("name", "notes", "query_source", "query_text", "status"):
         if column in changes:
             setattr(definition, column, changes[column])
+    if changes.get("config") is not None:
+        # Merged, not replaced: config holds unrelated keys (the preferred run
+        # mode, the Yutori settings), and a save of one mustn't drop the other.
+        definition.config = {**(definition.config or {}), **changes["config"]}
     if changes.get("query_text"):
         definition.query_hash = _hash(changes["query_text"])
     if definition.status == "archived" and definition.archived_at is None:
@@ -318,22 +395,38 @@ async def run_definition(
         replaced = live.external_id
         await db.flush()
 
-    interval = settings.scout_run_interval_seconds
+    eff = await effective_settings(db, definition)
+    # A research task can be polled for its result, so its webhook is a
+    # convenience and needs a public URL; a Scout can only report by webhook.
+    webhook = (
+        settings.yutori_webhook_url
+        if kind == "scout" or settings.public_base_url
+        else None
+    )
+    payload = task_settings.build_payload(kind, query, eff, webhook)
     try:
         if kind == "research_task":
             response = await client.create_research_task(
                 query=query,
-                webhook_url=settings.yutori_webhook_url
-                if settings.public_base_url
-                else None,
+                webhook_url=payload.get("webhook_url"),
+                skip_email=payload["skip_email"],
+                user_timezone=payload.get("user_timezone"),
+                user_location=payload.get("user_location"),
+                output_schema=payload["output_schema"],
             )
             external_id = str(response.get("task_id") or response.get("id") or "")
             state = response.get("status")
         else:
             response = await client.create_scout(
                 query=query,
-                webhook_url=settings.yutori_webhook_url,
-                output_interval_seconds=interval,
+                webhook_url=payload["webhook_url"],
+                output_interval_seconds=payload["output_interval"],
+                skip_email=payload["skip_email"],
+                is_public=payload["is_public"],
+                output_schema=payload["output_schema"],
+                start_timestamp=payload.get("start_timestamp"),
+                user_timezone=payload.get("user_timezone"),
+                user_location=payload.get("user_location"),
             )
             external_id = str(response.get("id") or "")
             state = "active"
@@ -344,9 +437,18 @@ async def run_definition(
         await db.commit()
         return RunOutcome(started=False, error=str(exc)[:300])
 
+    warnings: list[str] = []
+    if kind == "scout" and eff.get("subscribers"):
+        # Subscribers live behind a separate endpoint. Not worth failing a run
+        # that has already been paid for, so a refusal is recorded instead.
+        try:
+            await client.update_email_settings(external_id, add=list(eff["subscribers"]))
+        except YutoriError as exc:
+            warnings.append(f"Subscribers weren't added: {str(exc)[:200]}")
+
     detail: dict[str, Any] = {"view_url": response.get("view_url")}
     if kind == "scout":
-        detail["output_interval"] = interval
+        detail["output_interval"] = payload["output_interval"]
         if replaced:
             detail["replaces"] = replaced
     instance = ScoutInstance(
@@ -369,7 +471,17 @@ async def run_definition(
         account_label=(credential.label or credential.key_name) if credential else None,
         cost_usd=settings.yutori_run_cost_usd,
         status="running",
-        detail={"query_hash": _hash(query), "trigger": "manual"},
+        detail={
+            "query_hash": _hash(query),
+            "trigger": "manual",
+            # Exactly what was sent, minus the query text (kept on the
+            # definition) and with the webhook secret masked — so a run's
+            # results can be read against the settings that produced them.
+            "sent": {
+                k: v for k, v in task_settings.mask(payload).items() if k != "query"
+            },
+            **({"warnings": warnings} if warnings else {}),
+        },
     )
     db.add(run)
 
@@ -1300,6 +1412,12 @@ async def run_detail(db: AsyncSession, run_id: uuid.UUID) -> dict | None:
         "delivered_by": run.delivered_by,
         "account_label": run.account_label,
         "error": run.error,
+        # "manual" when someone pressed Run, "schedule" when a monitor ran on
+        # its own interval (M13) — older runs have neither.
+        "trigger": (run.detail or {}).get("trigger"),
+        # The settings the request carried, webhook secret masked (M13 F8).
+        "sent": (run.detail or {}).get("sent"),
+        "warnings": (run.detail or {}).get("warnings") or [],
         "returned": len(returned),
         "unique_questions": len(wanted),
         "unparseable": unparseable,

@@ -9,6 +9,7 @@ import {
   type RunQuestion,
   type RunQuestionFate,
   duration,
+  every,
   money,
   scoutApi,
   when,
@@ -195,7 +196,8 @@ export default function RunPage() {
         <div>
           <div className={styles.title}>Run · {when(run.started_at)}</div>
           <div className={`${styles.sub} ${styles.mono}`}>
-            {run.kind === "research_task" ? "research task" : "scout"} · {run.id}
+            {run.kind === "research_task" ? "research task" : "scout"}
+            {run.trigger === "schedule" ? " · ran on its own schedule" : ""} · {run.id}
           </div>
         </div>
         <div className={styles.actions}>
@@ -247,6 +249,12 @@ export default function RunPage() {
           result — the money was spent and nothing came back.
         </div>
       )}
+
+      {run.warnings && run.warnings.length > 0 && (
+        <div className={styles.notice}>{run.warnings.join(" ")}</div>
+      )}
+
+      {run.sent && <SentWith sent={run.sent} />}
 
       <div className={styles.stats}>
         <div className={styles.stat}>
@@ -348,5 +356,37 @@ export default function RunPage() {
         <div><dt>Result stored</dt><dd>{run.event_status ?? "nothing recorded"}</dd></div>
       </dl>
     </main>
+  );
+}
+
+/**
+ * The settings this run's request carried (M13 F8), so a change in results
+ * can be read against a change in settings. The query itself lives on the
+ * scout; the webhook secret was masked before it was stored.
+ */
+function SentWith({ sent }: { sent: Record<string, unknown> }) {
+  const schema = sent.output_schema as
+    | { properties?: { questions?: { items?: { properties?: Record<string, unknown> } } } }
+    | undefined;
+  const fields = Object.keys(schema?.properties?.questions?.items?.properties ?? {}).length;
+  const parts = [
+    typeof sent.output_interval === "number" ? every(sent.output_interval) : null,
+    typeof sent.start_timestamp === "number" ? `starting ${when(sent.start_timestamp)}` : null,
+    (sent.user_timezone as string | undefined) ?? "Yutori's default timezone",
+    (sent.user_location as string | undefined) ?? null,
+    sent.is_public === true ? "public" : sent.is_public === false ? "private" : null,
+    sent.skip_email === false ? "Yutori email on" : null,
+    fields ? `${fields} output field${fields === 1 ? "" : "s"}` : null,
+  ].filter(Boolean);
+
+  return (
+    <details className={styles.notice}>
+      <summary style={{ cursor: "pointer" }}>
+        <strong>Sent with:</strong> {parts.join(" · ")}
+      </summary>
+      <pre className={styles.query} style={{ marginTop: "10px" }}>
+        {JSON.stringify(sent, null, 2)}
+      </pre>
+    </details>
   );
 }

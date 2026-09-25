@@ -133,9 +133,18 @@ class YutoriClient:
     creates a Scout would mean paying twice.
     """
 
-    def __init__(self, api_key: str, *, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        timeout: float = 30.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         self._api_key = api_key
         self._timeout = timeout
+        # Tests pass an httpx.MockTransport to see the exact request bodies;
+        # in the app it is always None, which means a real network call.
+        self._transport = transport
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -153,7 +162,7 @@ class YutoriClient:
         """
         try:
             async with httpx.AsyncClient(
-                base_url=BASE_URL, timeout=self._timeout
+                base_url=BASE_URL, timeout=self._timeout, transport=self._transport
             ) as client:
                 response = await client.request(
                     method, path, json=payload, headers=self._headers
@@ -192,12 +201,19 @@ class YutoriClient:
         output_interval_seconds: int,
         skip_email: bool = True,
         is_public: bool = False,
+        output_schema: dict[str, Any] | None = None,
+        start_timestamp: int | None = None,
+        user_timezone: str | None = None,
+        user_location: str | None = None,
     ) -> dict[str, Any]:
         """Create the Scout. Note this starts it running immediately, which is
         a billable run — callers are responsible for meaning it.
 
         Observed: the run does not finish instantly. In the one run measured end
         to end, the Scout was created at 04:00 and the update arrived at 04:12.
+
+        Optional fields are only sent when given: Yutori reads an absent field
+        as "use your default" (Los Angeles, San Francisco, start now).
 
         Returns the new Scout, whose `id` is what every other method here needs.
         """
@@ -210,16 +226,23 @@ class YutoriClient:
             "output_interval": max(
                 output_interval_seconds, MIN_OUTPUT_INTERVAL_SECONDS
             ),
-            "output_schema": CANDIDATE_OUTPUT_SCHEMA,
+            "output_schema": output_schema or CANDIDATE_OUTPUT_SCHEMA,
             # We deliver via webhook; Yutori's own email would be a duplicate
             # of the digest this app sends.
             "skip_email": skip_email,
             # Yutori defaults this to true, which makes the Scout's reports
             # readable by anyone holding its UUID — confirmed against the live
             # API, where GET /updates returned data with no valid key at all.
-            # The query embeds the user's interests, so it stays private.
+            # The query embeds the user's interests, so it stays private
+            # unless the user deliberately chooses otherwise.
             "is_public": is_public,
         }
+        if start_timestamp is not None:
+            payload["start_timestamp"] = start_timestamp
+        if user_timezone:
+            payload["user_timezone"] = user_timezone
+        if user_location:
+            payload["user_location"] = user_location
         return await self._request("POST", SCOUTS_PATH, payload)
 
     async def update_scout(
@@ -229,18 +252,22 @@ class YutoriClient:
         query: str | None = None,
         webhook_url: str | None = None,
         output_interval_seconds: int | None = None,
-        is_public: bool | None = False,
+        is_public: bool | None = None,
+        user_timezone: str | None = None,
+        user_location: str | None = None,
+        skip_email: bool | None = None,
+        output_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """PATCH an existing Scout. Omitted fields are left unchanged, and this
         does not itself trigger a billable run (prd.md §25).
 
-        This is what keeps the Scout's query in step with the user's topics, and
-        it is free — which is why an ordinary profile save can call it but must
-        never call `create_scout`.
+        Everything a Scout was created with can be changed here except its
+        start time — Yutori's PATCH doesn't accept `start_timestamp`.
 
-        `is_public` defaults to False rather than None so that every sync also
-        re-asserts privacy — a Scout created before that was enforced gets
-        corrected the next time its query is pushed.
+        `is_public` defaults to None (leave alone). It used to default to False
+        so every push re-asserted privacy; now that visibility is a setting the
+        user chooses, a default here would silently undo that choice. Callers
+        that want the old behaviour pass False explicitly.
         """
         # Built key by key rather than sent wholesale: Yutori treats an absent
         # field as "leave alone", so sending None would be a different request
@@ -256,7 +283,38 @@ class YutoriClient:
             payload["output_interval"] = max(
                 output_interval_seconds, MIN_PATCH_INTERVAL_SECONDS
             )
+        if user_timezone is not None:
+            payload["user_timezone"] = user_timezone
+        if user_location is not None:
+            payload["user_location"] = user_location
+        if skip_email is not None:
+            payload["skip_email"] = skip_email
+        if output_schema is not None:
+            payload["output_schema"] = output_schema
         return await self._request("PATCH", f"{SCOUTS_PATH}/{scout_id}", payload)
+
+    async def update_email_settings(
+        self,
+        scout_id: str,
+        *,
+        skip_email: bool | None = None,
+        add: list[str] | None = None,
+        remove: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Who Yutori emails about this Scout. Free.
+
+        Separate from PATCH in Yutori's API: subscribers are managed by adding
+        and removing addresses (at most 200 per request), not by replacing the
+        list.
+        """
+        payload: dict[str, Any] = {}
+        if skip_email is not None:
+            payload["skip_email"] = skip_email
+        if add:
+            payload["subscribers_to_add"] = add
+        if remove:
+            payload["subscribers_to_remove"] = remove
+        return await self._request("PUT", f"{SCOUTS_PATH}/{scout_id}/email-settings", payload)
 
     async def get_scout(self, scout_id: str) -> dict[str, Any]:
         """One Scout's current state.
@@ -366,6 +424,8 @@ class YutoriClient:
         webhook_url: str | None = None,
         skip_email: bool = True,
         user_timezone: str | None = None,
+        user_location: str | None = None,
+        output_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Launch a one-time research task. **Billable** — $0.35, same as a
         scout-run.
@@ -378,7 +438,7 @@ class YutoriClient:
         """
         payload: dict[str, Any] = {
             "query": query,
-            "output_schema": CANDIDATE_OUTPUT_SCHEMA,
+            "output_schema": output_schema or CANDIDATE_OUTPUT_SCHEMA,
             "skip_email": skip_email,
         }
         if webhook_url:
@@ -388,6 +448,8 @@ class YutoriClient:
             # Yutori defaults to America/Los_Angeles, and the query asks for
             # "recent" questions — which it resolves in its own timezone.
             payload["user_timezone"] = user_timezone
+        if user_location:
+            payload["user_location"] = user_location
         return await self._request("POST", RESEARCH_PATH, payload)
 
     async def get_research_task(self, task_id: str) -> dict[str, Any]:

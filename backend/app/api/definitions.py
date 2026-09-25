@@ -3,16 +3,24 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_yutori_key
 from app.core.config import settings
 from app.core.db import get_db
+from app.integrations.yutori import CANDIDATE_OUTPUT_SCHEMA
 from app.repositories import credential_repository
 from app.schemas.profile import ProfileData
-from app.services import definition_service
+from app.schemas.yutori_settings import (
+    MAX_SCHEMA_CHARS,
+    MAX_SUBSCRIBERS,
+    MIN_INTERVAL_SECONDS,
+    YutoriSettings,
+    plain_errors,
+)
+from app.services import definition_service, task_settings
 from app.services.profile_service import get_or_create_profile
 
 router = APIRouter(tags=["scout-definitions"])
@@ -192,6 +200,78 @@ async def patch_definition(
         definition,
         rendered=definition_service.render_query(definition, await _profile_data(db)),
     )
+
+
+def _parse_settings(body: dict[str, Any]) -> YutoriSettings:
+    """Validate settings, answering 422 in sentences rather than error objects."""
+    try:
+        return YutoriSettings.model_validate(body)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=plain_errors(exc)
+        ) from None
+
+
+async def _settings_out(
+    db: AsyncSession, definition: Any, *, overrides: dict[str, Any] | None = None
+) -> dict:
+    view = await definition_service.settings_view(
+        db, definition, await _profile_data(db), overrides=overrides
+    )
+    return {
+        **view,
+        "run_cost_usd": settings.yutori_run_cost_usd,
+        "default_output_schema": CANDIDATE_OUTPUT_SCHEMA,
+        # What Yutori assumes when no timezone is sent, so the form can say so.
+        "yutori_default_timezone": task_settings.YUTORI_DEFAULT_TIMEZONE,
+        "limits": {
+            "min_interval_seconds": MIN_INTERVAL_SECONDS,
+            "max_subscribers": MAX_SUBSCRIBERS,
+            "max_schema_chars": MAX_SCHEMA_CHARS,
+        },
+    }
+
+
+@router.get("/scout-definitions/{definition_id}/settings")
+async def get_settings(definition_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """What this scout sends to Yutori: defaults, its overrides, and a preview.
+
+    Free — nothing here calls Yutori.
+    """
+    return await _settings_out(db, await _require(db, definition_id))
+
+
+@router.put("/scout-definitions/{definition_id}/settings")
+async def put_settings(
+    definition_id: uuid.UUID,
+    body: dict[str, Any] = Body(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Save this scout's overrides. Takes effect on its next run. Free."""
+    definition = await _require(db, definition_id)
+    parsed = _parse_settings(body)
+    definition = await definition_service.set_yutori_overrides(db, definition, parsed.overrides())
+    return await _settings_out(db, definition)
+
+
+@router.delete("/scout-definitions/{definition_id}/settings")
+async def reset_settings(definition_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Drop every override, so the scout follows the defaults again."""
+    definition = await _require(db, definition_id)
+    definition = await definition_service.set_yutori_overrides(db, definition, None)
+    return await _settings_out(db, definition)
+
+
+@router.post("/scout-definitions/{definition_id}/settings/preview")
+async def preview_settings(
+    definition_id: uuid.UUID,
+    body: dict[str, Any] = Body(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """What unsaved settings would send, and cost. Free, and stores nothing."""
+    definition = await _require(db, definition_id)
+    parsed = _parse_settings(body)
+    return await _settings_out(db, definition, overrides=parsed.overrides())
 
 
 @router.post(

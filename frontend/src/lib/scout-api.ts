@@ -107,6 +107,11 @@ export type RunDetail = {
   delivered_by: string | null;
   account_label: string | null;
   error: string | null;
+  /** "manual" (someone pressed Run) or "schedule" (a monitor ran on its own). */
+  trigger?: "manual" | "schedule" | null;
+  /** The request's settings, webhook secret masked. Runs before M13 have none. */
+  sent?: Record<string, unknown> | null;
+  warnings?: string[];
   returned: number;
   unique_questions: number;
   unparseable: number;
@@ -185,6 +190,37 @@ export type EffectivenessRow = {
   spend_usd: number;
   questions: number;
   per_dollar: number | null;
+};
+
+/** What a scout may change about its Yutori request. Unset = inherit. */
+export type YutoriSettings = {
+  output_interval_seconds?: number;
+  start?: "now" | "at";
+  /** Wall-clock time in the scout's timezone, e.g. "2026-09-25T09:00". */
+  start_at?: string | null;
+  user_timezone?: string | null;
+  user_location?: string | null;
+  is_public?: boolean;
+  email_from_yutori?: boolean;
+  subscribers?: string[];
+  output_schema?: Record<string, unknown>;
+};
+
+export type EffectiveSettings = Required<{
+  [K in keyof YutoriSettings]: NonNullable<YutoriSettings[K]> | null;
+}>;
+
+export type SettingsView = {
+  defaults: EffectiveSettings;
+  overrides: YutoriSettings;
+  effective: EffectiveSettings;
+  /** The exact request bodies, webhook secret masked. */
+  preview: { research: Record<string, unknown>; scout: Record<string, unknown> };
+  cost: { per_run: number; monthly: number };
+  run_cost_usd: number;
+  default_output_schema: Record<string, unknown>;
+  yutori_default_timezone: string;
+  limits: { min_interval_seconds: number; max_subscribers: number; max_schema_chars: number };
 };
 
 /** A monitor this app believes is still running at Yutori. */
@@ -274,6 +310,29 @@ export const scoutApi = {
   patchDefinition: (id: string, body: Partial<Definition>) =>
     json<Definition>(`/api/scout-definitions/${id}`, {
       method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  /** Defaults, this scout's overrides, and the exact request each would send. */
+  getSettings: (id: string) => json<SettingsView>(`/api/scout-definitions/${id}/settings`),
+
+  /** Saves overrides. Free; takes effect on the next run. */
+  putSettings: (id: string, body: YutoriSettings) =>
+    json<SettingsView>(`/api/scout-definitions/${id}/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  /** Drops every override, back to the defaults. */
+  resetSettings: (id: string) =>
+    json<SettingsView>(`/api/scout-definitions/${id}/settings`, { method: "DELETE" }),
+
+  /** What unsaved settings would send. Free, stores nothing. */
+  previewSettings: (id: string, body: YutoriSettings) =>
+    json<SettingsView>(`/api/scout-definitions/${id}/settings/preview`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),

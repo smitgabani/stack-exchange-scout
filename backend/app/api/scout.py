@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -16,6 +15,7 @@ from app.models.webhook_event import WebhookEvent
 from app.schemas.profile import ProfileData
 from app.services import ingest_service, query_generator, scout_service
 from app.services.profile_service import get_or_create_profile
+from app.services.task_settings import mask_webhook_url
 
 router = APIRouter(tags=["scout"])
 
@@ -61,21 +61,6 @@ class SyncResponse(BaseModel):
     action: str
     scout_id: str | None = None
     error: str | None = None
-
-
-def mask_webhook_url(url: str | None) -> str | None:
-    """Strip the query string from a webhook URL before it leaves the backend.
-
-    Yutori echoes back the `webhook_url` we registered, and ours carries
-    YUTORI_WEBHOOK_SECRET as a query parameter — that secret is the only thing
-    authenticating inbound candidate data, so it must never reach the browser.
-    """
-    if not url:
-        return None
-    parts = urlsplit(url)
-    if not parts.scheme:
-        return "(configured)"
-    return f"{parts.scheme}://{parts.netloc}{parts.path}"
 
 
 def _status_from(scout: Any, *, mismatch: bool = False) -> ScoutStatus:
