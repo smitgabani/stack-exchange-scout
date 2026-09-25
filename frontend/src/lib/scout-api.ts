@@ -256,6 +256,31 @@ export class ApiError extends Error {
   }
 }
 
+/** A live monitor as Yutori reports it, and where it differs from its scout. */
+export type MonitorRemote = {
+  monitor: Monitor;
+  remote: {
+    status: string | null;
+    query: string | null;
+    output_interval: number | null;
+    user_timezone: string | null;
+    is_public: boolean | null;
+    next_run: string | number | null;
+    update_count: number | null;
+    last_update: string | number | null;
+    rejection_reason: string | null;
+    paused_at: string | null;
+    created_at: string | null;
+    view_url: string | null;
+    has_output_schema: boolean;
+  };
+  diff: { field: string; label: string; live: unknown; saved: unknown }[];
+  /** The scout now asks for a different future start — only a replace can do that. */
+  start_changed: boolean;
+  /** Settings Yutori doesn't report back, so they can't be compared. */
+  not_compared: string[];
+};
+
 /** The 409 a Scout-mode run gets when its scout already has a live monitor. */
 export type LiveMonitorConflict = {
   code: "live_monitor";
@@ -364,6 +389,20 @@ export const scoutApi = {
       monitors: Monitor[];
       run_cost_usd: number;
     }>("/api/scout-monitors"),
+
+  /** The monitor as Yutori has it, compared with its scout. Free (a read). */
+  monitorRemote: (instanceId: string) =>
+    json<MonitorRemote>(`/api/scout-instances/${instanceId}/remote`),
+
+  /** Sends the scout's saved settings to its live monitor. Free — no run starts. */
+  applyToMonitor: (instanceId: string) =>
+    json<{ applied: boolean; warnings: string[] }>(`/api/scout-instances/${instanceId}/apply`, {
+      method: "POST",
+    }),
+
+  /** Brings a stopped monitor back on its schedule. Doesn't run it now. */
+  restartMonitor: (instanceId: string) =>
+    json<{ restarted: boolean }>(`/api/scout-instances/${instanceId}/restart`, { method: "POST" }),
 
   /** Stops every monitor that isn't its scout's newest. Free. */
   stopSuperseded: () =>

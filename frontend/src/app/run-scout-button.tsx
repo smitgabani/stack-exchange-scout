@@ -70,6 +70,17 @@ export function RunScoutButton({
     onError: (error) => setConflict(liveMonitorConflict(error)),
   });
 
+  // The free alternative to replacing: push the scout's saved settings to
+  // the monitor that's already running.
+  const apply = useMutation({
+    mutationFn: (instanceId: string) => scoutApi.applyToMonitor(instanceId),
+    onSuccess: async () => {
+      setConflict(null);
+      run.reset();
+      await queryClient.invalidateQueries({ queryKey: ["monitors"] });
+    },
+  });
+
   return (
     <>
       <button
@@ -133,9 +144,16 @@ export function RunScoutButton({
           run.mutate({ mode: allowModeChoice ? mode : "research" });
         }}
       />
+      {apply.isError && <span className={styles.error}>{(apply.error as Error).message}</span>}
+      {apply.isSuccess && (
+        <span className={styles.error} style={{ color: "var(--success)" }}>
+          Settings applied to the live monitor — free, no new run.
+        </span>
+      )}
       <LiveMonitorDialog
         conflict={conflict}
-        busy={run.isPending}
+        busy={run.isPending || apply.isPending}
+        onApply={() => conflict && apply.mutate(conflict.monitor.id)}
         onKeep={() => {
           setConflict(null);
           run.reset();

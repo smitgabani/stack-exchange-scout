@@ -485,3 +485,159 @@ async def test_monthly_cost_follows_the_interval(db_session, definition):
 
     assert row["output_interval"] == 86400
     assert row["monthly_cost_usd"] == round(30 * settings.yutori_run_cost_usd, 2)
+
+
+# ---------------------------------------------------------------------------
+# Editing a live monitor (M13 F6/F7)
+# ---------------------------------------------------------------------------
+
+
+class LiveClient(FakeClient):
+    """Reports a monitor with the app's old settings, and records edits."""
+
+    def __init__(self, remote: dict | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self.remote = remote or {}
+
+    async def get_scout(self, scout_id):
+        self.calls.append(("get_scout", scout_id))
+        return {"id": scout_id, "status": "active", **self.remote}
+
+    async def update_scout(self, scout_id, **kwargs):
+        self.calls.append(("update_scout", {"scout_id": scout_id, **kwargs}))
+        return {}
+
+    async def update_email_settings(self, scout_id, **kwargs):
+        self.calls.append(("update_email_settings", {"scout_id": scout_id, **kwargs}))
+        return {}
+
+    async def restart(self, scout_id):
+        self.calls.append(("restart", scout_id))
+        return {}
+
+
+@pytest.mark.anyio
+async def test_the_diff_lists_what_the_live_monitor_has_wrong(
+    db_session, definition, profile_data, monkeypatch
+):
+    await definition_service.set_yutori_overrides(
+        db_session,
+        definition,
+        {"output_interval_seconds": 86400, "user_timezone": "America/Toronto"},
+    )
+    live = await _instance(db_session, definition)
+    client = LiveClient(
+        {"output_interval": 2592000, "user_timezone": "America/Los_Angeles", "is_public": False}
+    )
+    _patch(monkeypatch, client)
+
+    result = await definition_service.monitor_remote(db_session, live.id, profile_data)
+
+    fields = {d["field"]: d for d in result["diff"]}
+    assert fields["output_interval"]["live"] == 2592000
+    assert fields["output_interval"]["saved"] == 86400
+    assert fields["user_timezone"]["saved"] == "America/Toronto"
+    assert "is_public" not in fields
+    assert result["start_changed"] is False
+
+
+@pytest.mark.anyio
+async def test_a_future_start_time_is_flagged_as_needing_a_replace(
+    db_session, definition, profile_data, monkeypatch
+):
+    await definition_service.set_yutori_overrides(
+        db_session, definition, {"start": "at", "start_at": "2099-01-01T09:00"}
+    )
+    live = await _instance(db_session, definition)
+    _patch(monkeypatch, LiveClient())
+
+    result = await definition_service.monitor_remote(db_session, live.id, profile_data)
+
+    assert result["start_changed"] is True
+
+
+@pytest.mark.anyio
+async def test_apply_patches_everything_but_the_start_and_syncs_subscribers(
+    db_session, definition, profile_data, monkeypatch
+):
+    await definition_service.set_yutori_overrides(
+        db_session,
+        definition,
+        {
+            "output_interval_seconds": 86400,
+            "is_public": False,
+            "start": "at",
+            "start_at": "2099-01-01T09:00",
+            "subscribers": ["new@example.com"],
+        },
+    )
+    live = await _instance(db_session, definition, detail={"subscribers": ["old@example.com"]})
+    client = LiveClient()
+    _patch(monkeypatch, client)
+
+    result = await definition_service.apply_to_monitor(db_session, live.id, profile_data)
+
+    assert result["applied"] is True
+    patch = next(c[1] for c in client.calls if c[0] == "update_scout")
+    assert patch["output_interval_seconds"] == 86400
+    assert patch["is_public"] is False
+    assert "start_timestamp" not in patch
+    email = next(c[1] for c in client.calls if c[0] == "update_email_settings")
+    assert email["add"] == ["new@example.com"]
+    assert email["remove"] == ["old@example.com"]
+    await db_session.refresh(live)
+    assert live.detail["subscribers"] == ["new@example.com"]
+
+
+@pytest.mark.anyio
+async def test_another_accounts_monitor_cannot_be_edited(
+    db_session, definition, profile_data, monkeypatch
+):
+    live = await _instance(db_session, definition, fingerprint="someone-else")
+    client = LiveClient()
+    _patch(monkeypatch, client)
+
+    async def mine(db, key_name):
+        return SimpleNamespace(account_fingerprint="mine", label="Mine", key_name=key_name)
+
+    monkeypatch.setattr(credential_repository, "get", mine)
+
+    result = await definition_service.apply_to_monitor(db_session, live.id, profile_data)
+
+    assert result["applied"] is False
+    assert "different API key" in result["error"]
+    assert client.calls == []
+
+
+@pytest.mark.anyio
+async def test_restart_is_refused_while_the_scout_has_another_live_monitor(
+    db_session, definition, monkeypatch
+):
+    stopped = await _instance(db_session, definition)
+    stopped.state = "done"
+    await db_session.commit()
+    await _instance(db_session, definition)
+    client = LiveClient()
+    _patch(monkeypatch, client)
+
+    result = await definition_service.restart_monitor(db_session, stopped.id)
+
+    assert result["restarted"] is False
+    assert "already has a live monitor" in result["error"]
+    assert client.calls == []
+
+
+@pytest.mark.anyio
+async def test_restart_brings_a_stopped_monitor_back(db_session, definition, monkeypatch):
+    stopped = await _instance(db_session, definition)
+    stopped.state = "done"
+    await db_session.commit()
+    client = LiveClient()
+    _patch(monkeypatch, client)
+
+    result = await definition_service.restart_monitor(db_session, stopped.id)
+
+    assert result["restarted"] is True
+    assert client.calls == [("restart", stopped.external_id)]
+    await db_session.refresh(stopped)
+    assert stopped.state == "active"

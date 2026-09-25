@@ -397,6 +397,33 @@ async def stop_remote(external_id: str, db: AsyncSession = Depends(get_db)) -> d
     return result
 
 
+@router.get("/scout-instances/{instance_id}/remote")
+async def monitor_remote(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """A live monitor as Yutori reports it, and where it differs from its scout. Free."""
+    result = await definition_service.monitor_remote(db, instance_id, await _profile_data(db))
+    if result.get("error"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["error"])
+    return result
+
+
+@router.post("/scout-instances/{instance_id}/apply", dependencies=[Depends(require_yutori_key)])
+async def apply_to_monitor(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Send the scout's saved settings to its live monitor. Free — no run starts."""
+    result = await definition_service.apply_to_monitor(db, instance_id, await _profile_data(db))
+    if not result.get("applied"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["error"])
+    return result
+
+
+@router.post("/scout-instances/{instance_id}/restart", dependencies=[Depends(require_yutori_key)])
+async def restart_monitor(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
+    """Bring a stopped monitor back on its schedule. Doesn't run it now."""
+    result = await definition_service.restart_monitor(db, instance_id)
+    if not result.get("restarted"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["error"])
+    return result
+
+
 @router.get("/scout-instances")
 async def list_instances(db: AsyncSession = Depends(get_db)) -> dict:
     """Remote objects this app knows about — Scouts and research tasks."""

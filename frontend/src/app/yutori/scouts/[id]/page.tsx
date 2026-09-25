@@ -7,6 +7,7 @@ import { useState } from "react";
 import { ConfirmDialog } from "../../../confirm-dialog";
 import { InfoButton } from "../../../info-button";
 import { LiveMonitorDialog } from "../../../live-monitor-dialog";
+import { LiveMonitorBanner } from "../../live-monitor";
 import { ParametersForm } from "../../parameters-form";
 import {
   type Definition,
@@ -78,6 +79,18 @@ export default function DefinitionPage() {
       if (detail) setConflict(detail);
       else setMessage(e.message);
     },
+  });
+
+  const applyToLive = useMutation({
+    mutationFn: (instanceId: string) => scoutApi.applyToMonitor(instanceId),
+    onSuccess: async (result) => {
+      setConflict(null);
+      setMessage(
+        ["Applied the saved settings to the live monitor — free, no new run.", ...result.warnings].join(" "),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["monitor-remote"] });
+    },
+    onError: (e: Error) => setMessage(e.message),
   });
 
   const remove = useMutation({
@@ -389,7 +402,8 @@ export default function DefinitionPage() {
       <LiveMonitorDialog
         conflict={conflict}
         scoutName={data.name}
-        busy={run.isPending}
+        busy={run.isPending || applyToLive.isPending}
+        onApply={() => conflict && applyToLive.mutate(conflict.monitor.id)}
         onKeep={() => setConflict(null)}
         onReplace={() => run.mutate(true)}
       />
@@ -440,6 +454,8 @@ function ScoutParameters({
   const after = async (text: string) => {
     setMessage(text);
     await queryClient.invalidateQueries({ queryKey: ["definition-settings", definitionId] });
+    // The live monitor's comparison is against these settings.
+    await queryClient.invalidateQueries({ queryKey: ["monitor-remote"] });
     await onSaved();
   };
   const save = useMutation({
@@ -459,6 +475,7 @@ function ScoutParameters({
   return (
     <>
       {message && <div className={styles.notice}>{message}</div>}
+      {mode === "scout" && <LiveMonitorBanner definitionId={definitionId} />}
       <ParametersForm
         variant="scout"
         mode={mode}

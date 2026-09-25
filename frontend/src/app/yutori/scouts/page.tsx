@@ -135,6 +135,18 @@ export default function ScoutsPage() {
     },
   });
 
+  const applyToLive = useMutation({
+    mutationFn: (instanceId: string) => scoutApi.applyToMonitor(instanceId),
+    onSuccess: async (result) => {
+      setConflict(null);
+      setMessage(
+        ["Applied the saved settings to the live monitor — free, no new run.", ...result.warnings].join(" "),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["monitors"] });
+    },
+    onError: (e: Error) => setMessage(e.message),
+  });
+
   const definitions = data?.definitions ?? [];
   const cost = data?.run_cost_usd ?? 0.35;
   const monitorInterval = data?.monitor_interval_seconds ?? 30 * 86400;
@@ -490,7 +502,8 @@ export default function ScoutsPage() {
       <LiveMonitorDialog
         conflict={conflict?.detail ?? null}
         scoutName={conflict?.target.name}
-        busy={run.isPending}
+        busy={run.isPending || applyToLive.isPending}
+        onApply={() => conflict && applyToLive.mutate(conflict.detail.monitor.id)}
         onKeep={() => setConflict(null)}
         onReplace={() => {
           if (conflict) run.mutate({ target: conflict.target, mode: "scout", replace: true });

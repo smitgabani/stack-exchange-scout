@@ -17,7 +17,12 @@ from sqlalchemy import and_, exists, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.integrations.yutori import YutoriError, YutoriForbidden, YutoriNotFound
+from app.integrations.yutori import (
+    MIN_PATCH_INTERVAL_SECONDS,
+    YutoriError,
+    YutoriForbidden,
+    YutoriNotFound,
+)
 from app.models.challenge import Challenge
 from app.models.question import Question
 from app.models.scout_definition import ScoutDefinition, ScoutInstance, ScoutRun
@@ -667,6 +672,226 @@ async def _live_monitors(db: AsyncSession) -> list[ScoutInstance]:
             .order_by(ScoutInstance.created_at.desc())
         )
     )
+
+
+async def _owned_monitor(
+    db: AsyncSession, instance_id: uuid.UUID
+) -> tuple[ScoutInstance | None, Any, str | None]:
+    """A tracked monitor the active key may act on, its client, or why not."""
+    instance = await db.get(ScoutInstance, instance_id)
+    if instance is None or instance.kind != "scout":
+        return None, None, "No such monitor"
+    client = await scout_service.get_client(db)
+    if client is None:
+        return None, None, "No usable Yutori API key"
+    active = await credential_repository.get(db, "yutori_api_key")
+    active_print = active.account_fingerprint if active else None
+    if instance.account_fingerprint and active_print and instance.account_fingerprint != active_print:
+        return None, None, (
+            "This monitor belongs to a different API key, so Yutori won't let this one change "
+            "it. Switch to that key on the Accounts page first."
+        )
+    return instance, client, None
+
+
+async def _monitor_target(
+    db: AsyncSession, instance: ScoutInstance, profile_data: ProfileData
+) -> tuple[dict[str, Any], str]:
+    """The settings and query the monitor *should* have: what its scout would send now."""
+    definition = (
+        await db.get(ScoutDefinition, instance.definition_id) if instance.definition_id else None
+    )
+    if definition is None:
+        return await yutori_defaults(db), ""
+    eff = await effective_settings(db, definition)
+    query = render_query(definition, profile_data, await active_template(db))
+    return eff, query
+
+
+def _live_diff(remote: dict[str, Any], eff: dict[str, Any], query: str) -> list[dict[str, Any]]:
+    """Where the monitor at Yutori differs from its scout's saved settings.
+
+    Only fields Yutori reports back can be compared; location, email and
+    subscribers aren't in its detail response, so Apply sends them regardless.
+    """
+    wanted_tz = eff.get("user_timezone") or task_settings.YUTORI_DEFAULT_TIMEZONE
+    checks = [
+        ("output_interval", "How often", remote.get("output_interval"),
+         eff.get("output_interval_seconds")),
+        ("user_timezone", "Timezone", remote.get("user_timezone"), wanted_tz),
+        ("is_public", "Visibility", remote.get("is_public"), bool(eff.get("is_public"))),
+        ("output_schema", "Output format", remote.get("output_schema"), eff.get("output_schema")),
+    ]
+    if query:
+        checks.append(("query", "Query", remote.get("query"), query))
+    diff = []
+    for field, label, live, saved in checks:
+        if isinstance(live, str) and isinstance(saved, str):
+            live, saved = live.strip(), saved.strip()
+        if live is None or live == saved:
+            continue
+        diff.append({"field": field, "label": label, "live": live, "saved": saved})
+    return diff
+
+
+async def monitor_remote(
+    db: AsyncSession, instance_id: uuid.UUID, profile_data: ProfileData
+) -> dict[str, Any]:
+    """A live monitor as Yutori reports it, and how it differs from its scout.
+
+    Free: a read. Also refreshes our record of its state and schedule.
+    """
+    instance, client, error = await _owned_monitor(db, instance_id)
+    if error:
+        return {"error": error}
+    try:
+        remote = await client.get_scout(instance.external_id)
+    except YutoriNotFound:
+        instance.state = "done"
+        await db.commit()
+        return {"error": "This monitor no longer exists at Yutori.", "gone": True}
+    except YutoriError as exc:
+        return {"error": str(exc)[:300]}
+
+    instance.state = remote.get("status") or instance.state
+    instance.detail = {
+        **(instance.detail or {}),
+        **({"output_interval": int(remote["output_interval"])} if remote.get("output_interval") else {}),
+        "next_run": remote.get("next_run_timestamp"),
+    }
+    await db.commit()
+
+    eff, query = await _monitor_target(db, instance, profile_data)
+
+    # Start time can't be patched. Flag it when the scout now asks for a
+    # future start different from the one this monitor was created with.
+    creating_run = await db.scalar(
+        select(ScoutRun)
+        .where(ScoutRun.instance_id == instance.id)
+        .order_by(ScoutRun.started_at.asc())
+    )
+    sent_start = ((creating_run.detail or {}).get("sent") or {}).get("start_timestamp") if creating_run else None
+    wanted_start = task_settings.start_timestamp(eff)
+    start_changed = bool(
+        wanted_start
+        and wanted_start != sent_start
+        and wanted_start > int(datetime.now(UTC).timestamp())
+    )
+
+    return {
+        "error": None,
+        "monitor": monitor_view(instance),
+        "remote": {
+            "status": remote.get("status"),
+            "query": remote.get("query"),
+            "output_interval": remote.get("output_interval"),
+            "user_timezone": remote.get("user_timezone"),
+            "is_public": remote.get("is_public"),
+            "next_run": remote.get("next_run_timestamp"),
+            "update_count": remote.get("update_count"),
+            "last_update": remote.get("last_update_timestamp"),
+            "rejection_reason": remote.get("rejection_reason"),
+            "paused_at": remote.get("paused_at"),
+            "created_at": remote.get("created_at"),
+            "view_url": (instance.detail or {}).get("view_url"),
+            "has_output_schema": remote.get("output_schema") is not None,
+        },
+        "diff": _live_diff(remote, eff, query),
+        "start_changed": start_changed,
+        "not_compared": ["Location", "Yutori email", "Subscribers"],
+    }
+
+
+async def apply_to_monitor(
+    db: AsyncSession, instance_id: uuid.UUID, profile_data: ProfileData
+) -> dict[str, Any]:
+    """Bring a live monitor in line with its scout's saved settings. Free.
+
+    A PATCH never starts a run; the monitor picks the changes up at its next
+    interval. Everything is sent except the start time, which Yutori can't
+    change on an existing monitor — that needs a replace.
+    """
+    instance, client, error = await _owned_monitor(db, instance_id)
+    if error:
+        return {"applied": False, "error": error}
+
+    eff, query = await _monitor_target(db, instance, profile_data)
+    warnings: list[str] = []
+    interval = int(eff.get("output_interval_seconds") or settings.scout_run_interval_seconds)
+    if interval < MIN_PATCH_INTERVAL_SECONDS:
+        warnings.append(
+            "Yutori only accepts an interval of an hour or more when changing a live monitor, so "
+            "it was set to 1 hour. Replace the monitor to run every 30 minutes."
+        )
+    try:
+        await client.update_scout(
+            instance.external_id,
+            query=query or None,
+            output_interval_seconds=interval,
+            is_public=bool(eff.get("is_public")),
+            user_timezone=eff.get("user_timezone") or None,
+            user_location=eff.get("user_location") or None,
+            skip_email=not eff.get("email_from_yutori"),
+            output_schema=eff.get("output_schema"),
+        )
+    except YutoriNotFound:
+        instance.state = "done"
+        await db.commit()
+        return {"applied": False, "error": "This monitor no longer exists at Yutori."}
+    except YutoriError as exc:
+        return {"applied": False, "error": str(exc)[:300]}
+
+    # Subscribers are added and removed, not replaced, so remember what was
+    # last applied to know what to take away.
+    wanted = list(eff.get("subscribers") or [])
+    previous = list((instance.detail or {}).get("subscribers") or [])
+    add = [e for e in wanted if e not in previous]
+    remove = [e for e in previous if e not in wanted]
+    if add or remove:
+        try:
+            await client.update_email_settings(instance.external_id, add=add, remove=remove)
+        except YutoriError as exc:
+            warnings.append(f"Subscribers weren't updated: {str(exc)[:200]}")
+            wanted = previous
+
+    applied_interval = max(interval, MIN_PATCH_INTERVAL_SECONDS)
+    instance.detail = {
+        **(instance.detail or {}),
+        "output_interval": applied_interval,
+        "subscribers": wanted,
+        "applied_at": datetime.now(UTC).isoformat(),
+    }
+    await db.commit()
+    return {"applied": True, "error": None, "warnings": warnings}
+
+
+async def restart_monitor(db: AsyncSession, instance_id: uuid.UUID) -> dict[str, Any]:
+    """Bring a stopped monitor back. It resumes its schedule; it doesn't run now.
+
+    Refused when its scout already has another live monitor — two would bill
+    for the same thing, which is the pile-up this whole milestone prevents.
+    """
+    instance, client, error = await _owned_monitor(db, instance_id)
+    if error:
+        return {"restarted": False, "error": error}
+    if instance.definition_id:
+        other = await live_monitor(db, instance.definition_id)
+        if other is not None and other.id != instance.id:
+            return {
+                "restarted": False,
+                "error": "This scout already has a live monitor. Stop that one first — two would "
+                "both bill for the same search.",
+            }
+    try:
+        await client.restart(instance.external_id)
+    except YutoriNotFound:
+        return {"restarted": False, "error": "This monitor no longer exists at Yutori."}
+    except YutoriError as exc:
+        return {"restarted": False, "error": str(exc)[:300]}
+    instance.state = "active"
+    instance.detail = {**(instance.detail or {}), "restarted_at": datetime.now(UTC).isoformat()}
+    await db.commit()
+    return {"restarted": True, "error": None}
 
 
 async def monitors_summary(db: AsyncSession) -> dict[str, Any]:

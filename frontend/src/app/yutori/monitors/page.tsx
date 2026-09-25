@@ -13,6 +13,7 @@ import {
 } from "@/lib/scout-api";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
+import { MonitorDetails } from "../live-monitor";
 import ws from "../../workspace.module.css";
 import styles from "../scout.module.css";
 
@@ -39,6 +40,7 @@ export default function ScoutPage() {
   const [stopTarget, setStopTarget] = useState<{ externalId: string; label: string } | null>(null);
   const [confirmStopOlder, setConfirmStopOlder] = useState(false);
   const [stopMessage, setStopMessage] = useState<string | null>(null);
+  const [restartTarget, setRestartTarget] = useState<Instance | null>(null);
   const queryClient = useQueryClient();
 
   const { data: instances } = useQuery({
@@ -68,6 +70,17 @@ export default function ScoutPage() {
     mutationFn: (externalId: string) => scoutApi.stopRemote(externalId),
     onSuccess: async (_, externalId) => {
       setStopMessage(`Stopped ${externalId}. It won't run or bill again.`);
+      await refreshMonitors();
+    },
+    onError: (e: Error) => setStopMessage(e.message),
+  });
+
+  // Brings a stopped monitor back on its schedule. It doesn't run now, and it
+  // bills again every interval — so it asks first.
+  const restart = useMutation({
+    mutationFn: (id: string) => scoutApi.restartMonitor(id),
+    onSuccess: async () => {
+      setStopMessage("Restarted. It runs again at its next interval — not now.");
       await refreshMonitors();
     },
     onError: (e: Error) => setStopMessage(e.message),
@@ -246,6 +259,16 @@ export default function ScoutPage() {
                                   </>
                                 ) : (
                                   <>
+                                    {instance.kind === "scout" && instance.state === "done" && (
+                                      <button
+                                        type="button"
+                                        className={styles.textButton}
+                                        onClick={() => setRestartTarget(instance)}
+                                        disabled={restart.isPending}
+                                      >
+                                        Restart
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       className={styles.textButton}
@@ -325,6 +348,25 @@ export default function ScoutPage() {
         onConfirm={() => {
           if (forgetTarget) forgetInstance.mutate(forgetTarget.id);
           setForgetTarget(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={restartTarget !== null}
+        title="Restart this monitor?"
+        body={
+          <p>
+            Brings it back on its schedule: it runs again at its next interval and bills each time
+            until you stop it. Yutori doesn&apos;t run it now — to search right away, start a monitor
+            from the scout instead.
+          </p>
+        }
+        confirmLabel="Restart"
+        busy={restart.isPending}
+        onCancel={() => setRestartTarget(null)}
+        onConfirm={() => {
+          if (restartTarget) restart.mutate(restartTarget.id);
+          setRestartTarget(null);
         }}
       />
 
@@ -548,6 +590,7 @@ function LiveMonitors({
   onStop: (monitor: Monitor) => void;
   onStopOlder: () => void;
 }) {
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <section className={styles.section}>
       <div className={styles.sectionHead}>
@@ -578,7 +621,7 @@ function LiveMonitors({
               </tr>
             </thead>
             <tbody>
-              {data.monitors.map((monitor) => (
+              {data.monitors.map((monitor) => [
                 <tr key={monitor.id}>
                   <td>
                     {monitor.definition_id ? (
@@ -601,17 +644,34 @@ function LiveMonitors({
                   <td>{monitor.next_run ? fmt(monitor.next_run) : "—"}</td>
                   <td>{fmt(monitor.created_at)}</td>
                   <td>
-                    <button
-                      type="button"
-                      className={styles.textButton}
-                      disabled={busy}
-                      onClick={() => onStop(monitor)}
-                    >
-                      Stop
-                    </button>
+                    <span style={{ display: "inline-flex", gap: 10 }}>
+                      <button
+                        type="button"
+                        className={styles.textButton}
+                        onClick={() => setOpen(open === monitor.id ? null : monitor.id)}
+                        aria-expanded={open === monitor.id}
+                      >
+                        {open === monitor.id ? "Hide" : "Details"}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.textButton}
+                        disabled={busy}
+                        onClick={() => onStop(monitor)}
+                      >
+                        Stop
+                      </button>
+                    </span>
                   </td>
-                </tr>
-              ))}
+                </tr>,
+                open === monitor.id ? (
+                  <tr key={`${monitor.id}-details`}>
+                    <td colSpan={7}>
+                      <MonitorDetails instanceId={monitor.id} />
+                    </td>
+                  </tr>
+                ) : null,
+              ])}
             </tbody>
           </table>
         </div>

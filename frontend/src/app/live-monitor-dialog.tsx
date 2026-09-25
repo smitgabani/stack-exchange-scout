@@ -19,12 +19,15 @@ export function LiveMonitorDialog({
   busy = false,
   onReplace,
   onKeep,
+  onApply,
 }: {
   conflict: LiveMonitorConflict | null;
   scoutName?: string;
   busy?: boolean;
   onReplace: () => void;
   onKeep: () => void;
+  /** Send the scout's saved settings to the live monitor instead. Free. */
+  onApply?: () => void;
 }) {
   const monitor = conflict?.monitor;
   const cost = conflict?.run_cost_usd ?? 0.35;
@@ -50,6 +53,27 @@ export function LiveMonitorDialog({
             <p style={{ marginTop: "10px", fontSize: "13px", color: "var(--muted)" }}>
               <strong>Keep it</strong> leaves it running; its next result arrives on schedule.
             </p>
+            {onApply && (
+              <p style={{ marginTop: "10px", fontSize: "13px" }}>
+                Changed its settings?{" "}
+                <button
+                  type="button"
+                  onClick={onApply}
+                  disabled={busy}
+                  style={{
+                    border: "none",
+                    background: "none",
+                    padding: 0,
+                    color: "var(--link)",
+                    cursor: "pointer",
+                    font: "inherit",
+                  }}
+                >
+                  Apply them to this monitor instead — free
+                </button>
+                , no new run.
+              </p>
+            )}
           </>
         ) : null
       }
