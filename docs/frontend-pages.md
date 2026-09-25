@@ -15,9 +15,15 @@ open.
 The home screen. Shows whether the Scout is scheduled or idle, your
 current topics, the latest digest's challenges, and digest history.
 
+- **Monitor banner** — appears while any Scout monitor is running at Yutori:
+  how many, and about what they cost a month. It turns to the alert colour when
+  some are leftovers from earlier runs. Links to Monitors.
 - **Find new questions** (`RunScoutButton`) — asks Yutori to search Stack
-  Overflow using your current topics. **Costs ~$0.35 per run.** Does not
-  run on a schedule; this is the only way to start a run from here.
+  Overflow using your current topics. **Costs ~$0.35 per run.** A research
+  task runs once. "Scout monitor" reads **Start monitor**, is priced per month,
+  and keeps running on its own interval until stopped. If the scout already has
+  a live monitor you're offered **Replace it** (stops the old one first, then
+  $0.35), **Keep it**, or applying your saved settings to it instead (free).
 - **Generate digest** — builds a digest from your best-scored,
   not-yet-used candidates and turns them into challenges. Does not send
   anything.
@@ -145,16 +151,41 @@ here that spends money.
 - **Clone** (per row) — duplicates a definition (free).
 - **Run** (per row, opens a mode-choice dialog) — starts a run against
   Yutori. **Costs ~$0.35.** The dialog lets you pick "Research task"
-  (recommended — runs immediately, one-shot) vs. "Scout" (a long-lived
-  monitor; restarting one was measured *not* to reliably trigger a run, so
-  it can cost the same and produce nothing).
+  (recommended: runs once, leaves nothing behind) or "Scout" (a monitor that
+  runs now, then keeps running on its interval, priced per month). A scout
+  gets **one live monitor at most**. Running it again in Scout mode offers to
+  replace the monitor (the old one is stopped before the new one is created)
+  or to apply the saved settings to it for free.
+- **How it runs** (scout page, above the tabs) — Research task or Scout
+  monitor. Decides which Parameters form applies. Saved with the page's Save.
+- **Parameters tab** (scout page) — the settings this scout sends Yutori, as
+  overrides of the Defaults. The Scout form has Schedule (how often, start now
+  or at a time), Where you are (timezone, location), Visibility (public needs
+  confirmation), Email from Yutori plus subscribers, Output format (a field
+  checklist or raw JSON, which must keep `questions[].url`), and a locked
+  Delivery row (the webhook). The Research form leaves out schedule,
+  visibility and subscribers. Beside the form:
+  - **What gets sent to Yutori** — the exact request, recomputed as you edit.
+    The webhook secret is hidden. Free.
+  - **Cost** — per run, or per month for a monitor.
+  - **Save / Discard / Reset to defaults**. Each changed field has its own
+    **Reset**. Saving an interval under a day asks first. Saving is free and
+    takes effect on the next run.
+- **Live monitor banner** (Parameters tab, Scout mode) — compares the monitor
+  already running at Yutori with the saved settings.
+  - **Apply to live monitor** — free, no run starts.
+  - **Replace…** — when the start time changed, which Yutori can't patch; a
+    paid run.
 - **Delete scout** — deletes the definition. Its runs and any challenges
   already produced from it are kept.
 - **Archive / Unarchive** (status toggle) — hides a definition from the
   default list without deleting it.
 
 ### Runs (`/yutori/runs`, `/yutori/runs/[runId]`)
-Read-only history plus two reconciliation actions per run:
+Read-only history plus two reconciliation actions per run. A run a monitor did
+on its own schedule is recorded automatically and says "ran on its own
+schedule". **Sent with** shows the settings the request carried (runs from M13
+on).
 
 - **Sync** — asks Yutori for this run's current status and collects the
   result if it has finished. Free.
@@ -172,8 +203,22 @@ under Scouts and a run's own page under Runs. "Find new questions" on
 the dashboard was on the same legacy path and now runs through a scout
 definition too, the same way the Scouts page always has.)
 
+**Live monitors** — every monitor this app believes is running, with its
+interval, rough monthly cost and next run. Leftovers (live, but not their
+scout's newest) are marked.
+- **Details** — the monitor's settings as Yutori reports them: status,
+  interval, next run, update count, timezone, visibility, rejection reason, and
+  a link to view it on Yutori. Free.
+- **Stop** — marks it done at Yutori, so it stops running and billing. Free.
+  Yutori's API has no pause.
+- **Stop older monitors** — stops every leftover and keeps each scout's newest.
+  Free.
+
 **Remote objects** — every Scout/research task this app has created,
 grouped by the account that owns it.
+- **Restart** (stopped Scout, active-key rows) — brings it back on its
+  schedule. It doesn't run now, and it bills every interval again. Refused
+  while its scout has another live monitor.
 - **Delete at Yutori** (Scout, active-key rows only) — deletes the Scout
   at Yutori itself. The one action here that stops something from
   billing further.
@@ -189,7 +234,27 @@ active account (Yutori has no way to list another account's Scouts
 without switching keys to it).
 - **List scouts and research tasks** — fetches this account's live
   inventory. Free, and useful for finding a Scout that's running (and
-  billing) with no matching local record.
+  billing) with no matching local record. It also:
+  - shows each monitor's interval, monthly cost and scout
+  - gives each live one a **Stop** button
+  - pulls in any updates whose webhook never arrived
+  - compares Yutori's own 30-day run count with what the app recorded; a gap
+    means runs billed out of sight
+
+### Defaults (`/yutori/defaults`)
+What every scout starts from. Nothing here spends anything.
+
+- **Query template** — the wording a "From my topics" scout sends Yutori, with
+  placeholders `{topics}`, `{preferred_concepts}`, `{excluded_concepts}`,
+  `{difficulty_min}` and `{difficulty_max}`. It works like the curator prompt:
+  - **Save as new version** activates the new version.
+  - **Activate** rolls back to an older one.
+  - **Reset to built-in** returns to the shipped template.
+  - A free preview fills in your current topics.
+  - A template is refused if it has an unknown placeholder or leaves out
+    `{topics}`.
+- **Default settings** — the same form as a scout's Parameters tab. Every
+  scout inherits these for any field it doesn't override.
 
 ### Accounts (`/yutori/accounts`, `/yutori/accounts/[id]`)
 Manages Yutori API keys ("accounts") that pay for runs.

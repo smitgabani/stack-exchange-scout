@@ -1,7 +1,12 @@
 # Feature list
 
-Candidate features to review and pick from before they become milestone tickets in
-[featuresticketlist.md](featuresticketlist.md). Nothing here is built yet.
+Candidate features, reviewed and scheduled as milestone tickets in
+[featuresticketlist.md](featuresticketlist.md).
+
+**Status (2026-09-24):**
+- §1: F0–F9 are built as **M13** (branches `M13-A` to `M13-D`; see ADR 0006).
+- F10 (presets) is deferred.
+- §2 hasn't been scoped yet.
 
 - [1. Yutori task settings editor](#1-yutori-task-settings-editor)
 - [2. Topic management](#2-topic-management) (placeholder)

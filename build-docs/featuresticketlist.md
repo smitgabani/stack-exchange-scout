@@ -374,3 +374,49 @@ The first real research task ran (`0d8944ee`, $0.35) and answered all three part
 - **Webhook:** never needed. The poll collected the result and `events_awaiting_ingest` never moved, so the webhook either did not arrive or arrived later. Building polling first turned what would have been a lost $0.35 into a non-event — which is the strongest argument for the research primitive, and now evidence rather than prediction.
 
 Downstream, untouched: 38 candidates, all scored, top 71.0. Ingest, enrich and rank handled research output without knowing research tasks exist.
+
+---
+
+## M13 — Yutori Task Settings, and One Live Monitor per Scout
+
+**Goal:** edit what a scout sends Yutori the way the LLM prompt is edited. That
+means how often it runs, when it starts, timezone, location, visibility,
+Yutori's own email, subscribers, the output schema and the query wording. It
+also means stopping Scout monitors from piling up and billing out of sight.
+
+Design: [ADR 0006](decisions/0006-one-live-monitor-and-task-settings.md).
+Feature list and mockup: [featurelist.md](featurelist.md) §1,
+[`design-mockups/ScoutParameters.html`](../design-mockups/ScoutParameters.html).
+Built on branches `M13-A` to `M13-E`, one per phase.
+
+**Backend — the monitor pile-up (Phase A, F0)**
+- `M13-B1` 💸 One live monitor per scout. A Scout-mode run with a live monitor gets a structured 409 (`live_monitor`); `replace=true` stops the old monitor before creating anything, and creates nothing if that fails. The definition row is locked. Another key's monitor is never touched.
+- `M13-B2` 💸 Scheduled runs reach the ledger. Webhook events carry `scout.id`, so each one is attributed to its monitor and recorded once (`trigger = schedule`). A late update completes a timed-out manual run instead of charging twice. `_sync_scout_run` only claims its own monitor's update.
+- `M13-B3` 💸 Monitors API. `GET /scout-monitors` is local and returns monthly cost and leftovers. `POST /scout-monitors/stop-superseded` and `POST /scout-remote/{id}/done` stop monitors. The inventory pulls missed updates and compares Yutori's 30-day run count with the ledger.
+- `M13-B4` Saving the profile no longer PATCHes the legacy Scout (it reset its interval to 3 days).
+
+**Backend — settings (Phases B–D, F1–F9)**
+- `M13-B5` 🔒 `YutoriSettings` validation, answering 422 in plain sentences: 30-minute floor, real timezone names, subscriber emails, and an output schema that still yields `questions[].url`. The webhook can't be set.
+- `M13-B6` `task_settings.build_payload` is the one function behind both the preview and the real request. The client sends every settable field, and only when it's set. `update_scout` no longer forces `is_public=false`. `update_email_settings` was added.
+- `M13-B7` `GET/PUT/DELETE /scout-definitions/{id}/settings` and `POST …/settings/preview`. Runs record what they sent (`detail.sent`, secret masked) and the template version.
+- `M13-B8` Migration `e4a7c2d91b60`: `query_templates` (versioned like `prompt_templates`) and `yutori_defaults` (one row). `/yutori/query-template[s]` and `/yutori/defaults` routes.
+- `M13-B9` Live monitors: `GET /scout-instances/{id}/remote` (diff against the scout, `start_changed`), `POST …/apply` (free PATCH, syncs subscribers), and `POST …/restart` (refused while the scout has another live monitor).
+
+**Frontend**
+- `M13-F1` Run dialogs price Scout mode per month and say **Start monitor**. The live-monitor dialog offers Replace, Keep, or Apply (free). The dashboard shows a banner while monitors run.
+- `M13-F2` Monitors: Live monitors with monthly cost, leftovers, Details, Stop, and Stop older monitors. The inventory gets interval, cost, Stop, and the Yutori-vs-ledger count. Stopped Scouts get Restart.
+- `M13-F3` Scout page: "How it runs" moves above the tabs, and a **Parameters** tab shows a different form for Research and for Scout, with a live request preview, cost, per-field Reset and a confirmation for public or frequent monitors. The run page shows **Sent with**.
+- `M13-F4` Yutori → **Defaults**: the query template editor (versions, activate, reset, free preview) and the default settings form.
+- `M13-F5` The Parameters tab shows whether the live monitor matches, with **Apply** or **Replace…**.
+
+**M13-TEST**
+- 💸 A second Scout-mode run of the same scout creates nothing. Replace calls `mark_done` before `create_scout`, and creates nothing if stopping fails. *(automated: `test_monitors.py`)*
+- 💸 A scheduled webhook becomes exactly one ledger row, and a repeat sync adds none. *(automated)*
+- 🔒 No response or stored run detail contains the webhook secret. *(automated: `test_task_settings.py`)*
+- 🧩 The preview body equals the body the client sends. *(automated: `test_yutori_client.py`)*
+- Manual, after deploy:
+  - Open Monitors, list what's at Yutori, and use **Stop older monitors**. Confirm that only leftovers stop and that the monthly total drops.
+  - Compare Yutori's 30-day run count with the ledger's.
+  - On a scout's Parameters tab, switch Research ↔ Scout and check that the form changes. Set a daily interval and a timezone, watch the preview update, then save.
+  - With a live monitor, check that the banner lists the difference and that **Apply** clears it (free).
+  - Edit and save the query template on Defaults, and check that the scout's Query preview uses it.

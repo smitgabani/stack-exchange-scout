@@ -72,9 +72,36 @@ any already-revealed hints intact, and only asks the model for blocks the
 current format wants that the challenge doesn't already have. If nothing
 is missing, it makes no LLM call at all.
 
+## Stage 1 in detail: what gets sent, and what keeps billing
+
+The request sent to Yutori is built from two editable things (M13):
+
+- **The query.** A "From my topics" scout fills the active **query template**
+  (Yutori → Defaults) with your topics, concepts and difficulty. A
+  "Write it myself" scout sends its own text.
+- **The settings.** A scout's Parameters tab sets how often, start time,
+  timezone, location, visibility, Yutori's own email, subscribers and the
+  output schema. It stores only what it overrides; everything else comes from
+  the Defaults. The webhook is fixed: it carries the secret that
+  authenticates results.
+
+A **research task** runs once. A **Scout monitor** runs now and then again at
+its interval, **billing $0.35 each time, until stopped**. That is the one
+thing in the app that runs, and costs, on a schedule, so:
+
+- a scout has at most one live monitor. Running it again means replacing it,
+  and the old one is stopped before the new one is created;
+- every scheduled run's update is recorded in the ledger (`scout_runs`,
+  `trigger = schedule`) the next time the app is opened, attributed through
+  the Scout id Yutori puts in the webhook;
+- Monitors compares Yutori's own run count with the ledger, because a
+  scheduled run that finds nothing sends no update and is otherwise
+  invisible.
+
 ## What's not automated yet
 
-Nothing in this pipeline runs on a timer. Scheduling every stage
+Apart from Yutori monitors running on their own interval (above), nothing in
+this pipeline runs on a timer. Scheduling every stage
 (especially digest generation and sending, on the frequency set on the
 Topics page) is tracked as a future milestone — see `build-docs/` for the
 roadmap.

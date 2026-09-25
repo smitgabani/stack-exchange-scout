@@ -347,3 +347,53 @@ candidates scored between 69 and 71. That is a suspiciously narrow band and
 suggests one sub-score is dominating. §26 forbids lowering the threshold to
 fill a digest; it says nothing about fixing a formula that is not
 discriminating.
+
+## 2026-09-24 — M13: Yutori task settings, and the monitors that billed forever
+
+**Milestone / tickets:** M13-B1..B9, M13-F1..F5 (feature list §1, F0–F9)
+
+**Decisions made:** [ADR 0006](decisions/0006-one-live-monitor-and-task-settings.md).
+- One live monitor per scout, enforced in the service with a row lock rather than a unique index, because the existing pile-up would have failed the migration.
+- Settings are overrides in layers (built-in → defaults → scout).
+- The query template is versioned like the curator prompt.
+- The webhook stays locked.
+- Saving the profile no longer touches Yutori.
+- Command autonomy was granted for M13 only: local git, tests and migrations. Push, merge, deploy and production DB stay user-run.
+
+**What got built:**
+
+It started as "let me edit the Scout parameters" and turned up a billing bug on the way. A Scout isn't a run; it's a monitor that runs again every interval until stopped, and every Scout-mode press created a new one while leaving the last one running. None of their later runs reached the ledger. The fix (F0) came first:
+- a second Scout-mode run is refused with a 409 describing the live monitor;
+- Replace stops the old monitor before creating anything;
+- scheduled runs are attributed to their monitor through the `scout.id` in each webhook and recorded once;
+- Monitors shows monthly cost, leftovers and Yutori's own run count against the ledger, with Stop and **Stop older monitors**.
+
+Then the settings:
+- a **Parameters** tab per scout, with a different form for Research and for Scout;
+- a live preview of the exact request (built by the same function the run uses);
+- monthly cost;
+- a **Defaults** tab with the editable query template and app-wide default settings;
+- a live-monitor comparison with a free **Apply**.
+
+The run page shows what each run sent.
+
+Tests went from 314 to 372. The new files are `test_monitors.py`, `test_task_settings.py`, `test_yutori_client.py` and `test_query_templates.py`. `test_yutori_client.py` is the first test that checks real request bodies, using an `httpx.MockTransport` passed through a new `transport=` argument on `YutoriClient`. It needed no new dependency.
+
+**Git:**
+- Branches: `M13-0-featurelist` (feature list and mockup), then `M13-A-monitor-pileup`, `M13-B-task-settings`, `M13-C-defaults-template`, `M13-D-live-monitors` and `M13-E-docs`. Each is branched from the one before, so they merge in order.
+- Conventional Commits: `fix:` for the pile-up, `feat:` for each settings phase, `docs:` for this.
+- The one migration (`e4a7c2d91b60`) was cycled upgrade → downgrade → upgrade against the **local** `scout_test` database, with `DATABASE_URL` overridden on the command line. `backend/.env` still points at production Supabase, so nothing here ran against it.
+
+**Concepts introduced:**
+- *Row locks vs unique indexes* for "at most one" rules: an index can't be added over data that already breaks it.
+- *Advisory locks* (`pg_advisory_xact_lock`) to serialise a job without a table to lock.
+- *Layered configuration*: store only overrides, so a default change propagates.
+- *Dependency injection for tests*: an optional transport rather than monkeypatching httpx.
+- *Structured error bodies*: a 409 whose `detail` is an object the UI can act on, behind an `ApiError` that keeps `message` readable for every existing caller.
+
+**Next up:**
+1. Push and merge the six branches in order.
+2. Deploy the backend, then the frontend. The migration is additive, so it's safe before the code.
+3. Open **Monitors → List scouts and research tasks → Stop older monitors** to clear the pile-up that already exists.
+4. Do the M13-TEST click-through.
+5. F10 (presets) and §2 topic management are next in `featurelist.md`.
