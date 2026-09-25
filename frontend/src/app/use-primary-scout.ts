@@ -32,6 +32,7 @@ export function usePrimaryScout() {
     definition,
     isRunning,
     costUsd: data?.run_cost_usd ?? 0.35,
+    monitorInterval: data?.monitor_interval_seconds ?? 30 * 86400,
     /** Why there is no single definition to run, when there isn't one. */
     ambiguity:
       ready.length === 0 ? ("none" as const) : ready.length > 1 ? ("many" as const) : null,

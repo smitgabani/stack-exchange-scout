@@ -6,13 +6,18 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { ConfirmDialog } from "../../../confirm-dialog";
 import { InfoButton } from "../../../info-button";
+import { LiveMonitorDialog } from "../../../live-monitor-dialog";
 import {
   type Definition,
+  type LiveMonitorConflict,
   MODE_LABEL,
   type RunMode,
   defaultMode,
   duration,
+  every,
+  liveMonitorConflict,
   money,
+  monthlyCost,
   scoutApi,
   when,
 } from "@/lib/scout-api";
@@ -29,6 +34,7 @@ export default function DefinitionPage() {
   const [asking, setAsking] = useState<"run" | "delete" | null>(null);
   const [mode, setMode] = useState<RunMode | null>(null);
   const [draft, setDraft] = useState<Partial<Definition> | null>(null);
+  const [conflict, setConflict] = useState<LiveMonitorConflict | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["definition", params.id],
@@ -51,12 +57,25 @@ export default function DefinitionPage() {
   });
 
   const run = useMutation({
-    mutationFn: () => scoutApi.runDefinition(params.id, runMode),
-    onSuccess: async (r) => {
-      setMessage(`Started ${r.kind === "research_task" ? "research task" : "scout"} ${r.external_id}.`);
+    mutationFn: (replace: boolean = false) =>
+      scoutApi.runDefinition(params.id, runMode, { replace }),
+    onSuccess: async (r, replace) => {
+      setConflict(null);
+      setMessage(
+        r.kind === "research_task"
+          ? `Started research task ${r.external_id}.`
+          : replace
+            ? `Monitor replaced: the old one was stopped and ${r.external_id} is running now.`
+            : `Monitor ${r.external_id} started. It keeps running on its interval until you stop it on Monitors.`,
+      );
       await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["monitors"] });
     },
-    onError: (e: Error) => setMessage(e.message),
+    onError: (e: Error) => {
+      const detail = liveMonitorConflict(e);
+      if (detail) setConflict(detail);
+      else setMessage(e.message);
+    },
   });
 
   const remove = useMutation({
@@ -84,6 +103,8 @@ export default function DefinitionPage() {
   const runMode: RunMode = mode ?? currentMode;
   const drifted =
     data.query_source === "topics" && data.query_text && data.rendered_query !== data.query_text;
+  const cost = data.run_cost_usd ?? 0.35;
+  const monitorInterval = data.monitor_interval_seconds ?? 30 * 86400;
 
   return (
     <main className={styles.page}>
@@ -111,9 +132,9 @@ export default function DefinitionPage() {
           </button>
           <InfoButton text="Writes your edits to this saved query. Nothing is sent to Yutori and nothing is billed — editing is always free." />
           <button className={styles.primary} onClick={() => setAsking("run")}>
-            Run · $0.35
+            {runMode === "scout" ? "Start monitor" : "Run"} · {money(cost)}
           </button>
-          <InfoButton text="Asks Yutori to search Stack Overflow now, using this scout's query. Costs about $0.35. Choose Scout monitor if you want it to keep running on its own interval afterward — that mode keeps billing until retired." />
+          <InfoButton text={`Asks Yutori to search Stack Overflow now, using this scout's query. Costs about ${money(cost)}. Choose Scout monitor if you want it to keep running on its own interval afterward — that mode keeps billing until you stop it.`} />
         </div>
       </div>
 
@@ -234,7 +255,7 @@ export default function DefinitionPage() {
       {tab === "runs" && (
         <div className={styles.section}>
           {runs.length === 0 ? (
-            <div className={styles.empty}>No runs yet. Running this scout costs about $0.35.</div>
+            <div className={styles.empty}>No runs yet. Running this scout costs about {money(cost)}.</div>
           ) : (
             <div className={styles.tableWrap}>
               <table className={styles.table}>
@@ -317,7 +338,7 @@ export default function DefinitionPage() {
         title={`Run “${data.name}”?`}
         body={
           <>
-            <p>This searches Stack Overflow now. It costs about <strong>$0.35</strong>.</p>
+            <p>This searches Stack Overflow now. It costs about <strong>{money(cost)}</strong>.</p>
             <div className={styles.seg} style={{ marginTop: "14px" }}>
               <button
                 type="button"
@@ -334,12 +355,26 @@ export default function DefinitionPage() {
                 Scout — keeps monitoring
               </button>
             </div>
+            {runMode === "scout" && (
+              <p className={styles.hint} style={{ marginTop: "10px" }}>
+                Creates a monitor that runs now, then again {every(monitorInterval)} on its own
+                until you stop it — about {money(monthlyCost(monitorInterval, cost))} a month.
+              </p>
+            )}
           </>
         }
-        confirmLabel="Run now"
+        confirmLabel={runMode === "scout" ? "Start monitor" : "Run now"}
         busy={run.isPending}
         onCancel={() => setAsking(null)}
-        onConfirm={() => { setAsking(null); run.mutate(); }}
+        onConfirm={() => { setAsking(null); run.mutate(false); }}
+      />
+
+      <LiveMonitorDialog
+        conflict={conflict}
+        scoutName={data.name}
+        busy={run.isPending}
+        onKeep={() => setConflict(null)}
+        onReplace={() => run.mutate(true)}
       />
 
       <ConfirmDialog

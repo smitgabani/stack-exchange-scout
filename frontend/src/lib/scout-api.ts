@@ -163,6 +163,11 @@ export type RemoteScout = {
   next_run: string | number | null;
   /** Whether this app has a record of it. Untracked + alive = billing unseen. */
   tracked: boolean;
+  output_interval?: number | null;
+  monthly_cost_usd?: number;
+  definition_name?: string | null;
+  /** A leftover: its scout has a newer monitor, and this one still bills. */
+  superseded?: boolean;
 };
 
 export type RemoteTask = {
@@ -182,23 +187,82 @@ export type EffectivenessRow = {
   per_dollar: number | null;
 };
 
+/** A monitor this app believes is still running at Yutori. */
+export type Monitor = {
+  id: string;
+  definition_id: string | null;
+  definition_name?: string | null;
+  external_id: string;
+  state: string | null;
+  account_fingerprint: string | null;
+  output_interval: number;
+  monthly_cost_usd: number;
+  next_run: string | number | null;
+  created_at: string | null;
+  /** Live, but not its scout's newest monitor: a leftover still billing. */
+  superseded?: boolean;
+};
+
+/**
+ * Thrown for any non-2xx answer. `message` is still the backend's plain
+ * `detail` (or `detail.message` when the detail is structured), so existing
+ * `(error as Error).message` callers read the same text as before; `status`
+ * and `detail` are there for the few that need to act on the answer.
+ */
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(message: string, status: number, detail: unknown) {
+    super(message);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+/** The 409 a Scout-mode run gets when its scout already has a live monitor. */
+export type LiveMonitorConflict = {
+  code: "live_monitor";
+  message: string;
+  monitor: Monitor;
+  run_cost_usd: number;
+};
+
+export function liveMonitorConflict(error: unknown): LiveMonitorConflict | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  const detail = error.detail as Partial<LiveMonitorConflict> | null;
+  return detail && detail.code === "live_monitor" ? (detail as LiveMonitorConflict) : null;
+}
+
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = (body as { detail?: unknown }).detail;
-    throw new Error(typeof detail === "string" ? detail : `${path} failed (${response.status})`);
+    const message =
+      typeof detail === "string"
+        ? detail
+        : typeof (detail as { message?: unknown } | null)?.message === "string"
+          ? (detail as { message: string }).message
+          : `${path} failed (${response.status})`;
+    throw new ApiError(message, response.status, detail);
   }
   return body as T;
 }
 
 export const scoutApi = {
   listDefinitions: (includeArchived = false) =>
-    json<{ definitions: Definition[]; run_cost_usd: number; active_account: string | null }>(
-      `/api/scout-definitions?include_archived=${includeArchived}`,
-    ),
+    json<{
+      definitions: Definition[];
+      run_cost_usd: number;
+      monitor_interval_seconds: number;
+      active_account: string | null;
+    }>(`/api/scout-definitions?include_archived=${includeArchived}`),
 
-  getDefinition: (id: string) => json<Definition & { runs: Run[] }>(`/api/scout-definitions/${id}`),
+  getDefinition: (id: string) =>
+    json<Definition & { runs: Run[]; run_cost_usd: number; monitor_interval_seconds: number }>(
+      `/api/scout-definitions/${id}`,
+    ),
 
   createDefinition: (body: Partial<Definition>) =>
     json<Definition>("/api/scout-definitions", {
@@ -222,10 +286,37 @@ export const scoutApi = {
       method: "DELETE",
     }),
 
-  /** The only call here that spends money. */
-  runDefinition: (id: string, mode: "research" | "scout") =>
+  /** The only call here that spends money. In scout mode a scout with a
+   *  live monitor answers 409 (see `liveMonitorConflict`) unless `replace`
+   *  is set, which stops that monitor before creating the new one. */
+  runDefinition: (id: string, mode: "research" | "scout", options: { replace?: boolean } = {}) =>
     json<{ started: boolean; run_id: string; external_id: string; kind: string; cost_usd: number }>(
-      `/api/scout-definitions/${id}/run?mode=${mode}`,
+      `/api/scout-definitions/${id}/run?mode=${mode}${options.replace ? "&replace=true" : ""}`,
+      { method: "POST" },
+    ),
+
+  /** Monitors this app believes are running, and what they cost a month.
+   *  Local only — no call to Yutori — so cheap enough for the dashboard. */
+  monitors: () =>
+    json<{
+      live_count: number;
+      superseded_count: number;
+      monthly_cost_usd: number;
+      monitors: Monitor[];
+      run_cost_usd: number;
+    }>("/api/scout-monitors"),
+
+  /** Stops every monitor that isn't its scout's newest. Free. */
+  stopSuperseded: () =>
+    json<{ stopped: string[]; failed: { external_id: string; error: string }[] }>(
+      "/api/scout-monitors/stop-superseded",
+      { method: "POST" },
+    ),
+
+  /** Stops one monitor at Yutori by its id, tracked or not. Free. */
+  stopRemote: (externalId: string) =>
+    json<{ stopped: boolean; tracked: boolean }>(
+      `/api/scout-remote/${encodeURIComponent(externalId)}/done`,
       { method: "POST" },
     ),
 
@@ -259,6 +350,17 @@ export const scoutApi = {
       untracked_scouts: string[];
       error: string | null;
       research_error?: string;
+      live_count?: number;
+      monthly_cost_usd?: number;
+      /** Updates fetched for webhooks that never arrived, and ledger rows added. */
+      pulled?: { fetched: number; new: number; recorded: number; error: string | null };
+      /** Yutori's own 30-day run count next to this app's, for the active key. */
+      usage?: {
+        period: string;
+        yutori_runs: number | null;
+        recorded_runs: number;
+        error: string | null;
+      };
     }>("/api/scout-remote"),
   /** Deletes the Scout at Yutori. The only call here that stops something billing. */
   deleteInstance: (id: string) =>
@@ -328,6 +430,25 @@ export function duration(seconds: number | null | undefined): string {
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ${String(seconds % 60).padStart(2, "0")}s`;
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/** "every 30 days", "every 6 hours", "every 30 min". */
+export function every(seconds: number | null | undefined): string {
+  if (!seconds) return "—";
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400;
+    return days === 1 ? "every day" : `every ${days} days`;
+  }
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return hours === 1 ? "every hour" : `every ${hours} hours`;
+  }
+  return `every ${Math.round(seconds / 60)} min`;
+}
+
+/** What a monitor at this interval costs over a 30-day month. */
+export function monthlyCost(intervalSeconds: number, runCost: number): number {
+  return intervalSeconds > 0 ? ((30 * 86400) / intervalSeconds) * runCost : 0;
 }
 
 export function money(value: number | null | undefined): string {

@@ -2,8 +2,16 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { scoutApi } from "@/lib/scout-api";
+import {
+  type LiveMonitorConflict,
+  every,
+  liveMonitorConflict,
+  money,
+  monthlyCost,
+  scoutApi,
+} from "@/lib/scout-api";
 import { ConfirmDialog } from "./confirm-dialog";
+import { LiveMonitorDialog } from "./live-monitor-dialog";
 import styles from "./run-scout-button.module.css";
 
 export type RunMode = "research" | "scout";
@@ -21,12 +29,18 @@ export type RunMode = "research" | "scout";
  * than the legacy singleton `/scout/run` — the caller resolves *which*
  * definition via `usePrimaryScout`, since that answer depends on how many
  * scouts exist and this component has no business guessing.
+ *
+ * Scout mode starts a *monitor*, which keeps running and billing on its own
+ * interval, so the dialog prices it per month, not per run. If the scout
+ * already has one, the run is refused and `LiveMonitorDialog` offers to
+ * replace it rather than silently adding a second.
  */
 export function RunScoutButton({
   definitionId,
   className,
   label = "Find new questions",
   cost = 0.35,
+  monitorInterval = 30 * 86400,
   isRunning = false,
   allowModeChoice = true,
 }: {
@@ -34,19 +48,26 @@ export function RunScoutButton({
   className?: string;
   label?: string;
   cost?: number;
+  /** How often a monitor started now would run, from the API. */
+  monitorInterval?: number;
   isRunning?: boolean;
   allowModeChoice?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [asking, setAsking] = useState(false);
   const [mode, setMode] = useState<RunMode>("research");
+  const [conflict, setConflict] = useState<LiveMonitorConflict | null>(null);
 
   const run = useMutation({
-    mutationFn: (m: RunMode) => scoutApi.runDefinition(definitionId, m),
+    mutationFn: (args: { mode: RunMode; replace?: boolean }) =>
+      scoutApi.runDefinition(definitionId, args.mode, { replace: args.replace }),
     onSuccess: async () => {
+      setConflict(null);
       await queryClient.invalidateQueries({ queryKey: ["definitions"] });
       await queryClient.invalidateQueries({ queryKey: ["runs"] });
+      await queryClient.invalidateQueries({ queryKey: ["monitors"] });
     },
+    onError: (error) => setConflict(liveMonitorConflict(error)),
   });
 
   return (
@@ -59,7 +80,7 @@ export function RunScoutButton({
       >
         {isRunning ? "Scout running…" : label}
       </button>
-      {run.isError && (
+      {run.isError && !conflict && (
         <span className={styles.error}>{(run.error as Error).message}</span>
       )}
       <ConfirmDialog
@@ -95,22 +116,31 @@ export function RunScoutButton({
                     onChange={() => setMode("scout")}
                   />
                   <span>
-                    <strong>Scout</strong> — the long-lived monitor. Restarting it was
-                    measured not to trigger a run, so this may cost $
-                    {cost.toFixed(2)} and produce nothing.
+                    <strong>Scout monitor</strong> — runs now, then again{" "}
+                    {every(monitorInterval)} on its own until you stop it: about{" "}
+                    {money(monthlyCost(monitorInterval, cost))} a month.
                   </span>
                 </label>
               </div>
             )}
           </>
         }
-        confirmLabel="Run now"
+        confirmLabel={allowModeChoice && mode === "scout" ? "Start monitor" : "Run now"}
         busy={run.isPending}
         onCancel={() => setAsking(false)}
         onConfirm={() => {
           setAsking(false);
-          run.mutate(allowModeChoice ? mode : "research");
+          run.mutate({ mode: allowModeChoice ? mode : "research" });
         }}
+      />
+      <LiveMonitorDialog
+        conflict={conflict}
+        busy={run.isPending}
+        onKeep={() => {
+          setConflict(null);
+          run.reset();
+        }}
+        onReplace={() => run.mutate({ mode: "scout", replace: true })}
       />
     </>
   );

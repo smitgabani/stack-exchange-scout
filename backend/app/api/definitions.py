@@ -120,6 +120,9 @@ async def list_definitions(
             for d in definitions
         ],
         "run_cost_usd": settings.yutori_run_cost_usd,
+        # How often a monitor started now would run, so the run dialog can say
+        # what Scout mode costs per month rather than just per run.
+        "monitor_interval_seconds": settings.scout_run_interval_seconds,
     }
 
 
@@ -163,6 +166,8 @@ async def get_definition(
             ),
         ),
         "runs": await definition_service.run_history(db, definition_id),
+        "run_cost_usd": settings.yutori_run_cost_usd,
+        "monitor_interval_seconds": settings.scout_run_interval_seconds,
     }
 
 
@@ -216,9 +221,17 @@ async def delete_definition(
     "/scout-definitions/{definition_id}/run", dependencies=[Depends(require_yutori_key)]
 )
 async def run_definition(
-    definition_id: uuid.UUID, mode: str = "research", db: AsyncSession = Depends(get_db)
+    definition_id: uuid.UUID,
+    mode: str = "research",
+    replace: bool = False,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Run this scout now. **Billable** — about $0.35."""
+    """Run this scout now. **Billable** — about $0.35.
+
+    In scout mode this starts a monitor that keeps running on its own. If the
+    scout already has one, the answer is a 409 describing it; pass
+    `replace=true` to stop that monitor and start a new one.
+    """
     if mode not in ("research", "scout"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -226,8 +239,19 @@ async def run_definition(
         )
     definition = await _require(db, definition_id)
     outcome = await definition_service.run_definition(
-        db, definition, await _profile_data(db), mode=mode
+        db, definition, await _profile_data(db), mode=mode, replace=replace
     )
+    if outcome.conflict == "live_monitor":
+        # Structured, so the UI can show the monitor and offer to replace it.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "live_monitor",
+                "message": outcome.error,
+                "monitor": outcome.live,
+                "run_cost_usd": settings.yutori_run_cost_usd,
+            },
+        )
     if not outcome.started:
         # 409 for "already running", 502 for anything Yutori refused.
         code = (
@@ -256,6 +280,45 @@ async def remote_inventory(db: AsyncSession = Depends(get_db)) -> dict:
     there", and the gap between them is the interesting part.
     """
     return await definition_service.remote_inventory(db)
+
+
+@router.get("/scout-monitors")
+async def monitors(db: AsyncSession = Depends(get_db)) -> dict:
+    """Monitors this app believes are still running, and their monthly cost.
+
+    Local only, so it is cheap enough for the dashboard. Runs the ledger sync
+    first, so scheduled runs that arrived since the last visit are counted.
+    """
+    await definition_service.record_scheduled_runs(db)
+    return {
+        **await definition_service.monitors_summary(db),
+        "run_cost_usd": settings.yutori_run_cost_usd,
+    }
+
+
+@router.post("/scout-monitors/stop-superseded", dependencies=[Depends(require_yutori_key)])
+async def stop_superseded(db: AsyncSession = Depends(get_db)) -> dict:
+    """Stop every monitor that isn't its scout's newest. Free."""
+    result = await definition_service.stop_superseded(db)
+    if result.get("error"):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=result["error"])
+    return result
+
+
+@router.post("/scout-remote/{external_id}/done", dependencies=[Depends(require_yutori_key)])
+async def stop_remote(external_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    """Stop one monitor at Yutori, tracked or not. Free.
+
+    502 rather than a silent success when Yutori refuses — a monitor that is
+    still running must never be reported as stopped.
+    """
+    result = await definition_service.stop_remote(db, external_id)
+    if not result.get("stopped"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result.get("error") or "Could not stop the monitor",
+        )
+    return result
 
 
 @router.get("/scout-instances")

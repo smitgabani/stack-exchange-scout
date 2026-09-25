@@ -888,7 +888,9 @@ async def finish_run_if_complete(db: AsyncSession) -> bool:
     return True
 
 
-def update_to_webhook_envelope(update: dict[str, Any]) -> dict[str, Any]:
+def update_to_webhook_envelope(
+    update: dict[str, Any], *, scout_id: str | None = None
+) -> dict[str, Any]:
     """Shape a `DeveloperUpdate` from GET /updates like a webhook body.
 
     The updates API has no `report_content` — it carries `structured_result`
@@ -896,9 +898,12 @@ def update_to_webhook_envelope(update: dict[str, Any]) -> dict[str, Any]:
     (prose). Mapping here rather than teaching the parser a second shape means
     webhook parsing is untouched, and both paths still key on `update.id`, so
     the existing (provider, event_id) unique index dedupes across them.
+
+    `scout_id` is carried as `scout.id`, where a real webhook puts it, so a
+    pulled update is attributed to its monitor exactly like a delivered one.
     """
     structured = update.get("structured_result")
-    return {
+    envelope: dict[str, Any] = {
         "event_type": "scout.update",
         "update": {
             "id": update.get("id"),
@@ -910,6 +915,9 @@ def update_to_webhook_envelope(update: dict[str, Any]) -> dict[str, Any]:
         },
         "source": "pull",
     }
+    if scout_id:
+        envelope["scout"] = {"id": scout_id}
+    return envelope
 
 
 async def pull_missed_updates(
@@ -952,7 +960,7 @@ async def pull_missed_updates(
     updates = response.get("updates") or []
     ingested = 0
     for update in updates:
-        payload = update_to_webhook_envelope(update)
+        payload = update_to_webhook_envelope(update, scout_id=scout.external_scout_id)
         event = await ingest_service.claim_event(db, payload)
         if event is not None:
             ingested += 1

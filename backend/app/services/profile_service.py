@@ -59,14 +59,9 @@ async def apply_patch(db: AsyncSession, patch: dict[str, Any]) -> Profile:
             detail="Cannot switch llm.provider to 'openai' without a stored OpenAI key",
         )
 
-    saved = await profile_repository.save(db, profile, validated.model_dump(mode="json"))
-
-    # Keep the Scout's query in step with the profile (prd.md §8 step 4). Runs
-    # after the save and never raises, so Yutori being down can't cost the user
-    # their edit (tdd.md §8.2) — a failure is recorded on the scout row and
-    # surfaced in the Settings sync status instead. Won't create a Scout; that
-    # would be a billable run nobody asked for.
-    from app.services import scout_service  # local import: avoids a cycle
-
-    await scout_service.sync(db, validated)
-    return saved
+    # No longer pushes anything to Yutori. It used to PATCH the legacy single
+    # Scout on every save — including its interval, to `scout.interval_days` —
+    # which could make a monitor nobody was watching run every 3 days. Scouts
+    # now render their query from the profile when they run, and a live
+    # monitor is updated deliberately from its own page (M13).
+    return await profile_repository.save(db, profile, validated.model_dump(mode="json"))

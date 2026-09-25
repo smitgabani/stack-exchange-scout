@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { colorForTopic } from "@/lib/topic-color";
 import { jobsApi } from "@/lib/jobs-api";
+import { money } from "@/lib/scout-api";
 import { JobStatus, useJob } from "./job-status";
+import { MonitorBanner } from "./monitor-banner";
 import { RunScoutButton } from "./run-scout-button";
 import { usePrimaryScout } from "./use-primary-scout";
 import { InfoButton } from "./info-button";
@@ -95,7 +97,7 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const { definition, isRunning, costUsd, ambiguity } = usePrimaryScout();
+  const { definition, isRunning, costUsd, monitorInterval, ambiguity } = usePrimaryScout();
 
   // One request for the whole page. Six separate fetches would each be a
   // Vercel function proxying to Fly, and the page could not render until the
@@ -161,6 +163,8 @@ export default function DashboardPage() {
 
   return (
     <main className={styles.page}>
+      <MonitorBanner />
+
       {/* ─── 1. Today ───────────────────────────────────────────────────
           One thing to do. When there is a challenge, that is it; when there
           is not, the block says what would produce one, so the page is never
@@ -223,6 +227,7 @@ export default function DashboardPage() {
                 definitionId={definition.id}
                 className={styles.cta}
                 cost={costUsd}
+                monitorInterval={monitorInterval}
                 isRunning={isRunning}
               />
             ) : (
@@ -393,9 +398,10 @@ export default function DashboardPage() {
                 definitionId={definition.id}
                 className={styles.button}
                 cost={costUsd}
+                monitorInterval={monitorInterval}
                 isRunning={isRunning}
               />
-              <InfoButton text="Asks Yutori to search Stack Overflow for new questions matching your current topics. Costs about $0.35 per run. It does not run on a schedule — you have to start it here." />
+              <InfoButton text={`Asks Yutori to search Stack Overflow for new questions matching your current topics. A research task runs once for about ${money(costUsd)}. A Scout monitor runs now and then keeps running on its own schedule until you stop it on the Monitors page.`} />
             </>
           ) : (
             <Link href="/yutori/scouts" className={styles.secondaryButton}>

@@ -5,12 +5,17 @@ import Link from "next/link";
 import { useState } from "react";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
+import { LiveMonitorDialog } from "../../live-monitor-dialog";
 import {
   type Definition,
+  type LiveMonitorConflict,
   MODE_LABEL,
   type RunMode,
   defaultMode,
+  every,
+  liveMonitorConflict,
   money,
+  monthlyCost,
   scoutApi,
   when,
 } from "@/lib/scout-api";
@@ -34,6 +39,10 @@ export default function ScoutsPage() {
   const [renameTarget, setRenameTarget] = useState<Definition | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [mode, setMode] = useState<"research" | "scout">("research");
+  // A Scout-mode run refused because the scout already has a live monitor.
+  const [conflict, setConflict] = useState<{ target: Definition; detail: LiveMonitorConflict } | null>(
+    null,
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: ["definitions", showArchived],
@@ -98,21 +107,37 @@ export default function ScoutsPage() {
   });
 
   const run = useMutation({
-    mutationFn: ({ id, mode }: { id: string; mode: "research" | "scout" }) =>
-      scoutApi.runDefinition(id, mode),
-    onSuccess: async (result) => {
+    mutationFn: ({
+      target,
+      mode,
+      replace,
+    }: {
+      target: Definition;
+      mode: "research" | "scout";
+      replace?: boolean;
+    }) => scoutApi.runDefinition(target.id, mode, { replace }),
+    onSuccess: async (result, { replace }) => {
+      setConflict(null);
       setMessage(
         result.kind === "research_task"
           ? `Research task started (${result.external_id}). Results are polled, so a missed webhook cannot lose it.`
-          : `Scout created (${result.external_id}). It will run on its interval until retired.`,
+          : replace
+            ? `Monitor replaced: the old one was stopped and ${result.external_id} is running now.`
+            : `Monitor started (${result.external_id}). It keeps running on its interval until you stop it on Monitors.`,
       );
       await refresh();
+      await queryClient.invalidateQueries({ queryKey: ["monitors"] });
     },
-    onError: (e: Error) => setMessage(e.message),
+    onError: (e: Error, { target }) => {
+      const detail = liveMonitorConflict(e);
+      if (detail) setConflict({ target, detail });
+      else setMessage(e.message);
+    },
   });
 
   const definitions = data?.definitions ?? [];
   const cost = data?.run_cost_usd ?? 0.35;
+  const monitorInterval = data?.monitor_interval_seconds ?? 30 * 86400;
   const activeAccount = data?.active_account ?? null;
   // Worth calling out only when there is actually more than one account in
   // play — otherwise every card would carry a label that says nothing.
@@ -449,16 +474,26 @@ export default function ScoutsPage() {
             <p className={styles.hint} style={{ marginTop: "10px" }}>
               {mode === "research"
                 ? "Runs immediately and leaves nothing behind at Yutori."
-                : "Creates a monitor that keeps running on its own interval until you retire it."}
+                : `Creates a monitor that runs now, then again ${every(monitorInterval)} on its own until you stop it — about ${money(monthlyCost(monitorInterval, cost))} a month.`}
             </p>
           </>
         }
-        confirmLabel="Run now"
+        confirmLabel={mode === "scout" ? "Start monitor" : "Run now"}
         busy={run.isPending}
         onCancel={() => setRunTarget(null)}
         onConfirm={() => {
-          if (runTarget) run.mutate({ id: runTarget.id, mode });
+          if (runTarget) run.mutate({ target: runTarget, mode });
           setRunTarget(null);
+        }}
+      />
+
+      <LiveMonitorDialog
+        conflict={conflict?.detail ?? null}
+        scoutName={conflict?.target.name}
+        busy={run.isPending}
+        onKeep={() => setConflict(null)}
+        onReplace={() => {
+          if (conflict) run.mutate({ target: conflict.target, mode: "scout", replace: true });
         }}
       />
     </main>

@@ -1,8 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
-import { type Instance, scoutApi, when as fmt } from "@/lib/scout-api";
+import {
+  type Instance,
+  type Monitor,
+  every,
+  money,
+  scoutApi,
+  when as fmt,
+} from "@/lib/scout-api";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
 import ws from "../../workspace.module.css";
@@ -28,11 +36,56 @@ export default function ScoutPage() {
   const [deleteTarget, setDeleteTarget] = useState<Instance | null>(null);
   const [forgetTarget, setForgetTarget] = useState<Instance | null>(null);
   const [showRemote, setShowRemote] = useState(false);
+  const [stopTarget, setStopTarget] = useState<{ externalId: string; label: string } | null>(null);
+  const [confirmStopOlder, setConfirmStopOlder] = useState(false);
+  const [stopMessage, setStopMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const { data: instances } = useQuery({
     queryKey: ["instances"],
     queryFn: scoutApi.listInstances,
+  });
+
+  // Local and free: what this app believes is still running. Syncing runs
+  // first records any scheduled runs whose updates arrived since last time.
+  const { data: live } = useQuery({
+    queryKey: ["monitors"],
+    queryFn: async () => {
+      await scoutApi.syncAllRuns().catch(() => undefined);
+      return scoutApi.monitors();
+    },
+  });
+
+  const refreshMonitors = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["monitors"] });
+    await queryClient.invalidateQueries({ queryKey: ["instances"] });
+    await queryClient.invalidateQueries({ queryKey: ["remote-inventory"] });
+  };
+
+  // Stopping is free and is what actually ends the billing: a monitor runs
+  // on its own interval until Yutori is told it is done.
+  const stopOne = useMutation({
+    mutationFn: (externalId: string) => scoutApi.stopRemote(externalId),
+    onSuccess: async (_, externalId) => {
+      setStopMessage(`Stopped ${externalId}. It won't run or bill again.`);
+      await refreshMonitors();
+    },
+    onError: (e: Error) => setStopMessage(e.message),
+  });
+
+  const stopOlder = useMutation({
+    mutationFn: scoutApi.stopSuperseded,
+    onSuccess: async (result) => {
+      setStopMessage(
+        result.failed.length
+          ? `Stopped ${result.stopped.length}. ${result.failed.length} could not be stopped: ${result.failed
+              .map((f) => `${f.external_id} (${f.error})`)
+              .join("; ")}`
+          : `Stopped ${result.stopped.length} older monitor${result.stopped.length === 1 ? "" : "s"}.`,
+      );
+      await refreshMonitors();
+    },
+    onError: (e: Error) => setStopMessage(e.message),
   });
 
   // Only fetched when asked for: two calls out to Yutori, and the page has to
@@ -74,6 +127,17 @@ export default function ScoutPage() {
           </div>
         </div>
       </div>
+
+      {stopMessage && <div className={styles.notice}>{stopMessage}</div>}
+
+      <LiveMonitors
+        data={live}
+        busy={stopOne.isPending || stopOlder.isPending}
+        onStop={(m) =>
+          setStopTarget({ externalId: m.external_id, label: m.definition_name ?? m.external_id })
+        }
+        onStopOlder={() => setConfirmStopOlder(true)}
+      />
 
       {removeInstance.isError && (
         <div className={styles.alert}>{(removeInstance.error as Error).message}</div>
@@ -264,6 +328,50 @@ export default function ScoutPage() {
         }}
       />
 
+      <ConfirmDialog
+        open={stopTarget !== null}
+        title={`Stop “${stopTarget?.label ?? ""}”?`}
+        body={
+          <p>
+            Marks this monitor done at Yutori, so it stops running and stops billing. It&apos;s
+            free. Questions it already found stay in your pool, and a new run can start a fresh
+            monitor later.
+          </p>
+        }
+        confirmLabel="Stop monitor"
+        busy={stopOne.isPending}
+        onCancel={() => setStopTarget(null)}
+        onConfirm={() => {
+          if (stopTarget) stopOne.mutate(stopTarget.externalId);
+          setStopTarget(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmStopOlder}
+        title="Stop the older monitors?"
+        body={
+          <p>
+            Stops the {live?.superseded_count ?? 0} monitor
+            {live?.superseded_count === 1 ? "" : "s"} left behind by earlier runs. Each scout keeps
+            its newest monitor. Free, and it ends about{" "}
+            {money(
+              (live?.monitors ?? [])
+                .filter((m) => m.superseded)
+                .reduce((sum, m) => sum + m.monthly_cost_usd, 0),
+            )}{" "}
+            a month of spending.
+          </p>
+        }
+        confirmLabel="Stop older monitors"
+        busy={stopOlder.isPending}
+        onCancel={() => setConfirmStopOlder(false)}
+        onConfirm={() => {
+          setConfirmStopOlder(false);
+          stopOlder.mutate();
+        }}
+      />
+
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2 className={styles.sectionTitle}>Everything at Yutori</h2>
@@ -291,6 +399,21 @@ export default function ScoutPage() {
             </div>
           ) : (
             <>
+              {remote?.usage && (
+                <div className={styles.notice}>
+                  <strong>Last {remote.usage.period}:</strong>{" "}
+                  {remote.usage.yutori_runs === null
+                    ? `Yutori's own count isn't available (${remote.usage.error ?? "unknown error"}).`
+                    : `Yutori counted ${remote.usage.yutori_runs} run${remote.usage.yutori_runs === 1 ? "" : "s"} on this key; this app recorded ${remote.usage.recorded_runs}.`}
+                  {remote.usage.yutori_runs !== null &&
+                    remote.usage.yutori_runs > remote.usage.recorded_runs &&
+                    " The difference ran without this app seeing a result — usually a scheduled monitor run that found nothing."}
+                  {remote.pulled && remote.pulled.new > 0 && (
+                    <> Recovered {remote.pulled.new} missed update{remote.pulled.new === 1 ? "" : "s"} just now.</>
+                  )}
+                </div>
+              )}
+
               {remote && remote.untracked_scouts.length > 0 && (
                 <div className={styles.alert}>
                   <strong>
@@ -312,20 +435,51 @@ export default function ScoutPage() {
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th>ID</th><th>Status</th><th>Created</th><th>Updates</th>
-                        <th>Next run</th><th>Tracked</th>
+                        <th>ID</th><th>Scout</th><th>Status</th><th>How often</th>
+                        <th>≈ a month</th><th>Created</th><th>Updates</th>
+                        <th>Next run</th><th>Tracked</th><th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {remote.scouts.map((scout) => (
                         <tr key={scout.id}>
                           <td className={styles.mono}>{scout.id}</td>
+                          <td>
+                            {scout.definition_name ?? "—"}
+                            {scout.superseded && (
+                              <>
+                                {" "}
+                                <span className={`${ws.pill} ${ws.pillBad}`}>Leftover</span>
+                              </>
+                            )}
+                          </td>
                           <td>{scout.status ?? "—"}</td>
+                          <td>{scout.output_interval ? every(scout.output_interval) : "—"}</td>
+                          <td className={styles.num}>
+                            {scout.status === "active" ? money(scout.monthly_cost_usd ?? 0) : "—"}
+                          </td>
                           <td>{fmt(scout.created_at)}</td>
                           <td className={styles.num}>{scout.update_count ?? "—"}</td>
                           <td>{scout.next_run ? fmt(scout.next_run) : "not scheduled"}</td>
                           <td className={scout.tracked ? styles.ok : styles.missed}>
                             {scout.tracked ? "yes" : "untracked"}
+                          </td>
+                          <td>
+                            {scout.status === "active" || scout.status === "paused" ? (
+                              <button
+                                type="button"
+                                className={styles.textButton}
+                                disabled={stopOne.isPending}
+                                onClick={() =>
+                                  setStopTarget({
+                                    externalId: scout.id,
+                                    label: scout.definition_name ?? scout.id,
+                                  })
+                                }
+                              >
+                                Stop
+                              </button>
+                            ) : null}
                           </td>
                         </tr>
                       ))}
@@ -372,5 +526,96 @@ export default function ScoutPage() {
           ))}
       </section>
     </main>
+  );
+}
+
+/**
+ * Monitors this app believes are running — the part of the page that answers
+ * "what is billing me on its own right now?". A leftover is a live monitor
+ * that isn't its scout's newest: before M13 every Scout-mode run created one
+ * and nothing stopped the last.
+ */
+function LiveMonitors({
+  data,
+  busy,
+  onStop,
+  onStopOlder,
+}: {
+  data:
+    | { live_count: number; superseded_count: number; monthly_cost_usd: number; monitors: Monitor[] }
+    | undefined;
+  busy: boolean;
+  onStop: (monitor: Monitor) => void;
+  onStopOlder: () => void;
+}) {
+  return (
+    <section className={styles.section}>
+      <div className={styles.sectionHead}>
+        <h2 className={styles.sectionTitle}>Live monitors</h2>
+        {data && data.superseded_count > 0 && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <button type="button" className={ws.primary} disabled={busy} onClick={onStopOlder}>
+              Stop older monitors ({data.superseded_count})
+            </button>
+            <InfoButton text="Stops every monitor that isn't its scout's newest. Each scout keeps one. Free — stopping never costs anything." />
+          </span>
+        )}
+      </div>
+      <div className={styles.pageSub}>
+        {data === undefined
+          ? "Loading…"
+          : data.live_count === 0
+            ? "None. Nothing is running or billing on its own schedule."
+            : `${data.live_count} running on their own schedule · about ${money(data.monthly_cost_usd)} a month. As recorded here — list what's at Yutori below to refresh from the source.`}
+      </div>
+      {data && data.monitors.length > 0 && (
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Scout</th><th>ID</th><th>How often</th><th>≈ a month</th>
+                <th>Next run</th><th>Started</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.monitors.map((monitor) => (
+                <tr key={monitor.id}>
+                  <td>
+                    {monitor.definition_id ? (
+                      <Link className={styles.textButton} href={`/yutori/scouts/${monitor.definition_id}`}>
+                        {monitor.definition_name ?? "Untitled"}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                    {monitor.superseded && (
+                      <>
+                        {" "}
+                        <span className={`${ws.pill} ${ws.pillBad}`}>Leftover</span>
+                      </>
+                    )}
+                  </td>
+                  <td className={styles.mono}>{monitor.external_id}</td>
+                  <td>{every(monitor.output_interval)}</td>
+                  <td className={styles.num}>{money(monitor.monthly_cost_usd)}</td>
+                  <td>{monitor.next_run ? fmt(monitor.next_run) : "—"}</td>
+                  <td>{fmt(monitor.created_at)}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className={styles.textButton}
+                      disabled={busy}
+                      onClick={() => onStop(monitor)}
+                    >
+                      Stop
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
