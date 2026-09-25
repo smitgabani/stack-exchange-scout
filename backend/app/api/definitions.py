@@ -111,6 +111,8 @@ async def list_definitions(
         if run["account_label"] and run["account_label"] not in entry["accounts"]:
             entry["accounts"].append(run["account_label"])
 
+    template = await definition_service.active_template(db)
+
     # So the list can say which of these ran on the account currently in use.
     active = await credential_repository.get(db, "yutori_api_key")
     active_account = (active.label or active.key_name) if active else None
@@ -119,7 +121,7 @@ async def list_definitions(
         "active_account": active_account,
         "definitions": [
             {
-                **_out(d, rendered=definition_service.render_query(d, profile_data)),
+                **_out(d, rendered=definition_service.render_query(d, profile_data, template)),
                 "stats": stats.get(
                     str(d.id),
                     {"runs": 0, "spend_usd": 0.0, "questions": 0, "last_run": None},
@@ -146,9 +148,13 @@ async def create_definition(
         notes=body.notes,
         config=body.config,
     )
-    return _out(
-        definition,
-        rendered=definition_service.render_query(definition, await _profile_data(db)),
+    return _out(definition, rendered=await _render(db, definition))
+
+
+async def _render(db: AsyncSession, definition: Any) -> str:
+    """What this definition would send right now, with the active template."""
+    return definition_service.render_query(
+        definition, await _profile_data(db), await definition_service.active_template(db)
     )
 
 
@@ -167,12 +173,7 @@ async def get_definition(
 ) -> dict:
     definition = await _require(db, definition_id)
     return {
-        **_out(
-            definition,
-            rendered=definition_service.render_query(
-                definition, await _profile_data(db)
-            ),
-        ),
+        **_out(definition, rendered=await _render(db, definition)),
         "runs": await definition_service.run_history(db, definition_id),
         "run_cost_usd": settings.yutori_run_cost_usd,
         "monitor_interval_seconds": settings.scout_run_interval_seconds,
@@ -196,10 +197,7 @@ async def patch_definition(
             detail="status must be 'draft', 'ready' or 'archived'",
         )
     definition = await definition_service.update_definition(db, definition, changes)
-    return _out(
-        definition,
-        rendered=definition_service.render_query(definition, await _profile_data(db)),
-    )
+    return _out(definition, rendered=await _render(db, definition))
 
 
 def _parse_settings(body: dict[str, Any]) -> YutoriSettings:
@@ -282,9 +280,7 @@ async def clone_definition(
 ) -> dict:
     definition = await _require(db, definition_id)
     clone = await definition_service.clone_definition(db, definition)
-    return _out(
-        clone, rendered=definition_service.render_query(clone, await _profile_data(db))
-    )
+    return _out(clone, rendered=await _render(db, clone))
 
 
 @router.delete("/scout-definitions/{definition_id}")

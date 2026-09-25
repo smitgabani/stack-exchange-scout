@@ -24,7 +24,14 @@ from app.models.scout_definition import ScoutDefinition, ScoutInstance, ScoutRun
 from app.models.webhook_event import WebhookEvent
 from app.repositories import credential_repository
 from app.schemas.profile import ProfileData
-from app.services import ingest_service, query_generator, scout_service, task_settings
+from app.services import (
+    ingest_service,
+    query_generator,
+    query_template_service,
+    scout_service,
+    task_settings,
+    yutori_defaults_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,17 +64,26 @@ def _hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def render_query(definition: ScoutDefinition, profile_data: ProfileData) -> str:
+def render_query(
+    definition: ScoutDefinition, profile_data: ProfileData, template: str | None = None
+) -> str:
     """The text that will actually be sent.
 
     A `topics` definition is rendered from the profile at run time, so editing
     topics keeps it current. A `freeform` one is used exactly as written —
     which is the point of choosing freeform, and why topics must never quietly
     overwrite it.
+
+    `template` is the active query template (M13); callers load it once with
+    `active_template` so a list of definitions costs one read, not one each.
     """
     if definition.query_source == "freeform":
         return definition.query_text or ""
-    return query_generator.generate(profile_data)
+    return query_generator.generate(profile_data, template)
+
+
+async def active_template(db: AsyncSession) -> str:
+    return (await query_template_service.get_active(db)).body
 
 
 def _live_clause():
@@ -143,8 +159,8 @@ async def _stop_monitor(client, instance: ScoutInstance) -> str | None:
 
 
 async def yutori_defaults(db: AsyncSession) -> dict[str, Any]:
-    """The settings every scout starts from."""
-    return task_settings.built_in_defaults()
+    """The settings every scout starts from: built-in, plus any edited defaults."""
+    return await yutori_defaults_service.effective(db)
 
 
 def yutori_overrides(definition: ScoutDefinition) -> dict[str, Any]:
@@ -194,7 +210,7 @@ async def settings_view(
     defaults = await yutori_defaults(db)
     stored = yutori_overrides(definition) if overrides is None else overrides
     eff = task_settings.effective(defaults, stored)
-    query = render_query(definition, profile_data)
+    query = render_query(definition, profile_data, await active_template(db))
     webhook = settings.yutori_webhook_url if settings.public_base_url else None
     return {
         "defaults": defaults,
@@ -372,7 +388,8 @@ async def run_definition(
         return RunOutcome(started=False, error="No usable Yutori API key")
 
     credential = await credential_repository.get(db, "yutori_api_key")
-    query = render_query(definition, profile_data)
+    template = await query_template_service.get_active(db)
+    query = render_query(definition, profile_data, template.body)
     if not query.strip():
         return RunOutcome(started=False, error="This scout has no query yet")
 
@@ -474,6 +491,12 @@ async def run_definition(
         detail={
             "query_hash": _hash(query),
             "trigger": "manual",
+            # Which wording produced this run, for a topics-based scout.
+            **(
+                {"query_template_version": template.version}
+                if definition.query_source == "topics"
+                else {}
+            ),
             # Exactly what was sent, minus the query text (kept on the
             # definition) and with the webhook secret masked — so a run's
             # results can be read against the settings that produced them.

@@ -36,16 +36,29 @@ Return only candidate questions and structured metadata."""
 
 _NONE = "- (none specified)"
 
+# The built-in template, used whenever no edited version is active (M13).
+DEFAULT_TEMPLATE = _TEMPLATE
+
+# Every name a template may use. Filled from the profile in `generate`.
+PLACEHOLDERS = (
+    "topics",
+    "preferred_concepts",
+    "excluded_concepts",
+    "difficulty_min",
+    "difficulty_max",
+)
+
 
 def _bullets(values: list[str]) -> str:
     return "\n".join(f"- {value}" for value in values) if values else _NONE
 
 
-def generate(profile: ProfileData) -> str:
+def generate(profile: ProfileData, template: str | None = None) -> str:
     """Render a Yutori Scout query from the profile.
 
-    Pure: no network, no clock, no database — so it can be unit-tested directly
-    (tdd.md §4.4, M4-B3).
+    `template` is the active edited version, if any; otherwise the built-in
+    one. Pure: no network, no clock, no database — so it can be unit-tested
+    directly (tdd.md §4.4, M4-B3).
     """
     # Weight is included so Yutori can tell a primary interest from a marginal
     # one; topics are ordered heaviest-first for the same reason.
@@ -54,7 +67,7 @@ def generate(profile: ProfileData) -> str:
         for topic in sorted(profile.topics, key=lambda t: t.weight, reverse=True)
     ]
 
-    return _TEMPLATE.format(
+    return (template or _TEMPLATE).format(
         topics=_bullets(topics),
         preferred_concepts=_bullets(profile.preferred_concepts),
         excluded_concepts=_bullets(profile.excluded_concepts),

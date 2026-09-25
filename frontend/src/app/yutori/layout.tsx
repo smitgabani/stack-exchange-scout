@@ -19,6 +19,7 @@ const TABS = [
   { href: "/yutori/monitors", label: "Monitors", hint: "Live Scouts and remote objects" },
   { href: "/yutori/runs", label: "Runs", hint: "What each run cost and found" },
   { href: "/yutori/accounts", label: "Accounts", hint: "API keys and per-key spend" },
+  { href: "/yutori/defaults", label: "Defaults", hint: "Query template and the settings every scout inherits" },
 ];
 
 export default function YutoriLayout({ children }: { children: React.ReactNode }) {

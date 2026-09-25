@@ -20,6 +20,7 @@ from app.api import (
     questions,
     scout,
     webhooks,
+    yutori,
 )
 from app.api import settings as settings_api
 from app.core.config import settings
@@ -110,6 +111,7 @@ app.include_router(digests.router)
 app.include_router(llm.router)
 app.include_router(jobs.router)
 app.include_router(dashboard.router)
+app.include_router(yutori.router)
 
 
 @app.get("/")

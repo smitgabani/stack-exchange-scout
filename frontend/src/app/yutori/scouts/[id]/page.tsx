@@ -232,6 +232,8 @@ export default function DefinitionPage() {
                 Built from your topics and weights on the{" "}
                 <Link className={styles.textButton} href="/topics">Topics page</Link>, and rebuilt
                 every time it runs — so changing topics updates it without editing anything here.
+                The wording around them is the{" "}
+                <Link className={styles.textButton} href="/yutori/defaults">query template</Link>.
               </p>
             )}
             <div className={styles.field}>
