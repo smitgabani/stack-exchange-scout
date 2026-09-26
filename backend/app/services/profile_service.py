@@ -2,10 +2,10 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.profile import Profile
-from app.repositories import profile_repository
 from app.schemas.profile import ProfileData
 from app.services.credentials_service import has_api_key
 
@@ -24,10 +24,17 @@ def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
 
 
 async def get_or_create_profile(db: AsyncSession) -> Profile:
-    profile = await profile_repository.get(db)
+    profile = await db.scalar(select(Profile).limit(1))
     if profile is None:
-        profile = await profile_repository.create_default(db)
+        profile = Profile(data=ProfileData().model_dump(mode="json"), version=1)
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
     return profile
+
+
+async def get_profile_data(db: AsyncSession) -> ProfileData:
+    return ProfileData.model_validate((await get_or_create_profile(db)).data)
 
 
 async def apply_patch(db: AsyncSession, patch: dict[str, Any]) -> Profile:
@@ -59,9 +66,10 @@ async def apply_patch(db: AsyncSession, patch: dict[str, Any]) -> Profile:
             detail="Cannot switch llm.provider to 'openai' without a stored OpenAI key",
         )
 
-    # No longer pushes anything to Yutori. It used to PATCH the legacy single
-    # Scout on every save — including its interval, to `scout.interval_days` —
-    # which could make a monitor nobody was watching run every 3 days. Scouts
-    # now render their query from the profile when they run, and a live
-    # monitor is updated deliberately from its own page (M13).
-    return await profile_repository.save(db, profile, validated.model_dump(mode="json"))
+    # Pushes nothing to Yutori: scouts render their query from the profile when
+    # they run, and a live monitor is updated deliberately from its own page.
+    profile.data = validated.model_dump(mode="json")
+    profile.version += 1
+    await db.commit()
+    await db.refresh(profile)
+    return profile

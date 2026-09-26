@@ -6,15 +6,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_gemini_key
 from app.core.config import settings
 from app.core.db import get_db
 from app.models.challenge import Challenge
 from app.models.digest import Digest
 from app.models.question import Question
-from app.schemas.profile import ProfileData
 from app.services import block_service, digest_service, email_service
-from app.services.profile_service import get_or_create_profile
+from app.services.profile_service import get_profile_data
 
 router = APIRouter(tags=["digests"])
 
@@ -91,16 +89,6 @@ def _challenge_summary(challenge: Challenge, question=None) -> ChallengeSummaryO
     )
 
 
-class DigestOut(BaseModel):
-    id: uuid.UUID
-    status: str
-    question_count: int
-    generated_at: datetime
-    sent_at: datetime | None
-    # Summaries: the dashboard shows a title, tags and a difficulty per card.
-    challenges: list[ChallengeSummaryOut] = []
-
-
 def _challenge_out(challenge: Challenge, question, meta: dict[str, dict]) -> ChallengeOut:
     """One challenge as the API returns it.
 
@@ -137,40 +125,6 @@ def _challenge_out(challenge: Challenge, question, meta: dict[str, dict]) -> Cha
         # deleted from either half stops rendering everywhere at once.
         blocks=order,
         block_meta=[meta[key] for key in order],
-    )
-
-
-@router.get("/digests", response_model=list[DigestOut])
-async def list_digests(db: AsyncSession = Depends(get_db), limit: int = 20) -> list[DigestOut]:
-    digests = (
-        await db.scalars(select(Digest).order_by(Digest.generated_at.desc()).limit(limit))
-    ).all()
-    return [
-        DigestOut(
-            id=d.id,
-            status=d.status,
-            question_count=d.question_count,
-            generated_at=d.generated_at,
-            sent_at=d.sent_at,
-        )
-        for d in digests
-    ]
-
-
-@router.get("/digests/{digest_id}", response_model=DigestOut)
-async def get_digest(digest_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> DigestOut:
-    digest = await db.get(Digest, digest_id)
-    if digest is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Digest not found")
-
-    pairs = await digest_service.load_digest_questions(db, digest.id)
-    return DigestOut(
-        id=digest.id,
-        status=digest.status,
-        question_count=digest.question_count,
-        generated_at=digest.generated_at,
-        sent_at=digest.sent_at,
-        challenges=[_challenge_summary(challenge, question) for question, challenge in pairs],
     )
 
 
@@ -242,40 +196,6 @@ async def get_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(get_
     return _challenge_out(challenge, question, await block_service.render_meta(db))
 
 
-@router.post("/challenges/{challenge_id}/reformat")
-async def reformat_challenge(
-    challenge_id: uuid.UUID,
-    format_id: int | None = None,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Add the blocks a format wants that this challenge does not have yet.
-
-    A top-up, not a regeneration: existing blocks are left alone, so hints
-    already revealed do not change mid-solve. The challenge keeps its id, which
-    is what keeps the link in an already-sent digest working.
-
-    Costs one LLM call, and nothing at all when there is nothing to add.
-    """
-    challenge = await db.get(Challenge, challenge_id)
-    if challenge is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Challenge not found")
-    question = await db.get(Question, challenge.question_id)
-    if question is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
-
-    profile = await get_or_create_profile(db)
-    profile_data = ProfileData.model_validate(profile.data)
-
-    try:
-        return await digest_service.reformat_challenge(
-            db, profile_data, challenge, question, format_id=format_id
-        )
-    except digest_service.PromotionError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except digest_service.DigestError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-
-
 @router.delete("/challenges/{challenge_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> None:
     """Delete one challenge, leaving its question and its digest alone.
@@ -290,37 +210,6 @@ async def delete_challenge(challenge_id: uuid.UUID, db: AsyncSession = Depends(g
 
     await db.delete(challenge)
     await db.commit()
-
-
-@router.post("/digest/generate", response_model=DigestOut, dependencies=[Depends(require_gemini_key)])
-async def generate_digest(db: AsyncSession = Depends(get_db)) -> DigestOut:
-    """Select the top candidates and curate them into challenges.
-
-    Synchronous for now — M7-TEST budgets 30s for five questions, and the
-    stage boundary is where M11's worker will slot in.
-    """
-    profile = await get_or_create_profile(db)
-    profile_data = ProfileData.model_validate(profile.data)
-
-    try:
-        digest = await digest_service.generate(db, profile_data, profile.version)
-    except digest_service.DigestError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)
-        ) from exc
-
-    pairs = await digest_service.load_digest_questions(db, digest.id)
-    meta = await block_service.render_meta(db)
-    return DigestOut(
-        id=digest.id,
-        status=digest.status,
-        question_count=digest.question_count,
-        generated_at=digest.generated_at,
-        sent_at=digest.sent_at,
-        challenges=[
-            _challenge_out(challenge, question, meta) for question, challenge in pairs
-        ],
-    )
 
 
 @router.post("/digest/send")
@@ -341,10 +230,8 @@ async def send_digest(digest_id: uuid.UUID | None = None, db: AsyncSession = Dep
     if digest.status == "sent":
         return {"status": "already_sent", "digest_id": str(digest.id)}
 
-    profile = await get_or_create_profile(db)
-    profile_data = ProfileData.model_validate(profile.data)
-
     if digest.status == "empty":
+        profile_data = await get_profile_data(db)
         subject, body = email_service.render_empty_digest(profile_data.digest.frequency_days)
     else:
         pairs = await digest_service.load_digest_questions(db, digest.id)

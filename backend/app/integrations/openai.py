@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from app.integrations.llm import CHALLENGE_SCHEMA, LLMError
+from app.integrations.llm import LLMError
 
 BASE_URL = "https://api.openai.com/v1"
 DEFAULT_MODEL = "gpt-4.1-mini"
@@ -25,7 +25,7 @@ class OpenAIProvider:
         self._timeout = timeout
 
     async def generate_json(
-        self, *, system_instruction: str, prompt: str, schema: dict[str, Any] | None = None
+        self, *, system_instruction: str, prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
         payload = {
             "model": self.model,
@@ -35,7 +35,7 @@ class OpenAIProvider:
             ],
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "challenge", "schema": schema or CHALLENGE_SCHEMA, "strict": False},
+                "json_schema": {"name": "challenge", "schema": schema, "strict": False},
             },
             "temperature": 0.7,
         }

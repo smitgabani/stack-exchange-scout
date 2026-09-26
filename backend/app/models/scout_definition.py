@@ -28,10 +28,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
-DEFINITION_STATUSES = ("draft", "ready", "archived")
-INSTANCE_KINDS = ("research_task", "scout")
-RUN_STATUSES = ("running", "succeeded", "failed", "timed_out")
-
 
 class ScoutDefinition(Base):
     """A saved query. Local, free, and the thing the dashboard is built around."""
@@ -47,7 +43,6 @@ class ScoutDefinition(Base):
     # topics doesn't silently rewrite a query somebody hand-tuned.
     query_source: Mapped[str] = mapped_column(String(16), default="topics")
     query_text: Mapped[str | None] = mapped_column(Text)
-    query_hash: Mapped[str | None] = mapped_column(String(64))
 
     # Per-definition overrides (interval, timezone). Free-form because Yutori's
     # accepted fields have changed twice already.

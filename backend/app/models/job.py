@@ -7,12 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
-# What a job can be asked to do. Kept as a tuple rather than a database enum:
-# adding a kind should not need a migration, and the value is only ever
-# written by this application.
-JOB_KINDS = ("digest_generate", "challenge_create", "reformat", "llm_test")
-JOB_STATUSES = ("queued", "running", "succeeded", "failed")
-
 
 class Job(Base):
     """One piece of work that outlives the request that asked for it.

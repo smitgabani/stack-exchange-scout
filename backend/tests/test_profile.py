@@ -10,7 +10,7 @@ def test_get_profile_returns_full_shape(client: TestClient, auth_cookies: dict[s
     assert response.status_code == 200
     body = response.json()
     assert "version" in body
-    for key in ("topics", "preferred_concepts", "excluded_concepts", "difficulty", "digest", "scout", "llm"):
+    for key in ("topics", "preferred_concepts", "excluded_concepts", "difficulty", "digest", "llm"):
         assert key in body["data"]
 
 

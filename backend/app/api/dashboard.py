@@ -23,8 +23,7 @@ from app.models.challenge import Challenge
 from app.models.digest import Digest
 from app.models.question import Question
 from app.models.scout_definition import ScoutRun
-from app.schemas.profile import ProfileData
-from app.services.profile_service import get_or_create_profile
+from app.services.profile_service import get_profile_data
 
 router = APIRouter(tags=["dashboard"])
 
@@ -78,8 +77,7 @@ def _card(challenge: Challenge, question: Question) -> dict:
 
 @router.get("/dashboard")
 async def dashboard(db: AsyncSession = Depends(get_db)) -> dict:
-    profile = await get_or_create_profile(db)
-    profile_data = ProfileData.model_validate(profile.data)
+    profile_data = await get_profile_data(db)
 
     # --- what there is to solve ---------------------------------------
     unsolved = (

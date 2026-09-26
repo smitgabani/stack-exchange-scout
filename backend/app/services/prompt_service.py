@@ -12,12 +12,13 @@ given batch, and makes rollback a matter of reactivating an old row.
 """
 
 import logging
+from functools import partial
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.prompt_template import PromptTemplate
-from app.services import challenge_service
+from app.services import challenge_service, versioned
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +79,9 @@ async def get_active(db: AsyncSession) -> challenge_service.PromptText:
     )
 
 
-async def list_versions(db: AsyncSession) -> list[PromptTemplate]:
-    return list(
-        await db.scalars(select(PromptTemplate).order_by(PromptTemplate.version.desc()))
-    )
+list_versions = partial(versioned.list_versions, model=PromptTemplate)
+activate = partial(versioned.activate, model=PromptTemplate)
+reset_to_default = partial(versioned.reset, model=PromptTemplate)
 
 
 async def save_version(
@@ -89,40 +89,10 @@ async def save_version(
 ) -> PromptTemplate:
     """Store a new version and make it active."""
     system_instruction, user_preamble = _validate(system_instruction, user_preamble)
-
-    highest = await db.scalar(select(PromptTemplate.version).order_by(PromptTemplate.version.desc()))
-    # Version 1 is the code default, so a first stored edit starts at 2 and
-    # never collides with the provenance already on existing challenges.
-    next_version = max(highest or 0, challenge_service.PROMPT_VERSION) + 1
-
-    await db.execute(update(PromptTemplate).values(is_active=False).where(PromptTemplate.is_active))
-    row = PromptTemplate(
-        version=next_version,
-        system_instruction=system_instruction,
-        user_preamble=user_preamble,
-        notes=notes,
-        is_active=True,
+    row = await versioned.save_active(
+        db,
+        PromptTemplate(system_instruction=system_instruction, user_preamble=user_preamble, notes=notes),
+        floor=challenge_service.PROMPT_VERSION,
     )
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
     logger.info("Prompt template v%d activated", row.version)
     return row
-
-
-async def activate(db: AsyncSession, version: int) -> PromptTemplate | None:
-    """Roll back to a stored version without copying it forward."""
-    row = await db.scalar(select(PromptTemplate).where(PromptTemplate.version == version))
-    if row is None:
-        return None
-    await db.execute(update(PromptTemplate).values(is_active=False).where(PromptTemplate.is_active))
-    row.is_active = True
-    await db.commit()
-    await db.refresh(row)
-    return row
-
-
-async def reset_to_default(db: AsyncSession) -> None:
-    """Deactivate every stored template, returning to the prompt in the code."""
-    await db.execute(update(PromptTemplate).values(is_active=False).where(PromptTemplate.is_active))
-    await db.commit()

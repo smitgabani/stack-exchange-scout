@@ -359,7 +359,7 @@ class YutoriClient:
           comes round. A run started this way produced no update at all.
 
         Which means this is not, on its own, a "run now" button. Delete and
-        recreate is — see `settings.scout_run_mechanism`.
+        recreate is.
         """
         return await self._request("POST", f"{SCOUTS_PATH}/{scout_id}/restart")
 

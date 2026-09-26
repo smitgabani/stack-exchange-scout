@@ -18,7 +18,6 @@ from app.api import (
     llm,
     profile,
     questions,
-    scout,
     webhooks,
     yutori,
 )
@@ -102,7 +101,6 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(profile.router)
 app.include_router(settings_api.router)
-app.include_router(scout.router)
 app.include_router(definitions.router)
 app.include_router(accounts.router)
 app.include_router(webhooks.router)

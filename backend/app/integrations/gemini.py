@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from app.integrations.llm import CHALLENGE_SCHEMA, LLMError
+from app.integrations.llm import LLMError
 
 BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
@@ -24,7 +24,7 @@ class GeminiProvider:
         self._timeout = timeout
 
     async def generate_json(
-        self, *, system_instruction: str, prompt: str, schema: dict[str, Any] | None = None
+        self, *, system_instruction: str, prompt: str, schema: dict[str, Any]
     ) -> dict[str, Any]:
         payload = {
             # The system instruction is sent separately from the untrusted
@@ -34,7 +34,7 @@ class GeminiProvider:
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "response_mime_type": "application/json",
-                "response_json_schema": schema or CHALLENGE_SCHEMA,
+                "response_json_schema": schema,
                 "temperature": 0.7,
             },
         }

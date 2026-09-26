@@ -1,8 +1,8 @@
 """A ceiling on the endpoints that spend money.
 
-Every job here costs a real LLM call, and a scout run costs $0.35. Nothing
-stopped a stuck retry loop — or a double-click — from spending repeatedly, and
-the only evidence would have been the bill.
+Every job here costs a real LLM call. Nothing stopped a stuck retry loop — or a
+double-click — from spending repeatedly, and the only evidence would have been
+the bill.
 
 In-process counters rather than Redis. The app runs as a single machine that no
 longer scales to zero, so one process sees every request; a second machine would
@@ -20,7 +20,6 @@ from fastapi import HTTPException, Request, status
 _LIMITS: dict[str, tuple[int, int]] = {
     # name: (max calls, per seconds)
     "llm": (20, 60 * 60),
-    "scout_run": (10, 60 * 60),
 }
 
 _calls: dict[str, list[float]] = defaultdict(list)
@@ -49,11 +48,6 @@ def _check(bucket: str) -> None:
 def limit_llm(request: Request) -> None:
     """Anything that calls a model. Used as a FastAPI dependency."""
     _check("llm")
-
-
-def limit_scout_run(request: Request) -> None:
-    """Anything that spends Yutori credit."""
-    _check("scout_run")
 
 
 def reset() -> None:

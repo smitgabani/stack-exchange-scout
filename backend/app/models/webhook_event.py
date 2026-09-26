@@ -7,8 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 
-WEBHOOK_EVENT_STATUSES = ("received", "processed", "failed", "ignored")
-
 
 class WebhookEvent(Base):
     """Durable inbox for inbound provider webhooks.

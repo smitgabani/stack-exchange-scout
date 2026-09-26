@@ -212,17 +212,6 @@ async def test_a_definition_with_no_query_is_not_run(
 
 
 @pytest.mark.anyio
-async def test_effectiveness_ranks_by_questions_per_dollar(db_session, definition):
-    """At a flat $0.35 a run, spend alone says nothing about which query is
-    worth keeping."""
-    rows = await definition_service.effectiveness(db_session)
-
-    assert any(row["id"] == str(definition.id) for row in rows)
-    ranked = [r["per_dollar"] for r in rows if r["per_dollar"] is not None]
-    assert ranked == sorted(ranked, reverse=True)
-
-
-@pytest.mark.anyio
 async def test_deleting_a_research_instance_needs_no_api_call(db_session, definition, monkeypatch):
     """A research task is already over — there is nothing at Yutori to delete,
     so reaching for the API would only be a way to fail."""

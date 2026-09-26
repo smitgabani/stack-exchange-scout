@@ -11,8 +11,8 @@ from app.api.deps import require_yutori_key
 from app.core.config import settings
 from app.core.db import get_db
 from app.integrations.yutori import CANDIDATE_OUTPUT_SCHEMA
+from app.models.scout_definition import ScoutDefinition
 from app.repositories import credential_repository
-from app.schemas.profile import ProfileData
 from app.schemas.yutori_settings import (
     MAX_SCHEMA_CHARS,
     MAX_SUBSCRIBERS,
@@ -21,7 +21,7 @@ from app.schemas.yutori_settings import (
     plain_errors,
 )
 from app.services import definition_service, task_settings
-from app.services.profile_service import get_or_create_profile
+from app.services.profile_service import get_profile_data
 
 router = APIRouter(tags=["scout-definitions"])
 
@@ -65,11 +65,6 @@ def _out(definition: Any, *, rendered: str | None = None) -> dict:
     }
 
 
-async def _profile_data(db: AsyncSession) -> ProfileData:
-    profile = await get_or_create_profile(db)
-    return ProfileData.model_validate(profile.data)
-
-
 @router.get("/scout-definitions")
 async def list_definitions(
     include_archived: bool = False, db: AsyncSession = Depends(get_db)
@@ -77,7 +72,7 @@ async def list_definitions(
     definitions = await definition_service.list_definitions(
         db, include_archived=include_archived
     )
-    profile_data = await _profile_data(db)
+    profile_data = await get_profile_data(db)
     history = await definition_service.run_history(db)
 
     stats: dict[str, dict] = {}
@@ -154,12 +149,12 @@ async def create_definition(
 async def _render(db: AsyncSession, definition: Any) -> str:
     """What this definition would send right now, with the active template."""
     return definition_service.render_query(
-        definition, await _profile_data(db), await definition_service.active_template(db)
+        definition, await get_profile_data(db), await definition_service.active_template(db)
     )
 
 
 async def _require(db: AsyncSession, definition_id: uuid.UUID):
-    definition = await definition_service.get_definition(db, definition_id)
+    definition = await db.get(ScoutDefinition, definition_id)
     if definition is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No such scout"
@@ -214,7 +209,7 @@ async def _settings_out(
     db: AsyncSession, definition: Any, *, overrides: dict[str, Any] | None = None
 ) -> dict:
     view = await definition_service.settings_view(
-        db, definition, await _profile_data(db), overrides=overrides
+        db, definition, await get_profile_data(db), overrides=overrides
     )
     return {
         **view,
@@ -315,7 +310,7 @@ async def run_definition(
         )
     definition = await _require(db, definition_id)
     outcome = await definition_service.run_definition(
-        db, definition, await _profile_data(db), mode=mode, replace=replace
+        db, definition, await get_profile_data(db), mode=mode, replace=replace
     )
     if outcome.conflict == "live_monitor":
         # Structured, so the UI can show the monitor and offer to replace it.
@@ -400,7 +395,7 @@ async def stop_remote(external_id: str, db: AsyncSession = Depends(get_db)) -> d
 @router.get("/scout-instances/{instance_id}/remote")
 async def monitor_remote(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """A live monitor as Yutori reports it, and where it differs from its scout. Free."""
-    result = await definition_service.monitor_remote(db, instance_id, await _profile_data(db))
+    result = await definition_service.monitor_remote(db, instance_id, await get_profile_data(db))
     if result.get("error"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["error"])
     return result
@@ -409,7 +404,7 @@ async def monitor_remote(instance_id: uuid.UUID, db: AsyncSession = Depends(get_
 @router.post("/scout-instances/{instance_id}/apply", dependencies=[Depends(require_yutori_key)])
 async def apply_to_monitor(instance_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Send the scout's saved settings to its live monitor. Free — no run starts."""
-    result = await definition_service.apply_to_monitor(db, instance_id, await _profile_data(db))
+    result = await definition_service.apply_to_monitor(db, instance_id, await get_profile_data(db))
     if not result.get("applied"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result["error"])
     return result
@@ -498,9 +493,3 @@ async def sync_run(run_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dic
 async def sync_all_runs(db: AsyncSession = Depends(get_db)) -> dict:
     """Advance every unfinished run."""
     return {"synced": await definition_service.sync_in_flight(db)}
-
-
-@router.get("/scout-effectiveness")
-async def effectiveness(db: AsyncSession = Depends(get_db)) -> dict:
-    """Definitions ranked by questions per dollar."""
-    return {"rows": await definition_service.effectiveness(db)}

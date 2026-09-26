@@ -6,7 +6,6 @@ so the question the dashboard exists to answer — which query earns its $0.35 �
 stays answerable even after the remote object and the key are gone.
 """
 
-import hashlib
 import logging
 import uuid
 from dataclasses import dataclass
@@ -65,10 +64,6 @@ DONE_STATES = ("done",)
 _SCHEDULED_RUNS_LOCK = 7_305_113
 
 
-def _hash(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
-
-
 def render_query(
     definition: ScoutDefinition, profile_data: ProfileData, template: str | None = None
 ) -> str:
@@ -105,13 +100,6 @@ def monitor_interval(instance: ScoutInstance) -> int:
     return int(recorded) if recorded else settings.scout_run_interval_seconds
 
 
-def monthly_cost(interval_seconds: int | None) -> float:
-    """What a monitor costs over a 30-day month at this interval."""
-    if not interval_seconds or interval_seconds <= 0:
-        return 0.0
-    return round((30 * 24 * 3600 / interval_seconds) * settings.yutori_run_cost_usd, 2)
-
-
 def monitor_view(instance: ScoutInstance) -> dict[str, Any]:
     interval = monitor_interval(instance)
     return {
@@ -121,7 +109,7 @@ def monitor_view(instance: ScoutInstance) -> dict[str, Any]:
         "state": instance.state,
         "account_fingerprint": instance.account_fingerprint,
         "output_interval": interval,
-        "monthly_cost_usd": monthly_cost(interval),
+        "monthly_cost_usd": task_settings.monthly_cost(interval),
         "next_run": (instance.detail or {}).get("next_run"),
         "created_at": instance.created_at.isoformat() if instance.created_at else None,
     }
@@ -163,11 +151,6 @@ async def _stop_monitor(client, instance: ScoutInstance) -> str | None:
     return None
 
 
-async def yutori_defaults(db: AsyncSession) -> dict[str, Any]:
-    """The settings every scout starts from: built-in, plus any edited defaults."""
-    return await yutori_defaults_service.effective(db)
-
-
 def yutori_overrides(definition: ScoutDefinition) -> dict[str, Any]:
     return dict((definition.config or {}).get("yutori") or {})
 
@@ -180,7 +163,7 @@ async def effective_settings(
     `overrides` replaces the stored ones — used to preview a draft for free.
     """
     return task_settings.effective(
-        await yutori_defaults(db),
+        await yutori_defaults_service.effective(db),
         yutori_overrides(definition) if overrides is None else overrides,
     )
 
@@ -212,7 +195,7 @@ async def settings_view(
     The preview is built by the same function a run uses, so what is shown is
     what would be sent — with the webhook secret masked.
     """
-    defaults = await yutori_defaults(db)
+    defaults = await yutori_defaults_service.effective(db)
     stored = yutori_overrides(definition) if overrides is None else overrides
     eff = task_settings.effective(defaults, stored)
     query = render_query(definition, profile_data, await active_template(db))
@@ -245,12 +228,6 @@ async def list_definitions(
     return list(await db.scalars(statement))
 
 
-async def get_definition(
-    db: AsyncSession, definition_id: uuid.UUID
-) -> ScoutDefinition | None:
-    return await db.get(ScoutDefinition, definition_id)
-
-
 async def create_definition(
     db: AsyncSession,
     *,
@@ -264,7 +241,6 @@ async def create_definition(
         name=name,
         query_source=query_source,
         query_text=query_text,
-        query_hash=_hash(query_text) if query_text else None,
         notes=notes,
         config=config,
         status="draft",
@@ -285,8 +261,6 @@ async def update_definition(
         # Merged, not replaced: config holds unrelated keys (the preferred run
         # mode, the Yutori settings), and a save of one mustn't drop the other.
         definition.config = {**(definition.config or {}), **changes["config"]}
-    if changes.get("query_text"):
-        definition.query_hash = _hash(changes["query_text"])
     if definition.status == "archived" and definition.archived_at is None:
         definition.archived_at = datetime.now(UTC)
     if definition.status != "archived":
@@ -494,7 +468,6 @@ async def run_definition(
         cost_usd=settings.yutori_run_cost_usd,
         status="running",
         detail={
-            "query_hash": _hash(query),
             "trigger": "manual",
             # Which wording produced this run, for a topics-based scout.
             **(
@@ -514,7 +487,6 @@ async def run_definition(
     db.add(run)
 
     definition.query_text = query
-    definition.query_hash = _hash(query)
     if definition.status == "draft":
         definition.status = "ready"
     await db.commit()
@@ -537,8 +509,7 @@ async def forget_instance(db: AsyncSession, instance_id: uuid.UUID) -> dict[str,
     is correct, but it also means an instance pointing at another account's
     key has no way to leave this app's list at all: not deletable (wrong key),
     and until now not forgettable either. This is that second door: it clears
-    the reference this app holds and nothing else, mirroring the legacy
-    Scout's `/scout/forget` for the one case it existed to solve.
+    the reference this app holds and nothing else.
     """
     instance = await db.get(ScoutInstance, instance_id)
     if instance is None:
@@ -702,7 +673,7 @@ async def _monitor_target(
         await db.get(ScoutDefinition, instance.definition_id) if instance.definition_id else None
     )
     if definition is None:
-        return await yutori_defaults(db), ""
+        return await yutori_defaults_service.effective(db), ""
     eff = await effective_settings(db, definition)
     query = render_query(definition, profile_data, await active_template(db))
     return eff, query
@@ -1040,7 +1011,7 @@ async def remote_inventory(db: AsyncSession) -> dict[str, Any]:
                     "update_count": item.get("update_count"),
                     "next_run": item.get("next_run_timestamp"),
                     "output_interval": interval,
-                    "monthly_cost_usd": monthly_cost(int(interval))
+                    "monthly_cost_usd": task_settings.monthly_cost(int(interval))
                     if interval and status_ == "active"
                     else 0.0,
                     "tracked": scout_id in tracked,
@@ -1481,48 +1452,6 @@ async def finish_run(
     await db.commit()
     await db.refresh(run)
     return run
-
-
-async def active_run(db: AsyncSession) -> ScoutRun | None:
-    return await db.scalar(
-        select(ScoutRun)
-        .where(ScoutRun.status == "running")
-        .order_by(ScoutRun.started_at.desc())
-    )
-
-
-async def effectiveness(db: AsyncSession) -> list[dict]:
-    """Definitions ranked by what they return per dollar.
-
-    The page's reason for existing: at a flat $0.35 a run, cost tells you
-    nothing on its own and run count tells you less.
-    """
-    definitions = await list_definitions(db, include_archived=True)
-    history = await run_history(db)
-
-    by_definition: dict[str, list[dict]] = {}
-    for run in history:
-        by_definition.setdefault(run["definition_id"] or "", []).append(run)
-
-    rows = []
-    for definition in definitions:
-        runs = by_definition.get(str(definition.id), [])
-        spend = sum(r["cost_usd"] or 0 for r in runs)
-        questions = sum(r.get("questions") or 0 for r in runs)
-        rows.append(
-            {
-                "id": str(definition.id),
-                "name": definition.name,
-                "status": definition.status,
-                "runs": len(runs),
-                "spend_usd": round(spend, 2),
-                "questions": questions,
-                "per_dollar": round(questions / spend, 1) if spend else None,
-            }
-        )
-    return sorted(
-        rows, key=lambda r: (r["per_dollar"] is None, -(r["per_dollar"] or 0))
-    )
 
 
 # What a question's current state means for the run that found it. Grouped

@@ -10,8 +10,8 @@ from app.core.db import get_db
 from app.models.challenge import Challenge
 from app.models.question import Question
 from app.schemas.profile import ProfileData
-from app.services import digest_service, enrichment_service, format_service, rank_stage
-from app.services.profile_service import get_or_create_profile
+from app.services import enrichment_service, ingest_service, rank_stage
+from app.services.profile_service import get_or_create_profile, get_profile_data
 
 router = APIRouter(tags=["questions"])
 
@@ -248,55 +248,14 @@ async def reopen_question(question_id: uuid.UUID, db: AsyncSession = Depends(get
     return QuestionOut.from_model(question, challenge_ids.get(question.id))
 
 
-@router.post("/questions/{question_id}/challenge", status_code=status.HTTP_201_CREATED)
-async def promote_question(
-    question_id: uuid.UUID,
-    format_id: int | None = None,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Turn a question into a challenge regardless of what it scored.
+@router.post("/candidates/ingest")
+async def ingest_candidates(db: AsyncSession = Depends(get_db)) -> dict:
+    """Turn stored webhook events into question rows.
 
-    The scoring formula decides what a digest contains; this is the escape
-    hatch for when the formula and the user disagree. Costs one LLM call and no
-    Yutori credit.
-
-    No `require_gemini_key` guard, unlike `/digest/generate`: the profile may
-    select OpenAI, and that dependency would refuse a perfectly usable OpenAI
-    setup for want of a Gemini key. `resolve_provider` checks the key belonging
-    to the provider actually chosen, and its failure is surfaced as the 403
-    below.
+    Separate from the webhook itself so ingestion is re-runnable and survives
+    the machine being stopped mid-flight.
     """
-    question = await db.get(Question, question_id)
-    if question is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
-
-    profile = await get_or_create_profile(db)
-    profile_data = ProfileData.model_validate(profile.data)
-
-    try:
-        challenge = await digest_service.promote_question(
-            db, profile_data, question, format_id=format_id
-        )
-    except digest_service.PromotionError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except digest_service.DigestError as exc:
-        # resolve_provider only raises for a missing/unusable key.
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-
-    # Recomputed rather than threaded back out of the service: cheap, and it
-    # keeps "what did I ask for" and "what arrived" compared in one place.
-    fmt = await format_service.resolve_for_run(db, format_id)
-    produced = challenge.content or {}
-    missing = [block.key for block in fmt.blocks if block.key not in produced]
-
-    return {
-        "challenge_id": str(challenge.id),
-        "question_id": str(question.id),
-        "format": fmt.name,
-        # Asked for and not produced, so a short challenge is explained rather
-        # than left to be noticed.
-        "missing": missing,
-    }
+    return (await ingest_service.ingest_pending(db)).as_dict()
 
 
 @router.post("/candidates/enrich")
@@ -307,9 +266,7 @@ async def enrich_candidates(db: AsyncSession = Depends(get_db)) -> dict:
     and so a Stack Exchange outage is recoverable by simply running it again.
     M11 will call this on a schedule.
     """
-    profile = await get_or_create_profile(db)
-    result = await enrichment_service.run(db, ProfileData.model_validate(profile.data))
-    return result.as_dict()
+    return (await enrichment_service.run(db, await get_profile_data(db))).as_dict()
 
 
 @router.post("/candidates/rank")

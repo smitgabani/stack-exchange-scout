@@ -1,10 +1,4 @@
-"""Start a long job, and ask how it is going.
-
-These sit alongside the synchronous endpoints they replace rather than
-replacing them, because the backend and the frontend do not deploy together —
-removing an endpoint the deployed frontend still calls takes the app down, as
-it did once already. The synchronous versions go once the frontend has moved.
-"""
+"""Start a long job, and ask how it is going."""
 
 import uuid
 
@@ -126,7 +120,7 @@ async def start_llm_test(
 @router.get("/{job_id}")
 async def get_job(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> dict:
     """Cheap by design — this is what the Check status button calls."""
-    job = await job_service.get(db, job_id)
+    job = await db.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No such job")
     return _out(job)

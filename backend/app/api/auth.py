@@ -45,13 +45,6 @@ async def logout(response: Response) -> SessionStatus:
     return SessionStatus(authenticated=False)
 
 
-@router.get("/session", response_model=SessionStatus)
-async def session(request: Request) -> SessionStatus:
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    authenticated = token is not None and verify_session_token(token)
-    return SessionStatus(authenticated=authenticated)
-
-
 class BootstrapOut(BaseModel):
     """Everything the app shell needs before it can render anything."""
 

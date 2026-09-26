@@ -12,12 +12,13 @@ fresh install and one whose templates were all reset behave identically.
 import logging
 import string
 from dataclasses import dataclass
+from functools import partial
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.query_template import QueryTemplate
-from app.services import query_generator
+from app.services import query_generator, versioned
 
 logger = logging.getLogger(__name__)
 
@@ -92,38 +93,15 @@ async def get_active(db: AsyncSession) -> ActiveTemplate:
     return ActiveTemplate(body=row.body, version=row.version, is_default=False)
 
 
-async def list_versions(db: AsyncSession) -> list[QueryTemplate]:
-    return list(await db.scalars(select(QueryTemplate).order_by(QueryTemplate.version.desc())))
+list_versions = partial(versioned.list_versions, model=QueryTemplate)
+activate = partial(versioned.activate, model=QueryTemplate)
+reset_to_default = partial(versioned.reset, model=QueryTemplate)
 
 
 async def save_version(db: AsyncSession, *, body: str, notes: str | None = None) -> QueryTemplate:
     """Store a new version and make it active."""
-    body = validate(body)
-    highest = await db.scalar(select(QueryTemplate.version).order_by(QueryTemplate.version.desc()))
-    next_version = max(highest or 0, BUILT_IN_VERSION) + 1
-
-    await db.execute(update(QueryTemplate).values(is_active=False).where(QueryTemplate.is_active))
-    row = QueryTemplate(version=next_version, body=body, notes=notes, is_active=True)
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
+    row = await versioned.save_active(
+        db, QueryTemplate(body=validate(body), notes=notes), floor=BUILT_IN_VERSION
+    )
     logger.info("Query template v%d activated", row.version)
     return row
-
-
-async def activate(db: AsyncSession, version: int) -> QueryTemplate | None:
-    """Roll back to a stored version without copying it forward."""
-    row = await db.scalar(select(QueryTemplate).where(QueryTemplate.version == version))
-    if row is None:
-        return None
-    await db.execute(update(QueryTemplate).values(is_active=False).where(QueryTemplate.is_active))
-    row.is_active = True
-    await db.commit()
-    await db.refresh(row)
-    return row
-
-
-async def reset_to_default(db: AsyncSession) -> None:
-    """Deactivate every stored template, returning to the built-in one."""
-    await db.execute(update(QueryTemplate).values(is_active=False).where(QueryTemplate.is_active))
-    await db.commit()

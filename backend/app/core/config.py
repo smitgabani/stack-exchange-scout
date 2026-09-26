@@ -46,12 +46,6 @@ class Settings(BaseSettings):
     # docs.yutori.com/pricing: $0.35 per scout-run, $5 free credits per account.
     yutori_run_cost_usd: float = 0.35
 
-    # How an on-demand run is started. "restart" stops the Scout and starts it
-    # again, which keeps its id, query and change-baseline; "recreate" deletes
-    # and creates it, which is the fallback if restart turns out to only resume
-    # the schedule rather than fire a run. Yutori documents neither behaviour,
-    # so this is a switch rather than a decision baked into the code.
-    scout_run_mechanism: str = "restart"
     # After this long with no update, a run is treated as finished and the Scout
     # is parked. A run that finds nothing never sends a webhook, so without this
     # the Scout would sit "running" forever — and a stuck run is expensive in a

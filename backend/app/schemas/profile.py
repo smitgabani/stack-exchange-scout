@@ -49,12 +49,6 @@ class Digest(BaseModel):
     questions: int = Field(default=5, ge=1, le=10)
 
 
-class Scout(BaseModel):
-    mode: Literal["setup", "automatic"] = "setup"
-    confirm_before_run: bool = True
-    interval_days: int = 3
-
-
 class Llm(BaseModel):
     provider: Literal["gemini", "openai"] = "gemini"
 
@@ -82,7 +76,6 @@ class ProfileData(BaseModel):
     difficulty: Difficulty = Field(default_factory=Difficulty)
     question_preferences: QuestionPreferences = Field(default_factory=QuestionPreferences)
     digest: Digest = Field(default_factory=Digest)
-    scout: Scout = Field(default_factory=Scout)
     llm: Llm = Field(default_factory=Llm)
 
     @field_validator("preferred_concepts", "excluded_concepts")

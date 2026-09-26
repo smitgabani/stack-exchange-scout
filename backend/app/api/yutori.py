@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.db import get_db
 from app.integrations.yutori import CANDIDATE_OUTPUT_SCHEMA
-from app.schemas.profile import ProfileData
 from app.schemas.yutori_settings import (
     MAX_SCHEMA_CHARS,
     MAX_SUBSCRIBERS,
@@ -27,16 +26,10 @@ from app.services import (
     task_settings,
     yutori_defaults_service,
 )
-from app.services.profile_service import get_or_create_profile
+from app.services.profile_service import get_profile_data
 from app.services.query_template_service import QueryTemplateError
 
 router = APIRouter(prefix="/yutori", tags=["yutori"])
-
-
-async def _profile_data(db: AsyncSession) -> ProfileData:
-    profile = await get_or_create_profile(db)
-    return ProfileData.model_validate(profile.data)
-
 
 # ---------------------------------------------------------------------------
 # Query template
@@ -64,7 +57,7 @@ async def get_query_template(db: AsyncSession = Depends(get_db)) -> dict:
         },
         "default_body": query_generator.DEFAULT_TEMPLATE,
         "placeholders": list(query_generator.PLACEHOLDERS),
-        "rendered": query_generator.generate(await _profile_data(db), active.body),
+        "rendered": query_generator.generate(await get_profile_data(db), active.body),
         "limits": {"max_template_chars": query_template_service.MAX_TEMPLATE_CHARS},
     }
 
@@ -125,7 +118,7 @@ async def preview_query_template(body: PreviewIn, db: AsyncSession = Depends(get
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from None
-    return {"rendered": query_generator.generate(await _profile_data(db), text)}
+    return {"rendered": query_generator.generate(await get_profile_data(db), text)}
 
 
 # ---------------------------------------------------------------------------

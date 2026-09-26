@@ -230,8 +230,6 @@ BY_KEY: dict[str, Block] = {block.key: block for block in BLOCKS}
 # Every block here is core now; the tuple is kept because the rest of the
 # pipeline asks "what must always be present" rather than "what is in code".
 CORE_KEYS: tuple[str, ...] = tuple(b.key for b in BLOCKS if b.core)
-# The format every challenge used before formats existed.
-LEGACY_KEYS: tuple[str, ...] = CORE_KEYS
 
 
 def resolve(keys: list[str] | tuple[str, ...] | None) -> list[Block]:

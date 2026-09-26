@@ -49,32 +49,24 @@ def verify_session_token(token: str) -> bool:
     return True
 
 
-# prd.md §27.1: every route requires a valid session except these — clickable
-# from an email with no login (feedback, scout confirm), secured a different
-# way (the webhook, by signature), needed unauthenticated (uptime checks), or
-# part of the login mechanism itself.
+# prd.md §27.1: every route requires a valid session except these — secured a
+# different way (the webhook, by its token), needed unauthenticated (uptime
+# checks), or part of the login mechanism itself.
 _EXEMPT_PATHS = {
     "/auth/login",
     "/auth/logout",
-    "/auth/session",
     # The app shell calls this before it knows whether anyone is logged in —
     # deciding that is its job. It answers `authenticated: false` and nothing
     # else without a session, so exempting it discloses nothing.
     "/auth/bootstrap",
-    "/feedback",
     "/webhooks/yutori",
     "/health",
     "/ready",
 }
-_EXEMPT_PATH_PREFIXES = ("/scout/confirm/",)
-
-
-def _is_exempt(path: str) -> bool:
-    return path in _EXEMPT_PATHS or path.startswith(_EXEMPT_PATH_PREFIXES)
 
 
 async def require_session(request: Request) -> None:
-    if _is_exempt(request.url.path):
+    if request.url.path in _EXEMPT_PATHS:
         return
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if token is None or not verify_session_token(token):

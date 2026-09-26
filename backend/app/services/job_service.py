@@ -66,10 +66,6 @@ async def create(db: AsyncSession, *, kind: str, payload: dict[str, Any]) -> Job
     return job
 
 
-async def get(db: AsyncSession, job_id: uuid.UUID) -> Job | None:
-    return await db.get(Job, job_id)
-
-
 async def run(job_id: uuid.UUID) -> None:
     """Execute one job. Never raises — a job that fails records why.
 

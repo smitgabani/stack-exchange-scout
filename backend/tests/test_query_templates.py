@@ -165,7 +165,7 @@ async def test_stored_defaults_are_inherited_by_scouts(clean_defaults):
         await yutori_defaults_service.put(
             session, YutoriSettings.model_validate({"user_timezone": "America/Toronto"})
         )
-        inherited = await definition_service.yutori_defaults(session)
+        inherited = await yutori_defaults_service.effective(session)
     assert inherited["user_timezone"] == "America/Toronto"
     # Everything not changed keeps its built-in value.
     assert inherited["is_public"] is False

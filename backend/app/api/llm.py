@@ -15,16 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_db
 from app.models.challenge import Challenge
 from app.models.question import Question
-from app.schemas.profile import ProfileData
 from app.services import (
     block_service,
     challenge_blocks,
     challenge_service,
-    digest_service,
     format_service,
     prompt_service,
 )
-from app.services.profile_service import get_or_create_profile
+from app.services.profile_service import get_profile_data
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
@@ -32,8 +30,7 @@ router = APIRouter(prefix="/llm", tags=["llm"])
 @router.get("/config")
 async def llm_config(db: AsyncSession = Depends(get_db)) -> dict:
     """Every value that shapes a challenge, read from the code that uses it."""
-    profile = await get_or_create_profile(db)
-    profile_data = ProfileData.model_validate(profile.data)
+    profile_data = await get_profile_data(db)
     template = await prompt_service.get_active(db)
     fmt = await format_service.get_default(db)
 
@@ -178,71 +175,6 @@ async def preview(
         "system_instruction": composed,
         "prompt": prompt,
         "prompt_chars": len(prompt),
-    }
-
-
-@router.post("/test")
-async def test_generate(
-    question_id: uuid.UUID = Query(...),
-    format_id: int | None = None,
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Run one real generation and throw the result away.
-
-    Costs one LLM call and writes nothing — no `Challenge` row, no change to
-    the question's status. The point is to see what the model actually returns,
-    and whether validation accepts it, without committing to it.
-    """
-    question = await db.get(Question, question_id)
-    if question is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
-
-    profile = await get_or_create_profile(db)
-    profile_data = ProfileData.model_validate(profile.data)
-
-    try:
-        provider = await digest_service.resolve_provider(db, profile_data)
-    except digest_service.DigestError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-
-    template = await prompt_service.get_active(db)
-    try:
-        fmt = await format_service.resolve_for_run(db, format_id)
-    except format_service.FormatError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-
-    try:
-        challenge = await challenge_service.generate_challenge(
-            provider,
-            question,
-            selection_reason="a test run",
-            template=template,
-            blocks=fmt.blocks,
-        )
-    except challenge_service.ChallengeValidationError as exc:
-        # A rejection is a useful result here, not an error to hide: it is how
-        # a prompt that produces spoilers gets caught before it is activated.
-        return {
-            "ok": False,
-            "provider": provider.name,
-            "model": provider.model,
-            "prompt_version": template.version,
-            "format": {"name": fmt.name, "blocks": fmt.keys},
-            "error": str(exc),
-        }
-
-    # Links are checked here too, so a test shows the same resources a real
-    # generation would keep rather than a rosier list.
-    dropped = await format_service.verify_content_links(challenge.content, fmt.blocks)
-
-    return {
-        "ok": True,
-        "provider": provider.name,
-        "model": provider.model,
-        "prompt_version": template.version,
-        "format": {"name": fmt.name, "blocks": fmt.keys},
-        "dropped_links": dropped,
-        "content": challenge.content,
     }
 
 

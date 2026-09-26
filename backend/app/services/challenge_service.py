@@ -79,10 +79,6 @@ def compose_system_instruction(
     )
 
 
-# Kept as the composed default so existing callers and tests still see the
-# whole instruction under its original name.
-SYSTEM_INSTRUCTION = compose_system_instruction()
-
 # Output-side business validation (tdd.md Decision 7): schema-valid JSON can
 # still contain exactly what we forbade.
 _SOLUTION_TELLS = (

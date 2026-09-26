@@ -117,7 +117,7 @@ async def test_injected_instruction_stays_confined_to_the_data_block() -> None:
     await challenge_service.generate_challenge(provider, _question(body=INJECTION_BODY))
 
     prompt = provider.prompts[0]
-    assert provider.system_instructions[0] == challenge_service.SYSTEM_INSTRUCTION
+    assert provider.system_instructions[0] == challenge_service.compose_system_instruction()
 
     injected_at = prompt.index("IGNORE PREVIOUS INSTRUCTIONS")
     assert prompt.index("<QUESTION>") < injected_at < prompt.index("</QUESTION>"), (

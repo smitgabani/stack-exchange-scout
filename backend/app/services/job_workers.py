@@ -1,7 +1,6 @@
 """The four long jobs, as background workers.
 
-Each one does exactly what its synchronous endpoint did and returns the same
-body, so the browser sees no difference beyond having to ask for it. Kept apart
+Each returns the body the browser reads back from `GET /jobs/{id}`. Kept apart
 from `job_service` so the machinery does not import the services it runs.
 
 Imported for its side effects — importing it registers the workers — which is
@@ -18,15 +17,9 @@ from app.models.challenge import Challenge
 from app.models.question import Question
 from app.schemas.profile import ProfileData
 from app.services import challenge_service, digest_service, format_service, job_service
-from app.services.profile_service import get_or_create_profile
+from app.services.profile_service import get_or_create_profile, get_profile_data
 
 logger = logging.getLogger(__name__)
-
-
-async def _profile(db: AsyncSession) -> ProfileData:
-    profile = await get_or_create_profile(db)
-    return ProfileData.model_validate(profile.data)
-
 
 @job_service.register("digest_generate")
 async def generate_digest(db: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
@@ -50,7 +43,7 @@ async def create_challenge(db: AsyncSession, payload: dict[str, Any]) -> dict[st
 
     row = await digest_service.promote_question(
         db,
-        await _profile(db),
+        await get_profile_data(db),
         question,
         format_id=payload.get("format_id"),
     )
@@ -69,7 +62,7 @@ async def reformat(db: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
 
     return await digest_service.reformat_challenge(
         db,
-        await _profile(db),
+        await get_profile_data(db),
         challenge,
         question,
         format_id=payload.get("format_id"),
@@ -84,7 +77,7 @@ async def llm_test(db: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
     if question is None:
         raise ValueError("That question no longer exists.")
 
-    profile_data = await _profile(db)
+    profile_data = await get_profile_data(db)
     provider = await digest_service.resolve_provider(db, profile_data)
 
     from app.services import prompt_service
