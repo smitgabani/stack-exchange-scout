@@ -3,9 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { json, send } from "@/lib/api";
 import { colorForTopic } from "@/lib/topic-color";
 import { jobsApi } from "@/lib/jobs-api";
-import { money } from "@/lib/scout-api";
+import { ago, money } from "@/lib/scout-api";
 import { JobStatus, useJob } from "./job-status";
 import { MonitorBanner } from "./monitor-banner";
 import { RunScoutButton } from "./run-scout-button";
@@ -66,29 +67,6 @@ type Dashboard = {
   last_run: { at: string | null; cost_usd: number | null; questions_found: number | null } | null;
 };
 
-async function fetchDashboard(): Promise<Dashboard> {
-  const response = await fetch("/api/dashboard");
-  if (!response.ok) {
-    // Vercel and Fly deploy separately. If this frontend lands first, the
-    // endpoint does not exist yet — say that, rather than "loading" forever.
-    throw new Error(
-      response.status === 404
-        ? "This page needs a newer backend than the one deployed — /dashboard returned 404."
-        : `Could not load the dashboard (HTTP ${response.status}).`,
-    );
-  }
-  return response.json();
-}
-
-function ago(value: string | null): string {
-  if (!value) return "";
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days} days ago`;
-  return `${Math.floor(days / 30)} months ago`;
-}
-
 function difficulty(value: number | null): string {
   return value ? `Difficulty ${value}/5` : "Difficulty not rated";
 }
@@ -104,7 +82,7 @@ export default function DashboardPage() {
   // slowest of them returned.
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["dashboard"],
-    queryFn: fetchDashboard,
+    queryFn: () => json<Dashboard>("/api/dashboard"),
   });
 
   async function refresh() {
@@ -129,15 +107,12 @@ export default function DashboardPage() {
     setSending(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/digest/send", { method: "POST" });
-      const body = await response.json();
-      setMessage(
-        response.ok
-          ? "Sent — check your inbox."
-          : `Could not send: ${typeof body.detail === "string" ? body.detail : "unknown error"}`,
-      );
-      await refresh();
+      await json<unknown>("/api/digest/send", send("POST"));
+      setMessage("Sent — check your inbox.");
+    } catch (e) {
+      setMessage(`Could not send: ${(e as Error).message}`);
     } finally {
+      await refresh();
       setSending(false);
     }
   }

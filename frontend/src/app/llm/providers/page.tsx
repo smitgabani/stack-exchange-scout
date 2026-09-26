@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { json, send } from "@/lib/api";
 import { llmApi } from "@/lib/llm-api";
 import { InfoButton } from "../../info-button";
 import ws from "../../workspace.module.css";
@@ -13,20 +14,8 @@ const PROVIDERS: { id: Provider; name: string; note: string }[] = [
   { id: "openai", name: "OpenAI", note: "Alternative provider" },
 ];
 
-async function fetchStatus(provider: Provider): Promise<boolean> {
-  const response = await fetch(`/api/settings/${provider}-key/status`);
-  if (!response.ok) throw new Error(`status check failed: ${response.status}`);
-  return (await response.json()).connected;
-}
-
-async function saveKey(provider: Provider, apiKey: string): Promise<void> {
-  const response = await fetch(`/api/settings/${provider}-key`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ api_key: apiKey }),
-  });
-  if (!response.ok) throw new Error(`failed to save the ${provider} key`);
-}
+const fetchStatus = async (provider: Provider) =>
+  (await json<{ connected: boolean }>(`/api/settings/${provider}-key/status`)).connected;
 
 function KeyRow({ id, name, note, active }: { id: Provider; name: string; note: string; active: boolean }) {
   const queryClient = useQueryClient();
@@ -39,7 +28,7 @@ function KeyRow({ id, name, note, active }: { id: Provider; name: string; note: 
   });
 
   const save = useMutation({
-    mutationFn: () => saveKey(id, value),
+    mutationFn: () => json<unknown>(`/api/settings/${id}-key`, send("POST", { api_key: value })),
     onSuccess: async () => {
       setValue("");
       setEditing(false);
@@ -108,14 +97,7 @@ export default function ProvidersPage() {
   });
 
   const switchProvider = useMutation({
-    mutationFn: async (provider: Provider) => {
-      const response = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ llm: { provider } }),
-      });
-      if (!response.ok) throw new Error("could not switch provider");
-    },
+    mutationFn: (provider: Provider) => json<unknown>("/api/profile", send("PATCH", { llm: { provider } })),
     onSuccess: async () => {
       setMessage("Provider switched. New challenges will use it.");
       await queryClient.invalidateQueries({ queryKey: ["llm-config"] });

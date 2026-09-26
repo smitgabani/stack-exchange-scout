@@ -5,16 +5,7 @@
  * on this side, so the page cannot drift from what actually gets sent.
  */
 
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(
-      typeof body.detail === "string" ? body.detail : `${path} failed: ${response.status}`,
-    );
-  }
-  return response.json();
-}
+import { json, send } from "./api";
 
 export type LlmConfig = {
   provider: "gemini" | "openai";
@@ -130,11 +121,7 @@ export const llmApi = {
   prompts: () => json<{ versions: PromptVersion[] }>("/api/llm/prompts"),
 
   savePrompt: (body: { system_instruction: string; user_preamble: string; notes?: string }) =>
-    json<{ version: number }>("/api/llm/prompts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+    json<{ version: number }>("/api/llm/prompts", send("POST", body)),
 
   activatePrompt: (version: number) =>
     json<{ version: number }>(`/api/llm/prompts/${version}/activate`, { method: "POST" }),
@@ -149,13 +136,6 @@ export const llmApi = {
     if (overrides?.user_preamble) params.set("user_preamble", overrides.user_preamble);
     return json<Preview>(`/api/llm/preview?${params}`);
   },
-
-  /** Costs one real LLM call and saves nothing. */
-  test: (questionId: string, formatId?: number) =>
-    json<TestResult>(
-      `/api/llm/test?question_id=${questionId}${formatId ? `&format_id=${formatId}` : ""}`,
-      { method: "POST" },
-    ),
 
   generations: () => json<{ generations: Generation[] }>("/api/llm/generations"),
 
@@ -175,12 +155,7 @@ export const llmApi = {
     instruction: string;
     description?: string;
     gated?: boolean;
-  }) =>
-    json<BlockMeta>("/api/llm/blocks/custom", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+  }) => json<BlockMeta>("/api/llm/blocks/custom", send("POST", body)),
 
   updateBlock: (
     id: number,
@@ -191,25 +166,16 @@ export const llmApi = {
       description?: string | null;
       gated?: boolean;
     },
-  ) =>
-    json<BlockMeta>(`/api/llm/blocks/custom/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+  ) => json<BlockMeta>(`/api/llm/blocks/custom/${id}`, send("PATCH", body)),
 
-  deleteBlock: (id: number) =>
-    fetch(`/api/llm/blocks/custom/${id}`, { method: "DELETE" }).then((r) => {
-      if (!r.ok) throw new Error(`delete failed: ${r.status}`);
-    }),
+  deleteBlock: (id: number) => json<void>(`/api/llm/blocks/custom/${id}`, send("DELETE")),
 
   /** Reword a block that ships in the code. Its shape is unaffected. */
   setInstruction: (key: string, instruction: string) =>
-    json<{ key: string; instruction: string }>(`/api/llm/blocks/${key}/instruction`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ instruction }),
-    }),
+    json<{ key: string; instruction: string }>(
+      `/api/llm/blocks/${key}/instruction`,
+      send("PUT", { instruction }),
+    ),
 
   resetInstruction: (key: string) =>
     json<{ key: string; instruction: string }>(`/api/llm/blocks/${key}/instruction`, {
@@ -226,43 +192,15 @@ export const llmApi = {
     blocks: string[];
     description?: string;
     make_default?: boolean;
-  }) =>
-    json<ChallengeFormat>("/api/llm/formats", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+  }) => json<ChallengeFormat>("/api/llm/formats", send("POST", body)),
 
   updateFormat: (
     id: number,
     body: { name: string; blocks: string[]; description?: string | null },
-  ) =>
-    json<ChallengeFormat>(`/api/llm/formats/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+  ) => json<ChallengeFormat>(`/api/llm/formats/${id}`, send("PATCH", body)),
 
   makeFormatDefault: (id: number) =>
     json<ChallengeFormat>(`/api/llm/formats/${id}/default`, { method: "POST" }),
 
-  /** Adds the blocks a format wants that a challenge lacks. One LLM call,
-   *  or none when there is nothing to add. Keeps the challenge's id. */
-  reformatChallenge: (challengeId: string, formatId: number | null) =>
-    json<{
-      added: string[];
-      /** Asked for and not produced by the model. */
-      missing: string[];
-      dropped_links: string[];
-      format: string;
-      spent_call: boolean;
-    }>(
-      `/api/challenges/${challengeId}/reformat${formatId === null ? "" : `?format_id=${formatId}`}`,
-      { method: "POST" },
-    ),
-
-  deleteFormat: async (id: number) => {
-    const response = await fetch(`/api/llm/formats/${id}`, { method: "DELETE" });
-    if (!response.ok) throw new Error(`delete failed: ${response.status}`);
-  },
+  deleteFormat: (id: number) => json<void>(`/api/llm/formats/${id}`, send("DELETE")),
 };

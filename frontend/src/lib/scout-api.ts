@@ -9,6 +9,8 @@
  * nothing else here can spend anything.
  */
 
+import { ApiError, json, send } from "./api";
+
 export type RunMode = "research" | "scout";
 
 export type DefinitionStats = {
@@ -182,16 +184,6 @@ export type RemoteTask = {
   tracked: boolean;
 };
 
-export type EffectivenessRow = {
-  id: string;
-  name: string;
-  status: string;
-  runs: number;
-  spend_usd: number;
-  questions: number;
-  per_dollar: number | null;
-};
-
 /** What a scout may change about its Yutori request. Unset = inherit. */
 export type YutoriSettings = {
   output_interval_seconds?: number;
@@ -239,23 +231,6 @@ export type Monitor = {
   superseded?: boolean;
 };
 
-/**
- * Thrown for any non-2xx answer. `message` is still the backend's plain
- * `detail` (or `detail.message` when the detail is structured), so existing
- * `(error as Error).message` callers read the same text as before; `status`
- * and `detail` are there for the few that need to act on the answer.
- */
-export class ApiError extends Error {
-  status: number;
-  detail: unknown;
-
-  constructor(message: string, status: number, detail: unknown) {
-    super(message);
-    this.status = status;
-    this.detail = detail;
-  }
-}
-
 /** A live monitor as Yutori reports it, and where it differs from its scout. */
 export type MonitorRemote = {
   monitor: Monitor;
@@ -295,22 +270,6 @@ export function liveMonitorConflict(error: unknown): LiveMonitorConflict | null 
   return detail && detail.code === "live_monitor" ? (detail as LiveMonitorConflict) : null;
 }
 
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown }).detail;
-    const message =
-      typeof detail === "string"
-        ? detail
-        : typeof (detail as { message?: unknown } | null)?.message === "string"
-          ? (detail as { message: string }).message
-          : `${path} failed (${response.status})`;
-    throw new ApiError(message, response.status, detail);
-  }
-  return body as T;
-}
-
 export const scoutApi = {
   listDefinitions: (includeArchived = false) =>
     json<{
@@ -326,29 +285,17 @@ export const scoutApi = {
     ),
 
   createDefinition: (body: Partial<Definition>) =>
-    json<Definition>("/api/scout-definitions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+    json<Definition>("/api/scout-definitions", send("POST", body)),
 
   patchDefinition: (id: string, body: Partial<Definition>) =>
-    json<Definition>(`/api/scout-definitions/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+    json<Definition>(`/api/scout-definitions/${id}`, send("PATCH", body)),
 
   /** Defaults, this scout's overrides, and the exact request each would send. */
   getSettings: (id: string) => json<SettingsView>(`/api/scout-definitions/${id}/settings`),
 
   /** Saves overrides. Free; takes effect on the next run. */
   putSettings: (id: string, body: YutoriSettings) =>
-    json<SettingsView>(`/api/scout-definitions/${id}/settings`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+    json<SettingsView>(`/api/scout-definitions/${id}/settings`, send("PUT", body)),
 
   /** Drops every override, back to the defaults. */
   resetSettings: (id: string) =>
@@ -356,11 +303,7 @@ export const scoutApi = {
 
   /** What unsaved settings would send. Free, stores nothing. */
   previewSettings: (id: string, body: YutoriSettings) =>
-    json<SettingsView>(`/api/scout-definitions/${id}/settings/preview`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+    json<SettingsView>(`/api/scout-definitions/${id}/settings/preview`, send("POST", body)),
 
   cloneDefinition: (id: string) =>
     json<Definition>(`/api/scout-definitions/${id}/clone`, { method: "POST" }),
@@ -473,28 +416,15 @@ export const scoutApi = {
       `/api/scout-instances/${id}/forget`,
       { method: "POST" },
     ),
-  effectiveness: () => json<{ rows: EffectivenessRow[] }>("/api/scout-effectiveness"),
 
   listAccounts: () => json<{ accounts: Account[] }>("/api/accounts"),
   addAccount: (body: { api_key: string; label: string; make_active: boolean }) =>
-    json<Account>("/api/accounts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
+    json<Account>("/api/accounts", send("POST", body)),
   renameAccount: (id: number, label: string) =>
-    json<Account>(`/api/accounts/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label }),
-    }),
+    json<Account>(`/api/accounts/${id}`, send("PATCH", { label })),
   /** null restores the computed total. */
   setAccountSpend: (id: number, spend_usd: number | null) =>
-    json<Account>(`/api/accounts/${id}/spend`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spend_usd }),
-    }),
+    json<Account>(`/api/accounts/${id}/spend`, send("PUT", { spend_usd })),
   activateAccount: (id: number) => json<Account>(`/api/accounts/${id}/activate`, { method: "POST" }),
   removeAccount: (id: number) =>
     json<{ removed: boolean; label: string; kept: Record<string, number> }>(`/api/accounts/${id}`, {
@@ -520,6 +450,17 @@ export function when(value: string | number | null | undefined): string {
       ? new Date(value > MS_THRESHOLD ? value : value * 1000)
       : new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+}
+
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/** "today", "yesterday", "3 days ago", "last month", "2 years ago"; "" for no date. */
+export function ago(value: string | null | undefined): string {
+  if (!value) return "";
+  const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000));
+  if (days < 30) return relative.format(-days, "day");
+  if (days < 365) return relative.format(-Math.floor(days / 30), "month");
+  return relative.format(-Math.floor(days / 365), "year");
 }
 
 export function duration(seconds: number | null | undefined): string {

@@ -2,21 +2,19 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { json } from "@/lib/api";
 import { jobsApi } from "@/lib/jobs-api";
 import { type TestResult, llmApi } from "@/lib/llm-api";
 import { JobStatus, useJob } from "../../job-status";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
+import { VersionTable } from "../../version-table";
 import ws from "../../workspace.module.css";
 import styles from "../llm.module.css";
 
 type QuestionOption = { id: string; title: string | null; status: string };
 
-async function fetchQuestions(): Promise<QuestionOption[]> {
-  const response = await fetch("/api/questions?status=all&limit=60");
-  if (!response.ok) throw new Error("could not load questions");
-  return response.json();
-}
+const fetchQuestions = () => json<QuestionOption[]>("/api/questions?status=all&limit=60");
 
 export default function PromptPage() {
   const queryClient = useQueryClient();
@@ -299,44 +297,11 @@ export default function PromptPage() {
             No saved versions — the prompt in the code is in use. Saving an edit creates version 2.
           </div>
         ) : (
-          <div className={ws.tableWrap}>
-            <table className={ws.table}>
-              <thead>
-                <tr>
-                  <th>Version</th>
-                  <th>Saved</th>
-                  <th>Notes</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {versions.versions.map((v) => (
-                  <tr key={v.id}>
-                    <td>
-                      v{v.version}{" "}
-                      {v.is_active && <span className={`${ws.pill} ${ws.pillOn}`}>Active</span>}
-                    </td>
-                    <td>{v.created_at ? new Date(v.created_at).toLocaleString() : "—"}</td>
-                    <td>{v.notes ?? "—"}</td>
-                    <td>
-                      {!v.is_active && (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                          <button
-                            className={`${ws.secondary} ${ws.tiny}`}
-                            onClick={() => activate.mutate(v.version)}
-                            disabled={activate.isPending}
-                          >
-                            Activate
-                          </button>
-                          <InfoButton text="Makes this earlier prompt version active again. The version that's currently active is kept in history, not deleted." />
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <VersionTable
+            versions={versions.versions}
+            onActivate={(version) => activate.mutate(version)}
+            pending={activate.isPending}
+          />
         )}
       </div>
 

@@ -3,26 +3,15 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { json, send } from "@/lib/api";
 import styles from "./onboarding.module.css";
 
 type Step = "yutori" | "gemini" | "done";
 
-async function saveKey(
-  provider: "yutori" | "gemini",
-  apiKey: string,
-  label?: string,
-): Promise<void> {
-  const response = await fetch(`/api/settings/${provider}-key`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // The label names the Yutori account. Without it the key lists as
-    // "yutori_api_key", which is useless once a second account exists.
-    body: JSON.stringify({ api_key: apiKey, label }),
-  });
-  if (!response.ok) {
-    throw new Error(`failed to save ${provider} key: ${response.status}`);
-  }
-}
+// The label names the Yutori account. Without it the key lists as
+// "yutori_api_key", which is useless once a second account exists.
+const saveKey = (provider: "yutori" | "gemini", apiKey: string, label?: string) =>
+  json<unknown>(`/api/settings/${provider}-key`, send("POST", { api_key: apiKey, label }));
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<Step>("yutori");

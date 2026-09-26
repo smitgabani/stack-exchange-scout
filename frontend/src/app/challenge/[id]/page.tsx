@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { json, send } from "@/lib/api";
 import { jobsApi } from "@/lib/jobs-api";
 import { llmApi } from "@/lib/llm-api";
+import { ago } from "@/lib/scout-api";
 import { JobStatus, useJob } from "../../job-status";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
@@ -42,45 +44,13 @@ type ChallengeDetail = {
   solved_at: string | null;
 };
 
-async function fetchChallenge(id: string): Promise<ChallengeDetail> {
-  const response = await fetch(`/api/challenges/${id}`);
-  if (!response.ok) {
-    throw new Error(`failed to load challenge: ${response.status}`);
-  }
-  return response.json();
-}
-
-function postedAgo(value: string | null): string {
-  if (!value) return "unknown date";
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  if (days <= 0) return "posted today";
-  if (days === 1) return "posted yesterday";
-  if (days < 30) return `posted ${days} days ago`;
-  return `posted ${Math.floor(days / 30)} months ago`;
-}
-
-function solvedAgo(value: string | null): string {
-  if (!value) return "";
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days} days ago`;
-  return `${Math.floor(days / 30)} months ago`;
-}
-
-async function post(path: string): Promise<void> {
-  const response = await fetch(path, { method: "POST" });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(typeof body.detail === "string" ? body.detail : `request failed: ${response.status}`);
-  }
-}
+const post = (path: string) => json<unknown>(path, send("POST"));
 
 export default function ChallengePage() {
   const params = useParams<{ id: string }>();
   const { data: challenge, isLoading, isError } = useQuery({
     queryKey: ["challenge", params.id],
-    queryFn: () => fetchChallenge(params.id),
+    queryFn: () => json<ChallengeDetail>(`/api/challenges/${params.id}`),
   });
 
   // Progressive reveal, and a further gate on solution-adjacent blocks. All
@@ -244,7 +214,7 @@ export default function ChallengePage() {
 
       {challenge.question_status === "solved" && (
         <div className={styles.completedBanner}>
-          <span>🎉 Completed {solvedAgo(challenge.solved_at)}</span>
+          <span>🎉 Completed {ago(challenge.solved_at)}</span>
           <button
             type="button"
             className={styles.reopenLink}
@@ -276,7 +246,7 @@ export default function ChallengePage() {
           </div>
           <div className={styles.metaLine}>
             {answerText} · {challenge.has_accepted_answer ? "accepted answer" : "no accepted answer"} ·{" "}
-            {postedAgo(challenge.question_created_at)}
+            {challenge.question_created_at ? `posted ${ago(challenge.question_created_at)}` : "unknown date"}
           </div>
         </div>
       </div>

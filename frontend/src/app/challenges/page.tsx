@@ -4,6 +4,8 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { json, send } from "@/lib/api";
+import { ago } from "@/lib/scout-api";
 import { ConfirmDialog } from "../confirm-dialog";
 import { InfoButton } from "../info-button";
 import styles from "./challenges.module.css";
@@ -54,40 +56,14 @@ async function fetchChallenges(
     limit: String(PAGE_SIZE),
   });
   if (before) params.set("before", before);
-  const response = await fetch(`/api/challenges?${params}`);
-  if (!response.ok) {
-    // A 404 here means the backend predates this page rather than that the
-    // list is empty — worth saying, because the two look identical otherwise.
-    if (response.status === 404) {
-      throw new Error(
-        "This page needs a newer backend than the one currently deployed — /challenges returned 404.",
-      );
-    }
-    throw new Error(`Could not load challenges (HTTP ${response.status}).`);
-  }
-  return response.json();
+  return json<ChallengeRow[]>(`/api/challenges?${params}`);
 }
 
-async function post(path: string): Promise<void> {
-  const response = await fetch(path, { method: "POST" });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(typeof body.detail === "string" ? body.detail : `request failed: ${response.status}`);
-  }
-}
+const post = (path: string) => json<unknown>(path, send("POST"));
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
   return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function timeAgo(value: string | null): string {
-  if (!value) return "";
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days}d ago`;
-  return `${Math.floor(days / 30)}mo ago`;
 }
 
 export default function ChallengesPage() {
@@ -145,12 +121,7 @@ function ChallengesPageInner() {
   }
 
   const remove = useMutation({
-    mutationFn: async (challenge: ChallengeRow) => {
-      const response = await fetch(`/api/challenges/${challenge.id}`, { method: "DELETE" });
-      if (!response.ok) {
-        throw new Error(`delete failed: ${response.status}`);
-      }
-    },
+    mutationFn: (challenge: ChallengeRow) => json<void>(`/api/challenges/${challenge.id}`, send("DELETE")),
     onSuccess: async () => {
       setPendingDelete(null);
       await refresh();
@@ -242,7 +213,7 @@ function ChallengesPageInner() {
           {challenges.map((challenge) => (
             <div key={challenge.id} className={styles.row}>
               <span className={styles.date}>
-                {showCompleted ? timeAgo(challenge.solved_at) : formatDate(challenge.created_at)}
+                {showCompleted ? ago(challenge.solved_at) : formatDate(challenge.created_at)}
               </span>
               <span>
                 <Link href={`/challenge/${challenge.id}`} className={styles.qtitle}>

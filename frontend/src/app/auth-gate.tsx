@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { json } from "@/lib/api";
 import styles from "./header.module.css";
 import { OnboardingGate } from "./onboarding-gate";
 
@@ -36,13 +37,7 @@ export type Bootstrap = {
  * One query key, so `OnboardingGate` reads the same cached answer rather than
  * fetching again.
  */
-async function fetchBootstrap(): Promise<Bootstrap> {
-  const response = await fetch("/api/auth/bootstrap");
-  if (!response.ok) {
-    throw new Error(`session check failed: ${response.status}`);
-  }
-  return response.json();
-}
+export const fetchBootstrap = () => json<Bootstrap>("/api/auth/bootstrap");
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

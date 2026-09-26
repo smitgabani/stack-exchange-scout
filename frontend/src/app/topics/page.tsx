@@ -2,13 +2,14 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
+import { ApiError, json, send } from "@/lib/api";
 import { colorForTopic } from "@/lib/topic-color";
 import { InfoButton } from "../info-button";
 import styles from "./topics.module.css";
 
 // What the backend actually does with this page's fields, in the order it does
 // it: filter_service.evaluate rejects, then ranking_service.score_topic_relevance
-// ranks, then profile_service.apply_patch re-syncs the Scout query.
+// ranks, then a topics-based scout renders its query from them on its next run.
 const TOPIC_GUIDE = [
   {
     title: "Matching is literal",
@@ -102,13 +103,9 @@ function formatErrorDetail(detail: unknown): string {
   return JSON.stringify(detail);
 }
 
-async function fetchProfile(): Promise<{ data: ProfileData; version: number }> {
-  const response = await fetch("/api/profile");
-  if (!response.ok) {
-    throw new Error(`failed to fetch profile: ${response.status}`);
-  }
-  return response.json();
-}
+type ProfileResponse = { data: ProfileData; version: number };
+
+const fetchProfile = () => json<ProfileResponse>("/api/profile");
 
 function Stepper({
   value,
@@ -279,19 +276,12 @@ export default function TopicsPage() {
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(formatErrorDetail(body.detail));
-        return;
-      }
+      const body = await json<ProfileResponse>("/api/profile", send("PATCH", form));
       setForm(body.data);
       await queryClient.invalidateQueries({ queryKey: ["profile"] });
       setShowSaved(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? formatErrorDetail(e.detail) : (e as Error).message);
     } finally {
       setSaving(false);
     }

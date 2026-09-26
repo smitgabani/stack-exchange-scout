@@ -3,8 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { json, send } from "@/lib/api";
 import { jobsApi } from "@/lib/jobs-api";
 import { llmApi } from "@/lib/llm-api";
+import { ago } from "@/lib/scout-api";
 import { JobStatus, useJob } from "../job-status";
 import { colorForTopic } from "@/lib/topic-color";
 import { ConfirmDialog } from "../confirm-dialog";
@@ -45,32 +47,12 @@ const FILTERS: Filter[] = [
   { label: "Awaiting enrichment", params: { status: "enrichment_pending" } },
 ];
 
-async function fetchQuestions(filter: Filter): Promise<QuestionRow[]> {
+function fetchQuestions(filter: Filter): Promise<QuestionRow[]> {
   const params = new URLSearchParams({ status: "candidate", limit: "60", ...filter.params });
-  const response = await fetch(`/api/questions?${params}`);
-  if (!response.ok) {
-    throw new Error(`failed to load questions: ${response.status}`);
-  }
-  return response.json();
+  return json<QuestionRow[]>(`/api/questions?${params}`);
 }
 
-async function postTo(path: string): Promise<void> {
-  const response = await fetch(path, { method: "POST" });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(typeof body.detail === "string" ? body.detail : `request failed: ${response.status}`);
-  }
-}
-
-function relativeDate(value: string | null): string {
-  if (!value) return "unknown";
-  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days}d ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
-}
+const postTo = (path: string) => json<unknown>(path, send("POST"));
 
 function QuestionCard({
   question,
@@ -114,8 +96,8 @@ function QuestionCard({
       </div>
 
       <div className={styles.qdateRow}>
-        Posted {relativeDate(question.question_created_at)} · last active{" "}
-        {relativeDate(question.last_activity_at)}
+        Posted {ago(question.question_created_at) || "unknown"} · last active{" "}
+        {ago(question.last_activity_at) || "unknown"}
       </div>
 
       {match !== null ? (
@@ -265,16 +247,13 @@ export default function QuestionsPage() {
     setRunning(label);
     setStageMessage(null);
     try {
-      const response = await fetch(path, { method: "POST" });
-      const body = await response.json();
-      if (!response.ok) {
-        setStageMessage(`${label} failed: ${JSON.stringify(body.detail ?? body)}`);
-        return;
-      }
+      const body = await json<{ succeeded: number; skipped: number; failed: number }>(path, send("POST"));
       setStageMessage(
         `${label}: ${body.succeeded} succeeded, ${body.skipped} skipped, ${body.failed} failed`,
       );
       await queryClient.invalidateQueries({ queryKey: ["questions"] });
+    } catch (error) {
+      setStageMessage(`${label} failed: ${(error as Error).message}`);
     } finally {
       setRunning(null);
     }

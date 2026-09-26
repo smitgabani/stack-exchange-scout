@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { YutoriSettings } from "@/lib/scout-api";
 import { yutoriApi } from "@/lib/yutori-api";
 import { InfoButton } from "../../info-button";
+import { VersionTable } from "../../version-table";
 import ws from "../../workspace.module.css";
-import { ParametersForm } from "../parameters-form";
+import { ParametersForm, useDebounced } from "../parameters-form";
 
 /**
  * What every scout starts from (M13): the wording of the query sent to
@@ -23,15 +24,6 @@ export default function DefaultsPage() {
       <DefaultSettings />
     </main>
   );
-}
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), ms);
-    return () => clearTimeout(timer);
-  }, [value, ms]);
-  return debounced;
 }
 
 function QueryTemplateEditor() {
@@ -174,41 +166,12 @@ function QueryTemplateEditor() {
         </div>
       </div>
 
-      {(history?.versions.length ?? 0) > 0 && (
-        <div className={ws.tableWrap}>
-          <table className={ws.table}>
-            <thead>
-              <tr>
-                <th>Version</th>
-                <th>Saved</th>
-                <th>Note</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {history!.versions.map((row) => (
-                <tr key={row.id}>
-                  <td className={ws.num}>v{row.version}</td>
-                  <td>{row.created_at ? new Date(row.created_at).toLocaleString() : "—"}</td>
-                  <td>{row.notes ?? "—"}</td>
-                  <td>
-                    {row.is_active ? (
-                      <span className={`${ws.pill} ${ws.pillOn}`}>Active</span>
-                    ) : (
-                      <button
-                        className={ws.textButton}
-                        onClick={() => activate.mutate(row.version)}
-                        disabled={activate.isPending}
-                      >
-                        Activate
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {history && history.versions.length > 0 && (
+        <VersionTable
+          versions={history.versions}
+          onActivate={(version) => activate.mutate(version)}
+          pending={activate.isPending}
+        />
       )}
     </div>
   );

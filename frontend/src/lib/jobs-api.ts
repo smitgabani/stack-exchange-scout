@@ -9,6 +9,8 @@
  * think it is ready, so an idle tab costs nothing at all.
  */
 
+import { json, send } from "./api";
+
 export type JobStatus = "queued" | "running" | "succeeded" | "failed";
 
 export type Job = {
@@ -23,23 +25,7 @@ export type Job = {
   finished_at: string | null;
 };
 
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = (body as { detail?: unknown }).detail;
-    throw new Error(typeof detail === "string" ? detail : `${path} failed (${response.status})`);
-  }
-  return body as T;
-}
-
-function post(path: string, body?: unknown): Promise<Job> {
-  return json<Job>(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
+const post = (path: string, body?: unknown) => json<Job>(path, send("POST", body));
 
 export const jobsApi = {
   generateDigest: () => post("/api/jobs/digest-generate"),
@@ -55,7 +41,3 @@ export const jobsApi = {
 
   get: (jobId: string) => json<Job>(`/api/jobs/${jobId}`),
 };
-
-export function isFinished(job: Job | null | undefined): boolean {
-  return job?.status === "succeeded" || job?.status === "failed";
-}

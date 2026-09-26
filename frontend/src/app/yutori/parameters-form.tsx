@@ -37,22 +37,8 @@ const PRESETS: [string, number][] = [
   ["30 days", 2592000],
 ];
 
-const TIMEZONES = [
-  "America/Toronto",
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Sao_Paulo",
-  "Europe/London",
-  "Europe/Berlin",
-  "Europe/Paris",
-  "Asia/Kolkata",
-  "Asia/Singapore",
-  "Asia/Tokyo",
-  "Australia/Sydney",
-  "UTC",
-];
+// Suggestions only — the field accepts any IANA name. The list omits "UTC".
+const TIMEZONES = [...Intl.supportedValuesOf("timeZone"), "UTC"];
 
 type Schema = {
   properties?: { questions?: { items?: { properties?: Record<string, unknown> } } };
@@ -74,7 +60,7 @@ function schemaWith(base: Record<string, unknown>, keep: string[]): Record<strin
   return copy;
 }
 
-function useDebounced<T>(value: T, ms: number): T {
+export function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(value), ms);
@@ -423,39 +409,30 @@ export function ParametersForm({
                     </span>
                   ))}
                 </div>
-                <div className={styles.row}>
+                {/* A form so the browser handles Enter and validates the address. */}
+                <form
+                  className={styles.row}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const email = newSubscriber.trim().toLowerCase();
+                    if (!subscribers.includes(email)) edit({ subscribers: [...subscribers, email] });
+                    setNewSubscriber("");
+                  }}
+                >
                   <input
                     id={`sub-${scopeKey}`}
                     className={ws.input}
                     type="email"
+                    required
                     aria-label="Add a subscriber"
                     placeholder="name@example.com"
                     value={newSubscriber}
                     onChange={(e) => setNewSubscriber(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        (e.currentTarget.nextElementSibling as HTMLButtonElement | null)?.click();
-                      }
-                    }}
                   />
-                  <button
-                    type="button"
-                    className={`${ws.secondary} ${ws.tiny}`}
-                    onClick={() => {
-                      const email = newSubscriber.trim().toLowerCase();
-                      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                        setLocalError("Enter an email address like name@example.com.");
-                        return;
-                      }
-                      setLocalError(null);
-                      if (!subscribers.includes(email)) edit({ subscribers: [...subscribers, email] });
-                      setNewSubscriber("");
-                    }}
-                  >
+                  <button type="submit" className={`${ws.secondary} ${ws.tiny}`}>
                     Add
                   </button>
-                </div>
+                </form>
                 <p className={ws.hint}>Added when the monitor is created.</p>
                 {override("subscribers")}
               </>

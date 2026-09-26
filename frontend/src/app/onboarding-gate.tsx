@@ -3,8 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-
-
+import { fetchBootstrap } from "./auth-gate";
 
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -12,14 +11,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
 
   // No fetch of its own: AuthGate has already asked, under the same key, and
   // the answer carries both keys. Two requests per page load removed.
-  const { data, isLoading } = useQuery({
-    queryKey: ["bootstrap"],
-    queryFn: async () => {
-      const response = await fetch("/api/auth/bootstrap");
-      if (!response.ok) throw new Error(`session check failed: ${response.status}`);
-      return response.json() as Promise<{ onboarding_complete: boolean }>;
-    },
-  });
+  const { data, isLoading } = useQuery({ queryKey: ["bootstrap"], queryFn: fetchBootstrap });
 
   const setupComplete = data?.onboarding_complete ?? false;
 

@@ -4,24 +4,8 @@
  * next run will send.
  */
 
+import { json, send } from "./api";
 import type { EffectiveSettings, YutoriSettings } from "./scout-api";
-
-async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(
-      typeof body.detail === "string" ? body.detail : `${path} failed: ${response.status}`,
-    );
-  }
-  return response.json();
-}
-
-const send = (method: string, body?: unknown): RequestInit => ({
-  method,
-  headers: { "Content-Type": "application/json" },
-  body: body === undefined ? undefined : JSON.stringify(body),
-});
 
 export type QueryTemplateConfig = {
   template: { body: string; version: number; is_default: boolean };

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { json, send } from "@/lib/api";
 import {
   type RunDetail,
   type RunQuestion,
@@ -150,11 +151,8 @@ export default function RunPage() {
   });
 
   const ingest = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/candidates/ingest", { method: "POST" });
-      if (!response.ok) throw new Error(`ingest failed: ${response.status}`);
-      return response.json();
-    },
+    mutationFn: () =>
+      json<{ succeeded: number; skipped: number; failed: number }>("/api/candidates/ingest", send("POST")),
     onSuccess: async (body) => {
       setNote(`Ingest: ${body.succeeded} added, ${body.skipped} skipped, ${body.failed} failed.`);
       await queryClient.invalidateQueries({ queryKey: ["run"] });
