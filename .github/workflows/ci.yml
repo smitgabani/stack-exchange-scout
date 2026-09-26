@@ -64,6 +64,11 @@ jobs:
         working-directory: backend
     env:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test
+      # conftest.py deliberately ignores DATABASE_URL (locally it points at
+      # production) and connects to TEST_DATABASE_URL instead. Without this
+      # it fell back to a passwordless localhost URL and every test failed to
+      # connect as the runner user.
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test
       APP_ACCESS_PASSWORD: test-password
       APP_SECRET_KEY: test-secret-key
       YUTORI_WEBHOOK_SECRET: test-webhook-secret

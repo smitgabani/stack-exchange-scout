@@ -189,7 +189,7 @@ def test_bootstrap_without_a_session_reports_nothing_else(client: TestClient) ->
 
 
 def test_the_llm_endpoints_stop_accepting_after_the_hourly_ceiling(
-    client: TestClient, auth_cookies: dict[str, str]
+    client: TestClient, auth_cookies: dict[str, str], gemini_key_stored
 ) -> None:
     """Each of these costs a real LLM call. Nothing used to stop a retry loop
     from spending repeatedly, and the only evidence would have been the bill.

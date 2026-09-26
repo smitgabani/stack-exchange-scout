@@ -104,6 +104,26 @@ def client() -> TestClient:
 
 
 @pytest.fixture
+def gemini_key_stored(client: TestClient):
+    """Pass the "is a Gemini key stored?" check without storing one.
+
+    Routes that spend LLM calls refuse with 403 when no key is stored. Tests
+    that exercise those routes' own behaviour (202, rate limits) used to pass
+    only because a real key happened to be left in the local database — so
+    they failed in CI, whose database starts empty. No LLM is called either
+    way: these tests never reach the provider.
+    """
+    from app.api import deps
+
+    async def stored() -> None:
+        return None
+
+    client.app.dependency_overrides[deps.require_gemini_key] = stored
+    yield
+    client.app.dependency_overrides.pop(deps.require_gemini_key, None)
+
+
+@pytest.fixture
 def auth_cookies(client: TestClient) -> dict[str, str]:
     response = client.post("/auth/login", json={"password": settings.app_access_password})
     return {"session": response.cookies["session"]}

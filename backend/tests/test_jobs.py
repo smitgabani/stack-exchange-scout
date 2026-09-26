@@ -143,7 +143,7 @@ async def test_recovery_leaves_finished_jobs_alone(clean_jobs, registered_kinds)
 
 @pytest.mark.anyio
 async def test_starting_a_job_returns_202_without_doing_the_work(
-    client: TestClient, auth_cookies: dict[str, str], clean_jobs
+    client: TestClient, auth_cookies: dict[str, str], clean_jobs, gemini_key_stored
 ) -> None:
     """The whole point: the request does not wait for the LLM.
 
