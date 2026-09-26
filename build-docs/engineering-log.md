@@ -397,3 +397,39 @@ Tests went from 314 to 372. The new files are `test_monitors.py`, `test_task_set
 3. Open **Monitors → List scouts and research tasks → Stop older monitors** to clear the pile-up that already exists.
 4. Do the M13-TEST click-through.
 5. F10 (presets) and §2 topic management are next in `featurelist.md`.
+
+---
+
+## 2026-09-25 — Cleanup: removing what M12 and the job queue replaced
+
+**Milestone / tickets:** none — an over-engineering audit, then its fixes in one pass.
+
+**Decisions made:**
+- The legacy single-Scout path is gone: the `scouts` and `scout_events` tables, `/scout/*`, most of `scout_service`, the repository, and `profile.scout`. M12 had already copied its data into definitions, instances and runs, and nothing in the UI called it. Migration `f6b2e9d40c17` drops the tables and `scout_definitions.query_hash`, which was written but never read. Downgrade restores the schema but not the rows.
+- The synchronous twins of the four jobs are gone: `/digest/generate`, `/questions/{id}/challenge`, `/challenges/{id}/reformat` and `/llm/test`. `jobs.py` said they would go "once the frontend has moved", and it had.
+- Other unused endpoints are gone too: `/digests`, `/digests/{id}`, `/auth/session` and `/scout-effectiveness`.
+- `limit_scout_run` was removed, not attached, because it had never been attached to anything. Scout runs have no rate limit, the same as before. Attaching it to `/scout-definitions/{id}/run` is a one-line change if wanted.
+
+**What got built (mostly removed):**
+- Six copy-paste key routes became `/settings/{provider}-key`. The URLs didn't change.
+- The prompt and query-template services now share `services/versioned.py`.
+- `profile_service.get_profile_data` replaces the one-liner that was repeated 17 times.
+- The frontend has one `lib/api.ts` (`json`, `send`, `ApiError`) in place of four copies and a dozen hand-rolled `fetch` calls.
+- One `ago()` built on `Intl.RelativeTimeFormat` replaces five "N days ago" helpers.
+- There is one `<VersionTable>` component.
+- The timezone list comes from `Intl.supportedValuesOf("timeZone")`.
+- The subscriber input is a native `<form>`.
+
+Net result: −2,267 source lines, −645 test lines, no dependencies added or removed.
+
+**Git:** branch `chore/audit-cleanup`, three commits (backend, frontend, docs). The user overrode the command boundary for this task's local steps only, so Claude ran the branch, `uv lock`, pytest (348 passed), ruff, lint, build and the commits. The new migration was cycled down and up against the local `scout_test`. Push, merge and deploy stayed with the user.
+
+**Concepts introduced:**
+- `functools.partial` to bind a model class into a shared function without writing a wrapper.
+- A dropping migration is irreversible for data even when `downgrade()` exists.
+- Native platform features (`Intl`, form validation, Enter-to-submit) over hand-written equivalents.
+
+**Next up:**
+1. Push and merge `chore/audit-cleanup`.
+2. Deploy the backend. Its release migration drops `scouts` and `scout_events` in production.
+3. Deploy the frontend. Neither deploy depends on the other.

@@ -11,7 +11,7 @@ the Yutori webhook require a valid session cookie.
 |---|---|---|
 | POST | `/auth/login` | Check the shared password, set the session cookie |
 | POST | `/auth/logout` | Clear the session cookie |
-| GET | `/auth/session` | Current session status |
+| GET | `/auth/bootstrap` | Session status plus whether the Yutori and Gemini keys are stored, in one call |
 
 ## Profile (`profile.py`)
 
@@ -24,25 +24,8 @@ the Yutori webhook require a valid session cookie.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/settings/yutori-key` | Store/replace the Yutori API key (encrypted) |
-| GET | `/settings/yutori-key/status` | Whether a Yutori key is set |
-| POST | `/settings/gemini-key` | Store/replace the Gemini API key |
-| GET | `/settings/gemini-key/status` | Whether a Gemini key is set |
-| POST | `/settings/openai-key` | Store/replace the OpenAI API key |
-| GET | `/settings/openai-key/status` | Whether an OpenAI key is set |
-
-## Scout status & pipeline stages (`scout.py`)
-
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/scout` | Current Scout status summary (used by the dashboard hero); also polls/finalizes an in-flight run |
-| POST | `/scout/sync` | Free. Push the current profile-derived query to an existing Scout. Never creates one (`allow_create=False`) — creating a Scout is what `/scout/run` is for, behind a priced confirmation |
-| POST | `/scout/run?mode=research\|scout` | **Spends ~$0.35.** Starts a discovery run now. 409 if one is already in flight |
-| POST | `/scout/park` | Pause the Scout at Yutori. Free, idempotent |
-| POST | `/scout/forget` | Drop this app's local reference to a Scout it can no longer administer (e.g. after switching accounts). Free, local only — touches no discovered questions |
-| POST | `/scout/pull` | Ingest Yutori updates that never reached the webhook. Free |
-| GET | `/scout/panel` | Combined status data for the Yutori monitors panel, in one call |
-| POST | `/candidates/ingest` | Turn pending webhook payloads into candidate `question` rows (idempotent per Stack Overflow ID) |
+| POST | `/settings/{provider}-key` | Store/replace the API key for `yutori`, `gemini` or `openai` (encrypted) |
+| GET | `/settings/{provider}-key/status` | Whether that provider's key is set |
 
 ## Scout definitions, runs, accounts (`definitions.py`, `accounts.py`)
 
@@ -73,7 +56,6 @@ the Yutori webhook require a valid session cookie.
 | GET | `/scout-runs/{id}` | One run's detail, including per-question fate |
 | POST | `/scout-runs/{id}/sync` | Ask Yutori for this run's status; collect result if ready |
 | POST | `/scout-runs/sync` | Sync all outstanding runs |
-| GET | `/scout-effectiveness` | Cost-per-question rollup, per definition |
 | GET | `/accounts` | List stored Yutori API keys |
 | POST | `/accounts` | Add a key |
 | PATCH | `/accounts/{id}` | Rename a key |
@@ -112,7 +94,9 @@ Nothing here calls Yutori or spends anything — these change what the next run 
 | GET | `/questions/{id}` | One question |
 | POST | `/questions/{id}/dismiss` | Mark as user-dismissed (reversible, not re-discovered) |
 | POST | `/questions/{id}/restore` | Undo a dismissal |
-| POST | `/questions/{id}/challenge` | **Spends 1 LLM call.** Generate a challenge from this question |
+| POST | `/questions/{id}/complete` | Mark a challenged question solved |
+| POST | `/questions/{id}/reopen` | Undo a completion |
+| POST | `/candidates/ingest` | Turn pending webhook payloads into candidate `question` rows (idempotent per Stack Overflow ID) |
 | POST | `/candidates/enrich` | Fetch real Stack Exchange data for pending candidates |
 | POST | `/candidates/rank` | Re-score all candidates against the current profile |
 
@@ -120,14 +104,24 @@ Nothing here calls Yutori or spends anything — these change what the next run 
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/digests` | List digests |
-| GET | `/digests/{id}` | One digest + its challenges |
 | GET | `/challenges` | List challenges, filterable by source (digest/manual) |
 | GET | `/challenges/{id}` | One challenge's full content |
-| POST | `/challenges/{id}/reformat` | **Spends 0 or 1 LLM call.** Add any blocks a chosen format wants that this challenge lacks, keeping its ID and existing content |
 | DELETE | `/challenges/{id}` | Delete a challenge only; source question and digest membership elsewhere are unaffected |
-| POST | `/digest/generate` | **Spends N LLM calls.** Bundle best-scoring unused candidates into new challenges. Requires a Gemini key |
 | POST | `/digest/send` | Email the most recent digest via Resend |
+
+## Background jobs (`jobs.py`)
+
+Anything that calls a model runs as a job: the request returns at once with a
+job row, and `GET /jobs/{id}` reports how it went. Each start requires a Gemini
+key and is rate-limited.
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/jobs/digest-generate` | **Spends N LLM calls.** Bundle best-scoring unused candidates into new challenges |
+| POST | `/jobs/challenge-create` | **Spends 1 LLM call.** Generate a challenge from one question |
+| POST | `/jobs/reformat` | **Spends 0 or 1 LLM call.** Add any blocks a chosen format wants that a challenge lacks, keeping its ID and existing content |
+| POST | `/jobs/llm-test` | **Spends 1 LLM call.** Run a real generation without saving anything |
+| GET | `/jobs/{id}` | A job's status, and its result or error once finished |
 
 ## LLM configuration (`llm.py`)
 
@@ -139,7 +133,6 @@ Nothing here calls Yutori or spends anything — these change what the next run 
 | POST | `/llm/prompts/{version}/activate` | Reactivate an older version |
 | POST | `/llm/prompts/reset` | Revert to the default prompt shipped in code |
 | GET | `/llm/preview` | Render the exact prompt for a question, free (no model call) |
-| POST | `/llm/test` | **Spends 1 LLM call.** Run a real generation without saving anything |
 | GET | `/llm/generations` | Log of past generations (provider/model/prompt version/format) |
 | GET | `/llm/blocks` | The registry of challenge content blocks (core + optional) |
 | GET | `/llm/formats` | List saved formats + the active one |
@@ -151,9 +144,9 @@ Nothing here calls Yutori or spends anything — these change what the next run 
 ## Cost-bearing endpoints, at a glance
 
 - `POST /scout-definitions/{id}/run` — ~$0.35 per call (Yutori)
-- `POST /questions/{id}/challenge` — 1 LLM call
-- `POST /digest/generate` — N LLM calls (one per challenge generated)
-- `POST /challenges/{id}/reformat` — 0 or 1 LLM call
-- `POST /llm/test` — 1 LLM call
+- `POST /jobs/challenge-create` — 1 LLM call
+- `POST /jobs/digest-generate` — N LLM calls (one per challenge generated)
+- `POST /jobs/reformat` — 0 or 1 LLM call
+- `POST /jobs/llm-test` — 1 LLM call
 
 Every other endpoint is free to call as often as needed.

@@ -34,14 +34,14 @@ exactly which button triggers which stage).
        │
        ▼
  5a. Promote one question ──spends 1 LLM call──▶  a challenge
-       (POST /questions/{id}/challenge, pick a format)
+       (POST /jobs/challenge-create, pick a format)
        — generates: problem summary, why it was selected, concepts,
          starting direction, progressively-revealed hints, difficulty
        — the chosen "format" controls which extra blocks the LLM is asked
          for (see the LLM → Formats page)
        │
  5b. OR generate a digest ──spends N LLM calls──▶  a digest
-       (POST /digest/generate)
+       (POST /jobs/digest-generate)
        — bundles your best-scoring not-yet-used candidates into a batch of
          challenges in one go, sized by your "questions per digest" setting
        — can come back "empty" if nothing cleared the quality bar; the bar
@@ -66,7 +66,7 @@ represent different kinds of decisions.
 
 ## Reformatting vs. regenerating
 
-Adding sections to an existing challenge (`POST /challenges/{id}/reformat`)
+Adding sections to an existing challenge (`POST /jobs/reformat`)
 is not the same as generating a new one. It keeps the challenge's ID and
 any already-revealed hints intact, and only asks the model for blocks the
 current format wants that the challenge doesn't already have. If nothing
