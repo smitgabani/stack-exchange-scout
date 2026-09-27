@@ -487,4 +487,11 @@ Net result: −2,267 source lines, −645 test lines, no dependencies added or r
 - Rolling forward vs rolling back across a migration.
 - Pinning third-party actions by commit.
 
+**Result:** pull request #18 was merged as `b5334bc`. Deploy run 36283471662 needed three attempts:
+- **Attempts 1 and 2** (00:48–00:55 UTC): the release step's `alembic upgrade head` timed out connecting to Supabase's pooler. Fly aborted each release and the old version kept serving. The smoke test failed both runs, as designed, because `continue-on-error` had hidden the failed `flyctl` step.
+- **Diagnosis:** minutes later, throwaway machines on both the old and the new image connected in about 0.2 s, and `alembic current` worked. That points to a short pooler outage; the running app rode it out on its already-open connections.
+- **Attempt 3** succeeded. Backend and frontend are both on `b5334bc`: `/health` reports it, and both Vercel domains carry it in `app-version` through Vercel's own Git build. Release `prod-1` exists, and the database is at `f6b2e9d40c17`.
+
+Takeaway: a failed release step is safe to re-run. Nothing changes until the migration succeeds, and a re-run needs the approval again.
+
 **Next up:** phase 2. Create a Vercel token, then move the frontend into the pipeline with `vercel.json` and the prebuilt deploy steps.
