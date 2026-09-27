@@ -26,3 +26,9 @@ npm-debug.log*
 
 # Local scratch
 *.local
+
+# Vercel CLI link (`vercel link` at the repo root; the deploy pipeline needs its ids)
+.vercel
+
+# Per-machine Claude Code permissions
+.claude/settings.local.json

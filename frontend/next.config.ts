@@ -7,6 +7,13 @@ import type { NextConfig } from "next";
 const backendUrl = process.env.BACKEND_URL;
 
 const nextConfig: NextConfig = {
+  // Inlined at build time, so every page (static or rendered on request) names
+  // the commit it was built from. GIT_SHA comes from the deploy pipeline;
+  // VERCEL_GIT_COMMIT_SHA covers a build Vercel runs from Git itself.
+  env: {
+    GIT_SHA: process.env.GIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || "dev",
+  },
+
   async rewrites() {
     if (!backendUrl) {
       return [];

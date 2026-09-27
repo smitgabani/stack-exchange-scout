@@ -18,6 +18,12 @@ RUN uv sync --frozen --no-dev
 
 ENV PATH="/app/.venv/bin:$PATH"
 
+# The commit this image was built from, reported by /health. Baked into the
+# image (not set per deploy) so a rollback to an old image still names itself.
+# Last, so a new commit doesn't invalidate the dependency layers above.
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
+
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

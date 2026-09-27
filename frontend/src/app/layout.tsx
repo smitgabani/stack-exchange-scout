@@ -21,6 +21,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Stack Exchange Scout",
   description: "Stack Overflow questions, turned into coding challenges.",
+  // The commit this build came from (inlined by next.config.ts), rendered as
+  // <meta name="app-version"> so a deploy can be verified from any page.
+  other: { "app-version": process.env.GIT_SHA ?? "dev" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

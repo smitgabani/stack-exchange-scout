@@ -1,0 +1,79 @@
+name: Deploy
+
+# The only path to production for the backend (ADR 0007). Every push to main
+# runs CI, then deploys what changed since the last successful deploy, after an
+# approval on the `production` environment. Runbook:
+# build-docs/deployment-setup-guide.md §11.
+on:
+  push:
+    branches: [main]
+
+env:
+  FLY_URL: https://backend-soft-headland-5023.fly.dev
+  SITE_URL: https://stack-exchange-scout-tau.vercel.app
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.diff.outputs.backend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and the prod-* tags
+      - id: diff
+        # Compared with the last successful deploy (the newest prod-* tag), not
+        # the previous push, so a rejected, failed or cancelled deploy's changes
+        # still ship with the next run. No tag yet: everything counts as changed.
+        run: |
+          last=$(git tag --list 'prod-*' --sort=-v:refname | head -1)
+          files=$(if [ -n "$last" ]; then git diff --name-only "$last" HEAD; else git ls-files; fi)
+          # Only what ends up in the running image; tests and docs don't deploy.
+          grep -qE '^backend/(app/|alembic/|alembic\.ini|Dockerfile|\.dockerignore|fly\.toml|pyproject\.toml|uv\.lock)' <<< "$files" && backend=true || backend=false
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          if grep -q '^backend/alembic/versions/' <<< "$files"; then
+            echo "::warning title=Migration::This release changes the database schema. Back up Supabase before approving if it drops or rewrites anything."
+          fi
+
+  deploy:
+    needs: [checks, changes]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    environment: production # waits for approval; holds the deploy secrets
+    concurrency:
+      group: deploy-production # one deploy at a time; CI never waits on it
+      cancel-in-progress: false
+    permissions:
+      contents: write # create the release tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+        with:
+          version: 0.4.104
+      - name: Deploy the backend
+        working-directory: backend
+        # `fly deploy` has exited 1 after a successful release; the smoke test
+        # below decides. The release step runs `alembic upgrade head` first.
+        continue-on-error: true
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only --build-arg GIT_SHA=${{ github.sha }}
+      - name: Smoke test the API
+        run: |
+          for i in $(seq 12); do
+            curl -fsS "$FLY_URL/health" | grep -q "$GITHUB_SHA" && curl -fsS "$FLY_URL/ready" && exit 0
+            sleep 10
+          done
+          echo "::error::$FLY_URL/health is not serving $GITHUB_SHA"
+          exit 1
+      - name: Smoke test the site
+        run: curl -fsS --retry 5 --retry-all-errors "$SITE_URL/api/auth/bootstrap"
+      - name: Tag the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "prod-$GITHUB_RUN_NUMBER" > /dev/null 2>&1 || gh release create "prod-$GITHUB_RUN_NUMBER" --target "$GITHUB_SHA" --generate-notes

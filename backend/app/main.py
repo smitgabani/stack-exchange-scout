@@ -119,8 +119,12 @@ async def root() -> dict[str, str]:
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    """Liveness check: is the process up at all? No dependencies checked."""
-    return {"status": "ok"}
+    """Liveness check: is the process up at all? No dependencies checked.
+
+    `version` is the deployed commit, which the deploy pipeline's smoke test
+    matches against what it just shipped.
+    """
+    return {"status": "ok", "version": settings.git_sha}
 
 
 @app.get("/ready")
