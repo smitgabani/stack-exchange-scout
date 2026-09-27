@@ -433,3 +433,58 @@ Net result: −2,267 source lines, −645 test lines, no dependencies added or r
 1. Push and merge `chore/audit-cleanup`.
 2. Deploy the backend. Its release migration drops `scouts` and `scout_events` in production.
 3. Deploy the frontend. Neither deploy depends on the other.
+
+---
+
+## 2026-09-26 — M14: continuous delivery through one pipeline
+
+**Milestone / tickets:** M14 phase 1: P1–P4, B1, F1, S1–S3. Phase 2 (frontend: S4, P5) waits for a Vercel token.
+
+**Decisions made:** [ADR 0007](decisions/0007-continuous-delivery-pipeline.md), from the [CD Pipeline Report](https://claude.ai/code/artifact/ab72538a-f3f6-4bf5-94f5-c5e5bf6e03ba):
+- GitHub Actions is the only path to production for the backend, with one approval per release.
+- Change detection runs against the last successful deploy, the newest `prod-*` tag.
+- The smoke test, not `flyctl`'s exit code, decides whether a release worked.
+- Both apps stamp their commit at build time.
+- The owner declared the production data up to this deploy to be test data, so migration `f6b2e9d40c17` shipped without a backup. Real usage starts here.
+
+**What got built:**
+- **`ci.yml`:**
+  - It is reusable.
+  - A `frontend` job runs lint and build.
+  - The whole migration chain goes down to `base` and back up.
+- **`deploy.yml`:**
+  - CI, then `git diff` since the last tag, then approval, then `flyctl deploy` with the commit as a build argument.
+  - A smoke test that waits for `/health` to report the commit, then a check of the site's `/api` proxy, then the `prod-<n>` Release.
+- **Commit stamps:**
+  - `/health` reports `version`.
+  - `next.config.ts` inlines `GIT_SHA` (or Vercel's own commit variable) into every page's `<meta name="app-version">`.
+- **Docs:** ADR 0007, the M14 tickets, and §11 of the deployment guide (the runbook).
+
+`/code-review` found 12 issues in the first draft, and all were fixed:
+- change detection that could lose a rejected deploy's changes;
+- a failed `flyctl` step that would skip the smoke test;
+- rollbacks that can't cross a migration (the runbook now says roll forward with `git revert`);
+- a frontend stamp missing from pages rendered on request;
+- workflow-wide concurrency;
+- a round-trip that only tested the head migration;
+- an unpinned action;
+- a stamp set per deploy rather than baked into the image;
+- an environment-coupled test;
+- a filter that deployed test-only changes;
+- `.claude/settings.local.json` not being ignored.
+
+`/ponytail-review` also cut the tag step to one `gh release create --target`.
+
+**Git:** branch `m14-cd-pipeline`, pull request, merge, run under an M14-only autonomy grant.
+
+**Concepts introduced:**
+- Continuous delivery vs continuous deployment.
+- Reusable workflows.
+- Environments as an approval gate and a secret boundary.
+- Diffing against the last deploy rather than the last push.
+- Build arguments.
+- Build-time inlining (`next.config` `env`).
+- Rolling forward vs rolling back across a migration.
+- Pinning third-party actions by commit.
+
+**Next up:** phase 2. Create a Vercel token, then move the frontend into the pipeline with `vercel.json` and the prebuilt deploy steps.

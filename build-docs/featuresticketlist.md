@@ -420,3 +420,52 @@ Built on branches `M13-A` to `M13-E`, one per phase.
   - On a scout's Parameters tab, switch Research ↔ Scout and check that the form changes. Set a daily interval and a timezone, watch the preview update, then save.
   - With a live monitor, check that the banner lists the difference and that **Apply** clears it (free).
   - Edit and save the query template on Defaults, and check that the scout's Query preview uses it.
+
+---
+
+## M14 — Continuous Delivery Pipeline
+
+**Goal:** one path to production. Every merge to `main` is checked, then deploys only the app that changed, after one approval. Backend goes first, each deploy is smoke-tested, and each release is tagged.
+
+Design: [ADR 0007](decisions/0007-continuous-delivery-pipeline.md). Reasoning and the industry comparison: the [CD Pipeline Report](https://claude.ai/code/artifact/ab72538a-f3f6-4bf5-94f5-c5e5bf6e03ba). Runbook: [`deployment-setup-guide.md`](deployment-setup-guide.md) §11.
+System-design theme: continuous delivery, gated pipelines, expand/contract migrations.
+
+The work ships in two pull requests, which were phases in the report's rollout. Phase 1 (`m14-cd-pipeline`) moves the backend and all the checks into the pipeline. Phase 2 moves the frontend, and needs a Vercel token only the owner can create. Ticket IDs: `P` for pipeline code, `S` for setup (accounts, tokens, repository settings).
+
+**Phase 1: checks and backend (`m14-cd-pipeline`)**
+- `M14-P1` CI checks the frontend: a `frontend` job in `ci.yml` (`npm ci`, `npm run lint`, `npm run build`, Node 22).
+- `M14-P2` CI proves the whole migration chain reverses: `alembic downgrade base`, then `upgrade head`, before pytest.
+- `M14-P3` `ci.yml` becomes reusable (`workflow_call`). Its `push: main` trigger moves to the deploy workflow, which runs it first.
+- `M14-P4` `deploy.yml`, in this order:
+  1. CI.
+  2. Change detection: `git diff` against the newest `prod-*` tag (the last successful deploy), counting only files that end up in the image. It includes a warning when a migration changed.
+  3. The `production` approval.
+  4. `flyctl deploy --remote-only --build-arg GIT_SHA=…`. Its exit code doesn't decide success; the smoke test does, waiting for `/health` to report this commit.
+  5. A check of the site's `/api` proxy.
+  6. The GitHub Release `prod-<run>` and its tag.
+
+  `concurrency` sits on the deploy job only. `setup-flyctl` is pinned to a commit and `flyctl` to 0.4.104.
+- `M14-B1` The backend image is built with the `GIT_SHA` build argument, and `/health` reports it as `version` (`"dev"` elsewhere).
+- `M14-F1` `next.config.ts` inlines `GIT_SHA`, falling back to `VERCEL_GIT_COMMIT_SHA`, so every page, static or rendered on request, carries `<meta name="app-version">`.
+- `M14-S1` Fly deploy token (`fly tokens create deploy -a backend-soft-headland-5023 -x 8760h`), stored as `FLY_API_TOKEN` on the `production` environment.
+- `M14-S2` The `production` environment: owner as required reviewer, `main` only. **Before the merge**, because GitHub creates a missing environment without an approval step.
+- `M14-S3` A ruleset on `main`: require a pull request, and the `lint`, `test`, `production-imports` and `frontend` checks.
+
+**Phase 2: frontend (needs a Vercel token)**
+- `M14-S4` A Vercel token, `vercel link` at the repository root, and the `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` secrets on `production`.
+- `M14-P5` `deploy.yml` also deploys the frontend when `frontend/` changed since the last tag: `vercel pull`, `build --prod`, `deploy --prebuilt --prod`, then a check that the page shows this commit. `frontend/vercel.json` sets `git.deploymentEnabled: false`.
+
+**M14-TEST**
+- 🧩 `/health` answers `{"status": "ok", "version": <settings.git_sha>}`. *(automated: `test_health.py`)*
+- 🧩 Checked locally before phase 1 merged:
+  - The whole migration chain goes down to `base` and back up on a fresh database.
+  - A build with `GIT_SHA` set inlines it into the root layout shared by every route.
+- 🧩 The pull request's CI runs all four jobs and they pass.
+- Manual, on the first run after the merge:
+  - The Deploy run waits at "Review deployments".
+  - Approve it. The API smoke test finds the merge commit on `/health`.
+  - The `prod-<n>` Release appears.
+  - The site's `<meta name="app-version">` shows the merge commit, from Vercel's own Git build.
+- Afterwards:
+  - A docs-only or tests-only push deploys nothing.
+  - A pull request with a failing check can't be merged.
