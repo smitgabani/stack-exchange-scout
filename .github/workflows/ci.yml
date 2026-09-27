@@ -1,9 +1,10 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  # deploy.yml runs these same checks on every push to main before deploying,
+  # so pushes to main no longer trigger this workflow directly.
+  workflow_call:
 
 jobs:
   lint:
@@ -81,4 +82,23 @@ jobs:
       - run: pip install uv==0.12.13
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
+      # Every migration must be reversible: the whole chain down and back up.
+      - run: uv run alembic downgrade base
+      - run: uv run alembic upgrade head
       - run: uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
