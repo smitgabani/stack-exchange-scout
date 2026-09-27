@@ -6,9 +6,11 @@ client = TestClient(app)
 
 
 def test_health() -> None:
+    from app.core.config import settings
+
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "version": settings.git_sha}
 
 
 # --- 🔒 the suite must never point at production ---

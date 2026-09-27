@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     # Public URL of the frontend, used for challenge links in the email.
     app_base_url: str = ""
 
+    # The commit this image was built from (the Dockerfile's GIT_SHA build arg,
+    # passed by the deploy pipeline), reported by /health so a deploy can be
+    # verified. "dev" anywhere else.
+    git_sha: str = "dev"
+
     # A third bar, added after scoring real Stack Overflow data: topic + depth
     # + quality alone total 65, so a famous, well-written, on-topic question
     # cleared the threshold despite having 50 answers and an accepted one —

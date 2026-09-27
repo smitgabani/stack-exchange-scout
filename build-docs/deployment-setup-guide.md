@@ -234,86 +234,89 @@ npm run dev
 
 # 11. Continuous Deployment
 
-## 11.1 Is a CD pipeline realistic right now?
+Every production deploy goes through `.github/workflows/deploy.yml`. The decision is [ADR 0007](decisions/0007-continuous-delivery-pipeline.md), the tickets are M14 in `featuresticketlist.md`, and the reasoning is in the [CD Pipeline Report](https://claude.ai/code/artifact/ab72538a-f3f6-4bf5-94f5-c5e5bf6e03ba).
 
-Yes, and the move to Fly.io + Supabase makes it simpler than the original SQLite-based plan in one specific way:
+## 11.1 How a release happens
 
-* **No scheduler exists yet** (`prd.md` §23) — every recurring job is a manually-triggered endpoint. This still simplifies CD: a deploy doesn't need to coordinate with, drain, or restart background workers/cron jobs, because there aren't any running independently of a request. That becomes a real CD concern only once a scheduler (Celery/APScheduler/managed cron) is added — worth revisiting at that point, not a blocker today.
-* **The backend is now stateless.** With SQLite, the app was pinned to a single instance with a single attached volume, so deploys were realistically "stop old, start new." With the database external on Supabase, that constraint is gone — Fly.io could in principle run a genuine rolling/zero-downtime deploy across multiple machines. For a personal single-user tool this isn't necessary (brief downtime during a deploy is a non-issue), but it's worth knowing the option now exists if it's ever wanted, without needing an infrastructure rework to get there.
+1. **Open a pull request.** `ci.yml` runs `lint`, `test`, `production-imports` and `frontend`. The `test` job takes every migration down to `base` and back up. The `main` ruleset won't allow a merge until all four pass.
+2. **Merge it.** The Deploy workflow runs CI again, then compares `HEAD` with the last successful deploy (the newest `prod-*` tag). If nothing that ends up in the backend image changed (for example tests, docs or CI), nothing deploys.
+3. **Approve it.** The run pauses at **Review deployments**. Open Actions → the run → Review deployments → tick `production` → Approve. If the run shows a *Migration* warning, read §11.3 first.
+4. **It deploys.**
+   1. `flyctl deploy` builds the image with this commit baked in, and runs `alembic upgrade head` as the release step.
+   2. The smoke test waits for `/health` to report this commit, which decides success even if `flyctl` wrongly reports failure.
+   3. The site's `/api` proxy is checked.
+5. **It's tagged.** A green run creates the GitHub Release `prod-<run number>` and its tag, listing the merged pull requests.
 
-## 11.2 Recommended pipeline (GitHub Actions)
+The frontend moves in two phases:
+- **Now:** Vercel's GitHub integration deploys every push to `main`, as before. Each page's `<meta name="app-version">` names its commit.
+- **Phase 2 (needs a Vercel token):** the pipeline builds and deploys the frontend too (`vercel build`, then `vercel deploy --prebuilt --prod`), and `frontend/vercel.json` turns the GitHub integration off.
 
-Trigger on push/merge to `main`:
+## 11.2 One-time setup
 
-```yaml
-name: deploy
-on:
-  push:
-    branches: [main]
+Do these in this order, before the pull request that adds `deploy.yml` is merged.
 
-jobs:
-  backend-ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install -r backend/requirements.txt
-      - run: ruff check backend/
-      - run: pytest backend/
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-        # spin up a throwaway Postgres service container for this job
-        # (e.g. `services: postgres: image: postgres:16`) rather than testing
-        # against Supabase directly
+1. **Fly deploy token.** Run `fly tokens create deploy -a backend-soft-headland-5023 -x 8760h`. It creates a one-year token that can deploy this app and nothing else. Store it as the `FLY_API_TOKEN` secret on the `production` environment.
+2. **The `production` environment.**
+   - GitHub → Settings → Environments → New environment → `production`.
+   - Required reviewers: yourself. Leave "Prevent self-review" off, since you trigger every run.
+   - Deployment branches: `main` only.
+   - Do this before the merge. A workflow that names a missing environment makes GitHub create it with no approval step.
+3. **The `main` ruleset:**
+   - Settings → Rules → a branch ruleset on `main`.
+   - Require a pull request, with 0 approvals because this is a solo repo.
+   - Require the status checks `lint`, `test`, `production-imports` and `frontend`.
 
-  frontend-ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: "20" }
-      - run: npm ci --prefix frontend
-      - run: npm run lint --prefix frontend
-      - run: npm run build --prefix frontend
+For phase 2, the frontend:
+1. Create a Vercel token under Account Settings → Tokens.
+2. Run `vercel link` at the repository root and choose the existing project. `.vercel/project.json` now holds `orgId` and `projectId`; the root `.gitignore` keeps it out of git.
+3. Add `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` to the `production` environment.
 
-  deploy-backend:
-    needs: [backend-ci, frontend-ci]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      # migrations run against Supabase as a Fly `release_command` in
-      # fly.toml, so they execute before the new instance starts taking
-      # traffic
+The project stays linked to the repository. Domains, the `BACKEND_URL` environment variable and Vercel's rollback are unchanged.
+
+## 11.3 Releases that change the schema
+
+Migrations run while the old machine is still serving, so each one must be safe for the old code. Use expand/contract:
+- **Expand:** add new columns and tables in the release that starts using them.
+- **Contract:** drop old ones only in a later release, once nothing deployed reads them.
+
+Before approving any release that drops or rewrites data, back up Supabase:
+
+```bash
+pg_dump "<session-pooler connection string, port 5432>" --format=custom --file=backup-$(date +%F).dump
 ```
 
-Frontend deploys don't need a job here at all if Vercel's native GitHub integration is enabled — it deploys `main` to production and every PR to a preview automatically, with no extra CI config. Keep `frontend-ci` above only as a required check that blocks a bad PR from being merged; let Vercel do the actual deploy.
+- Take the session-pooler string from Supabase → Connect. The transaction pooler on port 6543 won't work for `pg_dump`.
+- The local `pg_dump` major version must be at least the server's.
+- A migration downgrade restores the schema, never the rows. To get data back, use `pg_restore` from this dump.
 
-Stages, in order: lint/typecheck → tests (against a throwaway Postgres, not the real Supabase project) → build → deploy backend (with migrations as part of the release) → (Vercel deploys frontend independently, triggered by the same merge).
+The first pipeline deploy (2026-09-26) shipped migration `f6b2e9d40c17`, which drops `scouts`, `scout_events` and `scout_definitions.query_hash`. It ran without a backup because the data up to then was test data. Real usage starts there, so from now on every release that drops data gets the backup above.
 
-## 11.3 Environments
+## 11.4 Rollback
 
-A single production environment is enough — this is a personal, single-user tool (`prd.md` framing throughout), so a full staging environment is more infrastructure than the product needs. Lightweight substitutes cover most of what staging would give you:
+**Roll forward.** `git revert` the bad merge on a branch, open a pull request and merge it. The pipeline deploys the result like any other release, and a reverted migration's `downgrade()` runs only if you add a new migration that performs it.
 
-* **Vercel preview deployments** — automatic per-PR frontend previews, free, no setup.
-* **Fly.io preview apps** — available if you want to test a backend change against a real (but disposable) deployment before merging; skip this for MVP and add it only if a change feels risky enough to warrant it.
-* **A second free Supabase project** for development/testing (§10) — keeps experiments off the production data without any extra tooling.
+Two things look like rollbacks but can't cross a migration:
+- Re-running an old Deploy run.
+- `fly deploy --image <old image>`.
 
-## 11.4 Rollback & data safety
+Both run the old code's release step, `alembic upgrade head`, against a database already at a newer revision. Alembic stops with "Can't locate revision" and the deploy fails. GitHub also stops allowing re-runs after 30 days.
 
-* **App code rollback** is easy on Fly.io — redeploy the previous image/release. Nothing special needed.
-* **Data safety is now Supabase's job by default** — it manages backups (§4.4), unlike the old SQLite plan where backups had to be built by hand. For a schema-changing deploy specifically, still take a manual `pg_dump` first as cheap insurance, since the free tier's automatic backup retention window is short.
-* Treat "deploy that changes the schema" as a distinct, more careful action than "deploy that only changes application code" — the former deserves a fresh manual backup first; the latter doesn't touch the data at all.
+- **The backend, when no migration is involved:** `fly releases --image` lists past images. Then run `fly deploy --image <that image>` from `backend/`. The image still reports its own commit on `/health`.
+- **The frontend:** Vercel dashboard → Deployments → the previous production deployment → Promote to Production.
 
-## 11.5 What this pipeline deliberately doesn't handle yet
+## 11.5 Break-glass manual deploy
 
-* Coordinating scheduled-job restarts across deploys — not applicable until a scheduler exists (§23).
-* Multi-instance/zero-downtime rollout — technically possible now (§11.1) but not needed for a single-user tool, so not built out.
-* Automated DB backup as part of the pipeline itself — Supabase covers routine backups (§4.4); wiring an extra pre-migration snapshot into the pipeline is a reasonable future iteration, not a blocker for a first working CD setup.
+If GitHub Actions itself is down:
+- Backend: `fly deploy` from `backend/`.
+- Frontend: `vercel deploy --prod` from the repository root.
+
+A manual backend deploy without `--build-arg GIT_SHA=<commit>` reports `"version": "dev"` on `/health`, which marks it as off-pipeline. The next pipeline run replaces it.
+
+`fly deploy` has exited 1 after a successful release before. When that happens, trust `fly status` and `/health` over the exit code.
+
+## 11.6 Deliberately not handled
+
+Not handled yet: a staging environment, pull-request preview URLs (Vercel's automatic ones stop with Git deploys), automatic rollback, continuous deployment without approval, blue/green releases, infrastructure as code, and semantic version numbers. ADR 0007 and the report give the point at which each becomes worth adding.
 
 ---
 
