@@ -12,6 +12,7 @@ import { JobStatus, useJob } from "../../job-status";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
 import { Block, ProgressiveHints, SPECIAL_BLOCKS, indexBlocks } from "./blocks";
+import { formatDuration, useTimer } from "./use-timer";
 import styles from "./challenge.module.css";
 
 type Hint = { label: string; text: string };
@@ -42,6 +43,7 @@ type ChallengeDetail = {
   block_meta?: { key: string; label: string; kind: string; gated?: boolean }[];
   question_status: string | null;
   solved_at: string | null;
+  time_spent_seconds: number | null;
 };
 
 const post = (path: string) => json<unknown>(path, send("POST"));
@@ -61,7 +63,9 @@ export default function ChallengePage() {
   const [formatOpen, setFormatOpen] = useState(false);
   const [chosenFormat, setChosenFormat] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [askDone, setAskDone] = useState(false);
 
+  const timer = useTimer(params.id);
   const queryClient = useQueryClient();
   const { data: formats } = useQuery({ queryKey: ["llm-formats"], queryFn: llmApi.formats });
   // Every block that exists. Needed for two things this challenge's own
@@ -93,10 +97,23 @@ export default function ChallengePage() {
   }
 
   const complete = useMutation({
-    mutationFn: () => post(`/api/questions/${challenge!.question_id}/complete`),
-    onSuccess: refreshAfterStatusChange,
+    mutationFn: (timeSpentSeconds?: number) =>
+      json(
+        `/api/questions/${challenge!.question_id}/complete`,
+        send("POST", timeSpentSeconds != null ? { time_spent_seconds: timeSpentSeconds } : undefined),
+      ),
+    onSuccess: async () => {
+      timer.reset();
+      setAskDone(false);
+      await refreshAfterStatusChange();
+    },
     onError: (e: Error) => setNote(e.message),
   });
+
+  function stopAndAsk() {
+    timer.pause();
+    setAskDone(true);
+  }
 
   const reopen = useMutation({
     mutationFn: () => post(`/api/questions/${challenge!.question_id}/reopen`),
@@ -214,7 +231,11 @@ export default function ChallengePage() {
 
       {challenge.question_status === "solved" && (
         <div className={styles.completedBanner}>
-          <span>🎉 Completed {ago(challenge.solved_at)}</span>
+          <span>
+            🎉 Completed {ago(challenge.solved_at)}
+            {challenge.time_spent_seconds != null &&
+              ` · solved in ${formatDuration(challenge.time_spent_seconds)}`}
+          </span>
           <button
             type="button"
             className={styles.reopenLink}
@@ -286,15 +307,53 @@ export default function ChallengePage() {
       )}
 
       {challenge.question_status !== "solved" && (
-        <button
-          type="button"
-          className={styles.completeButton}
-          onClick={() => complete.mutate()}
-          disabled={complete.isPending}
-        >
-          {complete.isPending ? "Marking complete…" : "✓ Mark as complete"}
-        </button>
+        <div className={styles.timerRow}>
+          {timer.status === "running" ? (
+            <>
+              <span className={styles.timerDisplay}>{formatDuration(timer.elapsedSeconds)}</span>
+              <button type="button" className={styles.timerButton} onClick={stopAndAsk}>
+                ⏹ Stop
+              </button>
+            </>
+          ) : (
+            <>
+              {timer.status === "paused" && (
+                <span className={styles.timerDisplay}>{formatDuration(timer.elapsedSeconds)}</span>
+              )}
+              <button type="button" className={styles.timerButton} onClick={timer.start}>
+                {timer.status === "paused" ? "▶ Resume" : "▶ Start solving"}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className={styles.completeButton}
+            onClick={() => {
+              if (timer.status === "running") timer.pause();
+              complete.mutate(timer.elapsedSeconds > 0 ? timer.elapsedSeconds : undefined);
+            }}
+            disabled={complete.isPending}
+          >
+            {complete.isPending ? "Marking complete…" : "✓ Mark as complete"}
+          </button>
+        </div>
       )}
+
+      <ConfirmDialog
+        open={askDone}
+        title="Mark this challenge as done?"
+        body={
+          <p>
+            You worked on this for <strong>{formatDuration(timer.elapsedSeconds)}</strong>. Move it
+            to Done with that time recorded?
+          </p>
+        }
+        confirmLabel="Mark as done"
+        cancelLabel="Not yet"
+        busy={complete.isPending}
+        onConfirm={() => complete.mutate(timer.elapsedSeconds)}
+        onCancel={() => setAskDone(false)}
+      />
 
       {challenge.question_url && <hr className={styles.hr} />}
 

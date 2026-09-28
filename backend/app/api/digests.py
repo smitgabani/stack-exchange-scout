@@ -49,6 +49,7 @@ class ChallengeOut(BaseModel):
     # completed challenge apart without a second query.
     question_status: str | None = None
     solved_at: datetime | None = None
+    time_spent_seconds: int | None = None
 
 
 class ChallengeSummaryOut(BaseModel):
@@ -72,6 +73,7 @@ class ChallengeSummaryOut(BaseModel):
     estimated_difficulty: int | None = None
     question_status: str | None = None
     solved_at: datetime | None = None
+    time_spent_seconds: int | None = None
 
 
 def _challenge_summary(challenge: Challenge, question=None) -> ChallengeSummaryOut:
@@ -86,6 +88,7 @@ def _challenge_summary(challenge: Challenge, question=None) -> ChallengeSummaryO
         estimated_difficulty=challenge.estimated_difficulty,
         question_status=question.status if question else None,
         solved_at=question.solved_at if question else None,
+        time_spent_seconds=question.time_spent_seconds if question else None,
     )
 
 
@@ -121,6 +124,7 @@ def _challenge_out(challenge: Challenge, question, meta: dict[str, dict]) -> Cha
         format_name=challenge.format_name,
         question_status=question.status if question else None,
         solved_at=question.solved_at if question else None,
+        time_spent_seconds=question.time_spent_seconds if question else None,
         # The order to render in, resolved against the library so a block
         # deleted from either half stops rendering everywhere at once.
         blocks=order,

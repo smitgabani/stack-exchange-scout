@@ -291,6 +291,40 @@
 /* Deliberately not the coral used for the Stack Overflow button below —
    this is a completion action, not the page's terminal one, and shouldn't
    compete with it for attention. */
+.timerRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timerDisplay {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  min-width: 4ch;
+}
+
+.timerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+  font-family: inherit;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 14px 22px;
+  cursor: pointer;
+}
+
+.timerButton:hover {
+  border-color: var(--border-strong);
+}
+
 .completeButton {
   display: inline-flex;
   align-items: center;
