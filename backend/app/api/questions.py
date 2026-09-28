@@ -1,9 +1,9 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -82,6 +82,8 @@ async def list_questions(
     min_score: int | None = None,
     max_answers: int | None = None,
     has_accepted_answer: bool | None = None,
+    answered: bool | None = None,
+    posted_within_days: int | None = Query(None, ge=1, le=365),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> list[QuestionOut]:
@@ -111,6 +113,16 @@ async def list_questions(
         statement = statement.where(Question.accepted_answer_id.is_not(None))
     if has_accepted_answer is False:
         statement = statement.where(Question.accepted_answer_id.is_(None))
+    if answered is True:
+        statement = statement.where(Question.answer_count > 0)
+    if answered is False:
+        statement = statement.where(
+            or_(Question.answer_count == 0, Question.answer_count.is_(None))
+        )
+    if posted_within_days is not None:
+        statement = statement.where(
+            Question.question_created_at >= datetime.now(UTC) - timedelta(days=posted_within_days)
+        )
 
     # Best candidates first; the partial index on (status, candidate_score)
     # covers exactly this.

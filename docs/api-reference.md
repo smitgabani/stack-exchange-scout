@@ -90,7 +90,7 @@ Nothing here calls Yutori or spends anything — these change what the next run 
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/questions` | List, filterable by status/answers/difficulty/rejection reason |
+| GET | `/questions` | List, filterable by status/topic/answers/answered/accepted/upvotes/difficulty/posted-within-days/rejection reason |
 | GET | `/questions/{id}` | One question |
 | POST | `/questions/{id}/dismiss` | Mark as user-dismissed (reversible, not re-discovered) |
 | POST | `/questions/{id}/restore` | Undo a dismissal |
