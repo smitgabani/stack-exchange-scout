@@ -139,6 +139,36 @@ function Stat({ value }: { value: unknown }) {
   );
 }
 
+function Scratchpad({ value }: { value: unknown }) {
+  const [text, setText] = useState(typeof value === "string" ? value : "");
+  const [copied, setCopied] = useState(false);
+  if (typeof value !== "string" || !value) return null;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can be denied by the browser; the text is still
+      // selectable by hand, so there is nothing further to do here.
+    }
+  }
+
+  return (
+    <div className={styles.scratchpad}>
+      <textarea
+        className={styles.scratchpadText}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <button type="button" className={styles.scratchpadCopy} onClick={copy}>
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
 function Diagram({ value }: { value: unknown }) {
   if (!value || typeof value !== "object") return null;
   const diagram = value as { caption?: string; mermaid?: string };
@@ -213,6 +243,9 @@ export function Block({ meta, value }: { meta: BlockMeta | undefined; value: unk
       break;
     case "diagram":
       body = <Diagram value={value} />;
+      break;
+    case "scratchpad":
+      body = <Scratchpad value={value} />;
       break;
     default:
       return null;
