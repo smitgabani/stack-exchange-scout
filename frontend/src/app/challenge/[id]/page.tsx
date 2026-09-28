@@ -12,6 +12,7 @@ import { JobStatus, useJob } from "../../job-status";
 import { ConfirmDialog } from "../../confirm-dialog";
 import { InfoButton } from "../../info-button";
 import { Block, ProgressiveHints, SPECIAL_BLOCKS, indexBlocks } from "./blocks";
+import { TimerCard } from "./timer-card";
 import { formatDuration, useTimer } from "./use-timer";
 import styles from "./challenge.module.css";
 
@@ -218,6 +219,15 @@ export default function ChallengePage() {
         </span>
       </div>
 
+      {challenge.question_status !== "solved" && (
+        <TimerCard
+          timer={timer}
+          onStop={stopAndAsk}
+          onComplete={(seconds) => complete.mutate(seconds)}
+          completing={complete.isPending}
+        />
+      )}
+
       {note && <div className={styles.notice}>{note}</div>}
 
       <JobStatus
@@ -303,39 +313,6 @@ export default function ChallengePage() {
           ) : (
             gated.map((key) => <Block key={key} meta={blockIndex.get(key)} value={content[key]} />)
           )}
-        </div>
-      )}
-
-      {challenge.question_status !== "solved" && (
-        <div className={styles.timerRow}>
-          {timer.status === "running" ? (
-            <>
-              <span className={styles.timerDisplay}>{formatDuration(timer.elapsedSeconds)}</span>
-              <button type="button" className={styles.timerButton} onClick={stopAndAsk}>
-                ⏹ Stop
-              </button>
-            </>
-          ) : (
-            <>
-              {timer.status === "paused" && (
-                <span className={styles.timerDisplay}>{formatDuration(timer.elapsedSeconds)}</span>
-              )}
-              <button type="button" className={styles.timerButton} onClick={timer.start}>
-                {timer.status === "paused" ? "▶ Resume" : "▶ Start solving"}
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            className={styles.completeButton}
-            onClick={() => {
-              if (timer.status === "running") timer.pause();
-              complete.mutate(timer.elapsedSeconds > 0 ? timer.elapsedSeconds : undefined);
-            }}
-            disabled={complete.isPending}
-          >
-            {complete.isPending ? "Marking complete…" : "✓ Mark as complete"}
-          </button>
         </div>
       )}
 
