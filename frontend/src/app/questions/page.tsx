@@ -47,8 +47,38 @@ const FILTERS: Filter[] = [
   { label: "Awaiting enrichment", params: { status: "enrichment_pending" } },
 ];
 
-function fetchQuestions(filter: Filter): Promise<QuestionRow[]> {
+const POSTED_WITHIN_OPTIONS = [
+  { label: "Any time", value: "" },
+  { label: "Last 1 day", value: "1" },
+  { label: "Last 2 days", value: "2" },
+  { label: "Last 3 days", value: "3" },
+  { label: "Last 9 days", value: "9" },
+];
+
+// "" means "any" for every field — omitted from the query rather than sent.
+type AdvancedFilters = {
+  topic: string;
+  postedWithinDays: string;
+  minUpvotes: string;
+  answered: string;
+  accepted: string;
+};
+
+const EMPTY_ADVANCED: AdvancedFilters = {
+  topic: "",
+  postedWithinDays: "",
+  minUpvotes: "",
+  answered: "",
+  accepted: "",
+};
+
+function fetchQuestions(filter: Filter, advanced: AdvancedFilters): Promise<QuestionRow[]> {
   const params = new URLSearchParams({ status: "candidate", limit: "60", ...filter.params });
+  if (advanced.topic) params.set("topic", advanced.topic);
+  if (advanced.postedWithinDays) params.set("posted_within_days", advanced.postedWithinDays);
+  if (advanced.minUpvotes) params.set("min_score", advanced.minUpvotes);
+  if (advanced.answered) params.set("answered", advanced.answered);
+  if (advanced.accepted) params.set("has_accepted_answer", advanced.accepted);
   return json<QuestionRow[]>(`/api/questions?${params}`);
 }
 
@@ -182,6 +212,7 @@ function QuestionCard({
 export default function QuestionsPage() {
   const queryClient = useQueryClient();
   const [activeFilter, setActiveFilter] = useState(FILTERS[0]);
+  const [advanced, setAdvanced] = useState<AdvancedFilters>(EMPTY_ADVANCED);
   const [running, setRunning] = useState<string | null>(null);
   const [stageMessage, setStageMessage] = useState<string | null>(null);
   const [pendingDismiss, setPendingDismiss] = useState<QuestionRow | null>(null);
@@ -192,12 +223,20 @@ export default function QuestionsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: questions, isLoading } = useQuery({
-    queryKey: ["questions", activeFilter.label],
-    queryFn: () => fetchQuestions(activeFilter),
+    queryKey: ["questions", activeFilter.label, advanced],
+    queryFn: () => fetchQuestions(activeFilter, advanced),
   });
   // Only needed when the dialog is open, but formats are a tiny list and
   // TanStack caches it across both pages that read it.
   const { data: formats } = useQuery({ queryKey: ["llm-formats"], queryFn: llmApi.formats });
+  // Topic options for the filter: the profile's own topics, not whatever
+  // happens to be in the current page of results.
+  const { data: profile } = useQuery({
+    queryKey: ["profile"],
+    queryFn: () => json<{ data: { topics: { name: string }[] } }>("/api/profile"),
+  });
+  const topicOptions = profile?.data.topics ?? [];
+  const advancedIsDirty = Object.values(advanced).some(Boolean);
 
   async function refresh() {
     await queryClient.invalidateQueries({ queryKey: ["questions"] });
@@ -284,6 +323,78 @@ export default function QuestionsPage() {
           );
         })}
       </nav>
+
+      <div className={styles.filterBar}>
+        <select
+          className={styles.dialogSelect}
+          aria-label="Filter by topic"
+          value={advanced.topic}
+          onChange={(e) => setAdvanced((a) => ({ ...a, topic: e.target.value }))}
+        >
+          <option value="">All topics</option>
+          {topicOptions.map((t) => (
+            <option key={t.name} value={t.name}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className={styles.dialogSelect}
+          aria-label="Filter by posted time"
+          value={advanced.postedWithinDays}
+          onChange={(e) => setAdvanced((a) => ({ ...a, postedWithinDays: e.target.value }))}
+        >
+          {POSTED_WITHIN_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        <input
+          className={styles.dialogSelect}
+          type="number"
+          min={0}
+          inputMode="numeric"
+          placeholder="Min upvotes"
+          aria-label="Minimum upvotes"
+          value={advanced.minUpvotes}
+          onChange={(e) => setAdvanced((a) => ({ ...a, minUpvotes: e.target.value }))}
+        />
+
+        <select
+          className={styles.dialogSelect}
+          aria-label="Filter by answered status"
+          value={advanced.answered}
+          onChange={(e) => setAdvanced((a) => ({ ...a, answered: e.target.value }))}
+        >
+          <option value="">Answered: any</option>
+          <option value="true">Answered</option>
+          <option value="false">Unanswered</option>
+        </select>
+
+        <select
+          className={styles.dialogSelect}
+          aria-label="Filter by accepted answer"
+          value={advanced.accepted}
+          onChange={(e) => setAdvanced((a) => ({ ...a, accepted: e.target.value }))}
+        >
+          <option value="">Accepted answer: any</option>
+          <option value="true">Has accepted answer</option>
+          <option value="false">No accepted answer</option>
+        </select>
+
+        {advancedIsDirty && (
+          <button
+            type="button"
+            className={styles.qactionGhost}
+            onClick={() => setAdvanced(EMPTY_ADVANCED)}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
 
       {/* Manual stage triggers. These become scheduled jobs in M11; until then
           running the pipeline by hand is the only way to advance candidates. */}

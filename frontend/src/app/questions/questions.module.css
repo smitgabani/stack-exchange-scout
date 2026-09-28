@@ -273,6 +273,19 @@
   background: var(--surface-strong);
 }
 
+/* The advanced filter bar below the status tabs. Reuses .dialogSelect for
+   every control so a select and the upvotes number input look identical. */
+.filterBar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filterBar .dialogSelect {
+  width: auto;
+}
+
 /* The format picker inside the promote dialog. */
 .dialogField {
   display: flex;
