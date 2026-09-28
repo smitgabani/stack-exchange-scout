@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 import { json, send } from "@/lib/api";
@@ -11,6 +11,7 @@ import { JobStatus, useJob } from "../job-status";
 import { colorForTopic } from "@/lib/topic-color";
 import { ConfirmDialog } from "../confirm-dialog";
 import { InfoButton } from "../info-button";
+import { useDebounced } from "../yutori/parameters-form";
 import styles from "./questions.module.css";
 
 type QuestionRow = {
@@ -222,9 +223,18 @@ export default function QuestionsPage() {
   const [promoteFormat, setPromoteFormat] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // The upvotes box is free text: without this, every keystroke fired a
+  // request and, since each partial value is a query key TanStack has never
+  // seen, flashed the whole list to "Loading…" and back for each character.
+  const debouncedMinUpvotes = useDebounced(advanced.minUpvotes, 400);
+  const effectiveAdvanced: AdvancedFilters = { ...advanced, minUpvotes: debouncedMinUpvotes };
+
   const { data: questions, isLoading } = useQuery({
-    queryKey: ["questions", activeFilter.label, advanced],
-    queryFn: () => fetchQuestions(activeFilter, advanced),
+    queryKey: ["questions", activeFilter.label, effectiveAdvanced],
+    queryFn: () => fetchQuestions(activeFilter, effectiveAdvanced),
+    // Keeps the current list on screen while a new filter's results load,
+    // instead of blanking to "Loading…" on every tab or filter change.
+    placeholderData: keepPreviousData,
   });
   // Only needed when the dialog is open, but formats are a tiny list and
   // TanStack caches it across both pages that read it.

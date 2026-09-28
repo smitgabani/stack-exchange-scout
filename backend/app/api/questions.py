@@ -100,7 +100,13 @@ async def list_questions(
             Question.rejection_reason.is_not(None), Question.rejection_reason != USER_DISMISSED
         )
     if topic:
-        statement = statement.where(Question.tags.any(topic.lower()))
+        # `.contains([x])` compiles to `tags @> ARRAY[x]`, which the GIN index
+        # on tags (idx_questions_tags) can actually use. `.any(x)` compiles to
+        # `x = ANY(tags)`, which is the same result but which Postgres can
+        # never satisfy from that index — confirmed with EXPLAIN under
+        # enable_seqscan=off, where `.any()` still fell back to scanning every
+        # candidate row's tags in a Filter rather than an Index Cond.
+        statement = statement.where(Question.tags.contains([topic.lower()]))
     if difficulty_min is not None:
         statement = statement.where(Question.difficulty >= difficulty_min)
     if difficulty_max is not None:
