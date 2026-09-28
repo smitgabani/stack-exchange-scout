@@ -45,6 +45,7 @@ KINDS = (
     "checklist",
     "stat",
     "diagram",
+    "scratchpad",
 )
 
 # The shape each kind implies. This is what makes user-defined blocks possible
@@ -57,6 +58,10 @@ KINDS = (
 # than merely happening to agree today.
 _SCHEMA_BY_KIND: dict[str, dict[str, Any]] = {
     "prose": {"type": "string"},
+    # Same shape as prose — a string — but drawn as an editable, copyable text
+    # box rather than a paragraph, for output the reader takes away and reuses
+    # (a snippet, a command, a template) rather than reads in place.
+    "scratchpad": {"type": "string"},
     "chips": {"type": "array", "items": {"type": "string"}},
     "list": {"type": "array", "items": {"type": "string"}},
     "checklist": {"type": "array", "items": {"type": "string"}},

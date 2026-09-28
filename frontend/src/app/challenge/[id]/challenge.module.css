@@ -434,6 +434,47 @@
   color: var(--muted);
 }
 
+.scratchpad {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 72ch;
+}
+
+.scratchpadText {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--canvas);
+  color: var(--body-text);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.scratchpadText:focus {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.scratchpadCopy {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--body-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scratchpadCopy:hover {
+  border-color: var(--border-strong);
+}
+
 .statBig {
   font-size: 26px;
   font-weight: 400;

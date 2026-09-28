@@ -53,6 +53,7 @@ const KIND_HELP: Record<string, string> = {
   resource_list: "Links, each with a title and a reason. Every URL is checked before it is stored, and dead ones are dropped.",
   stat: "One prominent figure with a line of rationale under it.",
   diagram: "A Mermaid diagram — flowchart, sequence or state — drawn on the page.",
+  scratchpad: "An editable text box with a copy button, for output the reader takes away — a snippet, a command, a template.",
   progressive_hints: "Hints revealed one at a time, behind a button.",
   rating: "A number out of five.",
 };
@@ -68,6 +69,7 @@ const SHAPE_OF: Record<string, string> = {
   resource_list: "links",
   stat: "a figure and a rationale",
   diagram: "diagram source",
+  scratchpad: "text",
   progressive_hints: "labelled hints",
   rating: "a number",
 };
