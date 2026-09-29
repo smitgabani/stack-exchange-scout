@@ -111,6 +111,10 @@ class Question(Base):
     # When a challenge on this question was marked complete. Distinct from
     # status == "solved" so "how long ago" can be shown, not just "done".
     solved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # How long solving it took, in seconds — from the frontend's own timer,
+    # sent alongside completion. Not the app's business to measure on its
+    # own: there is no server-side notion of "the user is working on this".
+    time_spent_seconds: Mapped[int | None] = mapped_column(Integer)
 
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime] = mapped_column(

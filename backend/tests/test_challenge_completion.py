@@ -140,6 +140,49 @@ def test_completing_requires_a_session(client: TestClient) -> None:
     assert client.post(f"/questions/{uuid.uuid4()}/complete").status_code == 401
 
 
+@pytest.mark.anyio
+async def test_completing_with_a_timer_stores_the_elapsed_seconds(
+    client: TestClient, auth_cookies: dict[str, str], solvable_challenge
+) -> None:
+    question_id, _challenge_id = solvable_challenge
+
+    response = client.post(
+        f"/questions/{question_id}/complete",
+        json={"time_spent_seconds": 754},
+        cookies=auth_cookies,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["time_spent_seconds"] == 754
+
+
+@pytest.mark.anyio
+async def test_completing_with_no_timer_leaves_it_null(
+    client: TestClient, auth_cookies: dict[str, str], solvable_challenge
+) -> None:
+    question_id, _challenge_id = solvable_challenge
+
+    response = client.post(f"/questions/{question_id}/complete", cookies=auth_cookies)
+
+    assert response.status_code == 200
+    assert response.json()["time_spent_seconds"] is None
+
+
+@pytest.mark.anyio
+async def test_completing_with_a_negative_timer_is_rejected(
+    client: TestClient, auth_cookies: dict[str, str], solvable_challenge
+) -> None:
+    question_id, _challenge_id = solvable_challenge
+
+    response = client.post(
+        f"/questions/{question_id}/complete",
+        json={"time_spent_seconds": -1},
+        cookies=auth_cookies,
+    )
+
+    assert response.status_code == 422
+
+
 # --- 🧩 the main screen stops showing it, the completed view does ---
 
 
@@ -202,11 +245,28 @@ async def test_reopening_restores_the_active_view_and_clears_the_timestamp(
     body = response.json()
     assert body["status"] == "selected"
     assert body["solved_at"] is None
+    assert body["time_spent_seconds"] is None
 
     active_ids = {
         row["id"] for row in client.get("/challenges?limit=200", cookies=auth_cookies).json()
     }
     assert str(challenge_id) in active_ids
+
+
+@pytest.mark.anyio
+async def test_reopening_clears_a_previously_recorded_time(
+    client: TestClient, auth_cookies: dict[str, str], solvable_challenge
+) -> None:
+    question_id, _challenge_id = solvable_challenge
+    client.post(
+        f"/questions/{question_id}/complete",
+        json={"time_spent_seconds": 300},
+        cookies=auth_cookies,
+    )
+
+    response = client.post(f"/questions/{question_id}/reopen", cookies=auth_cookies)
+
+    assert response.json()["time_spent_seconds"] is None
 
 
 @pytest.mark.anyio

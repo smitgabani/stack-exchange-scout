@@ -41,12 +41,14 @@ class QuestionOut(BaseModel):
     # a link to it instead of offering to spend another LLM call making one.
     challenge_id: uuid.UUID | None = None
     solved_at: datetime | None = None
+    time_spent_seconds: int | None = None
 
     @classmethod
     def from_model(cls, question: Question, challenge_id: uuid.UUID | None = None) -> "QuestionOut":
         return cls(
             challenge_id=challenge_id,
             solved_at=question.solved_at,
+            time_spent_seconds=question.time_spent_seconds,
             id=question.id,
             stackoverflow_question_id=question.stackoverflow_question_id,
             url=question.url,
@@ -213,8 +215,19 @@ async def restore_question(question_id: uuid.UUID, db: AsyncSession = Depends(ge
     return QuestionOut.from_model(question, challenge_ids.get(question.id))
 
 
+class CompleteRequest(BaseModel):
+    # From the frontend's own start/stop timer (localStorage-backed — there is
+    # no server-side notion of "the user is working on this"). Optional: a
+    # challenge can still be marked complete with no timer ever started.
+    time_spent_seconds: int | None = None
+
+
 @router.post("/questions/{question_id}/complete", response_model=QuestionOut)
-async def complete_question(question_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> QuestionOut:
+async def complete_question(
+    question_id: uuid.UUID,
+    payload: CompleteRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> QuestionOut:
     """Mark a challenge solved.
 
     Reuses `status = "solved"`, in the enum since M5 and never set anywhere —
@@ -232,9 +245,16 @@ async def complete_question(question_id: uuid.UUID, db: AsyncSession = Depends(g
             status_code=status.HTTP_409_CONFLICT,
             detail="This question has no challenge yet, so there is nothing to complete.",
         )
+    time_spent_seconds = payload.time_spent_seconds if payload else None
+    if time_spent_seconds is not None and time_spent_seconds < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="time_spent_seconds cannot be negative.",
+        )
 
     question.status = "solved"
     question.solved_at = datetime.now(UTC)
+    question.time_spent_seconds = time_spent_seconds
     await db.commit()
     await db.refresh(question)
     return QuestionOut.from_model(question, challenge_ids.get(question.id))
@@ -260,6 +280,7 @@ async def reopen_question(question_id: uuid.UUID, db: AsyncSession = Depends(get
 
     question.status = "selected"
     question.solved_at = None
+    question.time_spent_seconds = None
     await db.commit()
     await db.refresh(question)
     challenge_ids = await _challenge_ids_for(db, [question.id])

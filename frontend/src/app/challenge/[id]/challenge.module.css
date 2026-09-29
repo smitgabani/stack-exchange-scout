@@ -288,6 +288,200 @@
   cursor: default;
 }
 
+/* --- the timer card ------------------------------------------------------
+   One card, three looks — idle, running, paused — so the state is legible
+   at a glance without reading the button labels. Running gets the same
+   full-ink treatment as the problem block: it is the thing demanding your
+   attention while it's on. Paused and idle stay light, since neither is
+   urgent. */
+.timerCard {
+  border-radius: 16px;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
+.timerCard_idle {
+  background: var(--surface-soft);
+  border: 1px dashed var(--hairline);
+}
+
+.timerCard_running {
+  background: var(--ink);
+  color: var(--on-primary);
+}
+
+.timerCard_paused {
+  background: var(--cream);
+  color: var(--forest);
+}
+
+.timerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  position: relative;
+}
+
+.timerStatusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16px;
+  text-transform: uppercase;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.timerDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--coral);
+  animation: timerPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+}
+
+.timerReset {
+  position: absolute;
+  right: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.timerReset:hover {
+  opacity: 1;
+}
+
+.timerBig {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 56px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 480px) {
+  .timerBig {
+    font-size: 40px;
+  }
+}
+
+.timerActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timerPrimary,
+.timerSecondary,
+.timerGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 12px;
+  padding: 12px 24px;
+  cursor: pointer;
+}
+
+.timerPrimary {
+  background: var(--coral);
+  color: var(--on-primary);
+  border: none;
+}
+
+.timerPrimary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.timerPrimary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.timerSecondary {
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+}
+
+.timerSecondary:hover {
+  opacity: 0.8;
+}
+
+.timerGhost {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  padding: 12px 8px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.timerGhost:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.timerGhost:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.timerComplete {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 12px;
+  padding: 12px 24px;
+  cursor: pointer;
+  background: var(--success, #006400);
+  color: var(--on-primary);
+  border: none;
+}
+
+.timerComplete:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.timerComplete:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Deliberately not the coral used for the Stack Overflow button below —
    this is a completion action, not the page's terminal one, and shouldn't
    compete with it for attention. */

@@ -8,6 +8,7 @@ import { json, send } from "@/lib/api";
 import { ago } from "@/lib/scout-api";
 import { ConfirmDialog } from "../confirm-dialog";
 import { InfoButton } from "../info-button";
+import { formatDuration } from "../challenge/[id]/use-timer";
 import styles from "./challenges.module.css";
 
 type ChallengeRow = {
@@ -22,6 +23,7 @@ type ChallengeRow = {
   estimated_difficulty: number | null;
   question_status: string | null;
   solved_at: string | null;
+  time_spent_seconds: number | null;
 };
 
 // Completion is a separate axis from source, but the tab strip is one row, so
@@ -214,6 +216,9 @@ function ChallengesPageInner() {
             <div key={challenge.id} className={styles.row}>
               <span className={styles.date}>
                 {showCompleted ? ago(challenge.solved_at) : formatDate(challenge.created_at)}
+                {showCompleted && challenge.time_spent_seconds != null && (
+                  <div className={styles.timeSpent}>{formatDuration(challenge.time_spent_seconds)}</div>
+                )}
               </span>
               <span>
                 <Link href={`/challenge/${challenge.id}`} className={styles.qtitle}>
